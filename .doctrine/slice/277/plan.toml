@@ -53,9 +53,10 @@ exit_criteria = [
   { id = "EX-2", text = "The key is read once from JEV_API_KEY into a type whose Debug and Display print <redacted>; it is never written anywhere." },
   { id = "EX-3", text = "Retryable (429, 529, transport error): exponential backoff honouring retry-after, bounded by a named attempt constant." },
   { id = "EX-4", text = "A response whose model differs from JEV_MODEL aborts the run." },
+  { id = "EX-5", text = "Requests are paced client-side at --rps (default 2), with the clock injected so pacing is testable." },
 ]
 verification = [
-  { id = "VT-1", expects = "retry-after honoured; attempts bounded; model mismatch aborts", test_file = "crates/doctrine-jev/src/jev.rs", keywords = ["retry_after_is_honoured", "retry_attempts_are_bounded", "model_mismatch_aborts"], waived = false },
+  { id = "VT-1", expects = "retry-after honoured; attempts bounded; model mismatch aborts; pacing respects --rps", test_file = "crates/doctrine-jev/src/jev.rs", keywords = ["retry_after_is_honoured", "retry_attempts_are_bounded", "model_mismatch_aborts", "pacing_respects_rps"], waived = false },
   { id = "VT-2", expects = "Debug and Display of the key show <redacted>", test_file = "crates/doctrine-jev/src/jev.rs", keywords = ["api_key_debug_is_redacted"], waived = false },
 ]
 specs        = []
@@ -145,14 +146,14 @@ entrance_criteria = [
   { id = "EN-1", text = "PHASE-03, PHASE-05 and PHASE-06 complete." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "src/rank.rs: bm25 (search order); point (entity = best section probability); point-matched (point rubric over each entity's B-list option text); list (forward and reversed, mean probability, ties keep input order); unscored candidates sort last, never 0." },
+  { id = "EX-1", text = "src/rank.rs: bm25 (search order); point (entity = best section probability); point-matched (point rubric over each entity's B-list option text); list (forward and reversed, mean probability, ties keep input order); unscored candidates sort last, never 0. Point has a section-as-state mode (DEC-352 fallback: the section is the state, the query the question) selectable per run and recorded in run.toml." },
   { id = "EX-2", text = "TooLong recovery: point request split in two; single-question request halves its section; list halves option caps; at most two per question, then Unanswered; every step counted." },
   { id = "EX-3", text = "Completeness: missing questions retried once; an arm-slice is complete only if every candidate is then answered." },
   { id = "EX-4", text = "src/cache.rs: key = SHA-256 of canonical JSON over endpoint, model, state, ordered questions, RUBRIC_VERSION, SECTIONER_VERSION, PACKER_VERSION; value = raw body + time, returned model, usage; only a 200 whose answers all decode and are well formed is stored." },
   { id = "EX-5", text = "rank SL-NNN --arm <arm> emits a packet: entity, snapshot commit, arm, ranker score, and section for point rankers only; dry run unless --live --cap-usd N." },
 ]
 verification = [
-  { id = "VT-1", expects = "list order from mean of forward and reversed; ties keep input order; unscored last; point-matched uses option text", test_file = "crates/doctrine-jev/src/rank.rs", keywords = ["list_order_is_mean_of_both_orders", "ties_keep_input_order", "unscored_sorts_last", "point_matched_uses_option_text"], waived = false },
+  { id = "VT-1", expects = "list order from mean of forward and reversed; ties keep input order; unscored last; point-matched uses option text", test_file = "crates/doctrine-jev/src/rank.rs", keywords = ["list_order_is_mean_of_both_orders", "ties_keep_input_order", "unscored_sorts_last", "point_matched_uses_option_text", "section_as_state_mode_swaps_roles"], waived = false },
   { id = "VT-2", expects = "dense base64 section under a fake returning the context-limit 422 above a byte threshold is split, then halved, then Unanswered, each step counted", test_file = "crates/doctrine-jev/src/rank.rs", keywords = ["toolong_splits_then_halves_then_unanswered"], waived = false },
   { id = "VT-3", expects = "fake omits answers then answers the retry: complete; omits again: incomplete and counted", test_file = "crates/doctrine-jev/src/rank.rs", keywords = ["retry_completes_arm", "second_omission_marks_incomplete"], waived = false },
   { id = "VT-4", expects = "changed rubric, sectioner or packer version, or reordered questions, miss; a failure is never stored", test_file = "crates/doctrine-jev/src/cache.rs", keywords = ["version_change_misses", "reordered_questions_miss", "failure_never_cached"], waived = false },
@@ -162,19 +163,20 @@ requirements = []
 
 [[phase]]
 id        = "PHASE-08"
-name      = "Report, eval and dry-run plan"
-objective = "Pure spend plan and metrics, the eval command, and a dry-run plan of the full eval set."
+name      = "Report, eval, probe and dry-run plan"
+objective = "Pure spend plan and metrics, the eval and probe commands, and a dry-run plan of the full eval set."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-07 complete." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "src/budget.rs plan (pure): requests, estimated tokens and dollars at PRICE_PER_MTOK_USD = 0.042; a dry run prints the plan and makes zero transport calls." },
   { id = "EX-2", text = "src/report.rs (pure) per design sec-6: recall@10/@25 over all labels and over labels the query does not name; pool coverage; recall at 4k/8k/16k/32k (cost min(est body, 1k), empty bodies left out, prefix ends at first non-fitting entity); per label source and kind; bootstrap 95% intervals with a recorded seed and in-crate PRNG; paired deltas as listed; incomplete arm-slices left out and counted; per-slice dropped, truncation, unscored and order-agreement counts; top five uncited hits; headline also over slices with no unreadable labels; C deltas over a subsample when the DEC-352 fallback applies." },
-  { id = "EX-3", text = "eval writes results.jsonl and report.md under the run directory." },
+  { id = "EX-3", text = "eval writes results.jsonl and report.md under the run directory; it takes the arm set, the point mode and an optional seeded C-arm subsample size (the DEC-352 fallback), all recorded in run.toml." },
+  { id = "EX-4", text = "probe command: about ten fixed calls (Noul, Choice, a repeat, a dense-ASCII request, an oversized request to elicit the context-limit 422) under --cap-usd, printing answer shape, model echo, estimated vs reported tokens and raw 422 body; runs against the fake offline." },
 ]
 verification = [
   { id = "VT-1", expects = "recall@k, unnamed subset, pool coverage and recall-at-budget on a hand-worked table incl. non-fitting and empty-body entities; deterministic bootstrap; incomplete arm-slice excluded", test_file = "crates/doctrine-jev/src/report.rs", keywords = ["recall_at_k_hand_worked", "unnamed_label_subset", "pool_coverage_hand_worked", "budget_prefix_stops_at_non_fitting", "empty_body_left_out", "bootstrap_is_deterministic", "incomplete_arm_slice_excluded"], waived = false },
-  { id = "VT-2", expects = "full fake eval writes no file containing the key; replay from a populated cache makes zero transport calls and a byte-identical report; dry run makes zero calls", test_file = "crates/doctrine-jev/tests/fake_run.rs", keywords = ["fake_run_never_writes_key", "replay_is_byte_identical_with_zero_calls", "dry_run_makes_zero_calls"], waived = false },
+  { id = "VT-2", expects = "full fake eval writes no file containing the key; replay from a populated cache makes zero transport calls and a byte-identical report; dry run makes zero calls", test_file = "crates/doctrine-jev/tests/fake_run.rs", keywords = ["fake_run_never_writes_key", "replay_is_byte_identical_with_zero_calls", "dry_run_makes_zero_calls", "probe_runs_against_fake"], waived = false },
   { id = "VA-1", expects = "dry-run plan for the full eval set recorded in slice notes against the design's pre-plan estimate" },
 ]
 specs        = []

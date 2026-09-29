@@ -22,14 +22,17 @@ and PHASE-10 are the live trial, each live step under a cap the user approves.
   finding held on the ledger) is transcribed here as PHASE-03/EX-4: its
   placement constraint names the phase that builds the transport boundary and
   send log.
-- **Corpus, sectioner and packer in parallel (PHASE-04, PHASE-05).** Both need
-  only PHASE-01, and they are file-disjoint (`corpus.rs` vs `section.rs` +
-  `pack.rs`), so they can run as parallel workers.
+- **Corpus, then sectioner and packer (PHASE-04, PHASE-05).** Both need only
+  PHASE-01 and touch different modules, but both add a line to `src/lib.rs`, so
+  they run serially by default; running them in parallel costs a trivial merge.
 - **Labels after corpus (PHASE-06).** Classifying unreadable against absent
   needs `catalog scan`'s diagnostics, which PHASE-04 parses. The fixture is
   generated and committed here, so later phases test against real labels.
-- **Rankers join everything (PHASE-07)**, then the report and eval drive
-  (PHASE-08). The dry-run plan at the end of PHASE-08 replaces the design's
+- **Rankers join everything (PHASE-07)**, then the report, eval and probe
+  commands (PHASE-08). Everything PHASE-09 runs — the probe, section-as-state
+  point scoring and the C-arm subsample — exists and is tested offline first,
+  so the live phases operate code rather than write it. PHASE-07 is the
+  largest phase; its parts share one candidate type, so it stays whole. The dry-run plan at the end of PHASE-08 replaces the design's
   pre-plan cost estimate before any money is spent.
 - **Live last, split in two (PHASE-09, PHASE-10).** The probe must calibrate
   the estimator and fix how a context-limit 422 is recognised (the docs don't
