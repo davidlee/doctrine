@@ -1,0 +1,46 @@
+memory_uid = "mem_01a0eadfa9ca7561bb4f4c64047c7fcc"
+memory_key = "mem.fact.testing.git-fixtures-not-hermetic"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Test git fixtures inherit host git config, hooks and DOCTRINE_* env"
+summary = "Scratch-repo fixtures pin only dates; global commit.gpgsign fails 91/130 git::tests, global core.hookspath runs on every fixture commit"
+created = "2026-09-29"
+updated = "2026-09-29"
+
+[scope]
+paths = ["src/git.rs", "src/test_support.rs"]
+globs = ["tests/**/*.rs"]
+commands = []
+tags = ["testing", "git"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f7f06c2b8c5c33afc70e274a4f2bede09a94e0a4"
+ref_name = "refs/heads/edge"
+checkout_state_id = "126d44c2e1f92ac173cda8d6afde0e79ba4f71897ec5f22818d43118c9b006be"
+base_commit = "907083447f90d2ef5731cd094e3844bd3bff2ba0"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-411"
+

@@ -1,0 +1,85 @@
+id = 276
+slug = "hermetic-shared-test-fixtures"
+title = "Hermetic shared test fixtures"
+status = "proposed"
+created = "2026-09-29"
+updated = "2026-09-29"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/test_support.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/common/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/git.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/worktree/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/review/tests.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/state.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/dispatch.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/coverage_verify.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/*.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".cargo/config.toml"
+intent = "scope-relevant"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "CHR-172"
+
+[[relation]]
+label = "related"
+target = "IMP-357"
+
+[[relation]]
+label = "related"
+target = "IMP-364"
+
+[[relation]]
+label = "related"
+target = "IMP-368"
+
+[[relation]]
+label = "related"
+target = "ISS-501"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis. Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-NNN
+#   doctrine link SL-NNN governed_by ADR-NNN
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
