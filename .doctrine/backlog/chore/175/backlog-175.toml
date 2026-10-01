@@ -1,26 +1,22 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 365
-slug = "verify-vts-unattributable-reason-claims-a-keyword-match-it-never-ran"
-title = "verify-vt's UNATTRIBUTABLE reason claims a keyword match it never ran"
-kind = "issue"
-status = "closed"
-resolution = "duplicate"
-created = "2026-08-15"
+id = 175
+slug = "add-python3-to-the-jail"
+title = "Add python3 to the jail"
+kind = "chore"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-10-01"
 updated = "2026-10-01"
-tags = []
+tags = ["area:env", "observed"]
 
-# outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
+# outbound-only. Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
-# uniform `[[relation]]` rows (SL-048 "the cut") — author them with
+# uniform `[[relation]]` rows — author them with
 # `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
-
-[[relation]]
-label = "related"
-target = "ISS-226"

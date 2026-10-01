@@ -62,3 +62,19 @@ non-halting), no Fail/WAIVED/UNCHECKABLE.
   slice, forcing a manual re-grep + independent test run to establish the floors.
 - See also IMP-228 (`imp-228-vtgate-unattributable` worktree) if a fix is scoped
   there. Surfaced by SL-227 audit RV-302; `.doctrine/review/302/`.
+
+## Merged duplicates (2026-10-01)
+
+ISS-365, ISS-449 and ISS-464 report the same defect and are closed as duplicates
+of this item. What they add:
+
+- **Root cause** (ISS-365): `check_vt` in `src/vtgate.rs` returns `Unattributable`
+  at the attribution step, before the keyword loop runs; the "keyword present"
+  clause is boilerplate. Cheapest fix: drop the clause; richer fix: run keywords
+  first and report both facts (absent keyword → `FAIL`).
+- **Unimplemented phases** (ISS-449): every VT row of a not-yet-implemented phase
+  reads as if only attribution were missing.
+- **Per-phase use** (ISS-464): the exit code is unusable mid-slice (later phases'
+  missing test files FAIL), and there is no `--phase` filter.
+
+Recurrence: 14 friction observations, 2026-08-01 → 2026-09-25.

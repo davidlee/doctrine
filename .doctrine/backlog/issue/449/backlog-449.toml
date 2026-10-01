@@ -5,10 +5,10 @@ id = 449
 slug = "verify-vt-claims-keyword-present-on-an-unattributable-row-it-never-checked"
 title = "verify-vt claims keyword present on an unattributable row it never checked"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "duplicate"
 created = "2026-09-08"
-updated = "2026-09-08"
+updated = "2026-10-01"
 tags = ["area:cli", "area:slice", "correctness", "evidence"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
@@ -29,3 +29,7 @@ target = "STD-003"
 label = "references"
 role = "originates_from"
 target = "SL-256"
+
+[[relation]]
+label = "related"
+target = "ISS-226"

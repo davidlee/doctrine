@@ -71,3 +71,14 @@ rest.
 - `IMP-332` — the structured-request precedent on the observation surface.
 - `STD-001` — if the delimiter stays, it should be a named constant rather than
   a per-flag literal.
+
+## Merged duplicates (2026-10-01)
+
+ISS-453 and ISS-473 are closed as duplicates of this item. What they add:
+
+- Code site (ISS-453): `#[arg(long, num_args = 0.., value_delimiter = ',')]` in
+  `src/knowledge.rs`.
+- Also affects `--applies-to` (ISS-473); damaged records seen: DEC-168, CON-006, DEC-275.
+- `knowledge inspect` re-joins the array with `", "`, so the damage is invisible
+  there; only the raw TOML shows it (ISS-473).
+- Ask (ISS-473): a repeat form and an `@file`/stdin form in place of the delimiter.

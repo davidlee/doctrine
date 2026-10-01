@@ -5,10 +5,10 @@ id = 453
 slug = "knowledge-edit-list-facets-split-prose-at-every-comma"
 title = "knowledge edit list facets split prose at every comma"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "duplicate"
 created = "2026-09-15"
-updated = "2026-09-15"
+updated = "2026-10-01"
 tags = ["correctness", "knowledge-cli", "silent-absorption"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
@@ -25,3 +25,7 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "originates_from"
 target = "SL-259"
+
+[[relation]]
+label = "related"
+target = "ISS-349"
