@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f6a8-eebe-78c0-a63b-4ad76bec49cd"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f6a8-eebe-78c0-a63b-4ae3618b45fa"
+seq = 0
+a = "IMP-510"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.0
+rater = "agent"
+note = "largest friction cluster; root fix"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01 (EVD-031)"

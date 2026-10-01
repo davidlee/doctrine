@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f6a8-eec0-72c1-b9d0-d878394eb57e"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f6a8-eec0-72c1-b9d0-d881d3d3857f"
+seq = 0
+a = "IMP-511"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+note = "~16 mutation-beat records"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01 (EVD-031)"

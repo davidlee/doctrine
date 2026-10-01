@@ -35,3 +35,15 @@ label = "references"
 role = "concerns"
 descriptor = "observed demand ranking for Directions B, F, G"
 target = "RFC-023"
+
+[[relation]]
+label = "spawns"
+target = "IMP-510"
+
+[[relation]]
+label = "spawns"
+target = "IMP-511"
+
+[[relation]]
+label = "spawns"
+target = "ISS-516"

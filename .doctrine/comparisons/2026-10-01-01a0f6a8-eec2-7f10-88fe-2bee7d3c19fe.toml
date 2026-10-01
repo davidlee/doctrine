@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f6a8-eec2-7f10-88fe-2bee7d3c19fe"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f6a8-eec2-7f10-88fe-2bf467a6e2b3"
+seq = 0
+a = "ISS-516"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.5
+rater = "agent"
+note = "captured knowledge unfindable; multiplier on lint-trap recurrence"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01 (EVD-031)"
