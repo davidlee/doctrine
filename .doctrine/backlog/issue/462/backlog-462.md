@@ -53,3 +53,21 @@ what `bounds.rs`'s provenance rule (EX-16(a)) asks for.
 Hit live on SL-260 — the user selected `adversarial-then-human` as the design
 review policy and the run could not record it. Captured as a friction
 observation at the same moment.
+
+## Resolution
+
+Fixed in `f490eacdf` — option 1, not option 2. The label bound is shared by
+every `ValueKind::Label` term (stage, provenance, lifecycle, blocking,
+disposition, outcome, policy), so a policy-only bound would have needed a new
+value kind for no design gain.
+
+- `DESIGN_STAGE_LABEL_BYTES` → `DESIGN_LABEL_BYTES` = 32, provenance re-derived
+  from the widest member across label vocabularies (22 B, a review policy).
+- `ReviewPolicy::ALL` const-asserted against it (`attestation.rs`).
+- Knock-on: the rendered regression reason dropped 96 → 64 B so the widest
+  payload holds at 145/160 B and the row at 264 B — the projection-bounds
+  sketch totals are unchanged. Reasons are stored whole; only rendering elides.
+- Test: `every_advertised_review_policy_is_declarable` (`tests/e2e_design_review.rs`).
+
+Not done: provenance, lifecycle, blocking-judgement, review-disposition and
+outcome labels still carry no const proof. All fit today (widest 16 B).
