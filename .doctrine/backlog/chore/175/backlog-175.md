@@ -16,3 +16,10 @@ excluding it is deliberate, say so in AGENTS.md's jail section so agents stop tr
 
 12 observations, 2026-08-15 → 2026-09-28, mostly capsule workers: `01a00610`,
 `01a0ade9` (perl half-applied a mutation), `01a0ba84`, `01a0de02`, `01a0e34c`, `01a0ea38`.
+
+## Resolution (2026-10-01)
+
+Done by the user in 4ebf19bcf: `uv` + `python314` added to `devToolPkgs` (which
+feeds the jail via `projectPkgs`), with `UV_PYTHON_PREFERENCE` set in the jail env.
+The jail home is persistent, so uv's cache needs no redirect. Stale claim in
+`mem.pattern.testing.mutation-beat-asserts-application` corrected.

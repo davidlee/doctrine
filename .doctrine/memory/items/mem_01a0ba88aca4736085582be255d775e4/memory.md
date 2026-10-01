@@ -29,9 +29,10 @@ point"). A positive control whose mutation never applied is not a control at all
 and it is the one place the whole verification tier rests on the agent's own
 discipline rather than on a tool.
 
-Note `python3` is absent in the jail, so region splices tend to be done with
-`sed`, which fails silently on a non-matching pattern — exactly the quiet failure
-this pattern guards.
+Region splices done with `sed` or `perl` fail silently on a non-matching pattern —
+exactly the quiet failure this pattern guards. Since 2026-10-01 the jail carries
+`python3` (python314 + uv, `flake.nix` `devToolPkgs`), which can assert the match
+before writing.
 
 See [[mem.pattern.doctrine.tdd-loop]].
 

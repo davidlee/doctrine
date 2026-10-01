@@ -6,7 +6,7 @@ status = "active"
 title = "A mutation beat must assert the mutation applied before reading the result"
 summary = "A silently-unapplied mutation reads identically to a non-discriminating fixture — assert the edit landed, then run"
 created = "2026-09-19"
-updated = "2026-09-19"
+updated = "2026-10-01"
 
 [scope]
 paths = []
