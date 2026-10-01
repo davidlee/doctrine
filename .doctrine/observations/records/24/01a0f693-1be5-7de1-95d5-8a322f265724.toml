@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0f693-1be5-7de1-95d5-8a322f265724"
+recorded_at = "2026-10-01T08:27:11.205622017Z"
+kind = "friction"
+summary = "/backlog: filtered backlog list appends an unrelated 'boundary:' needs block to every query"
+detail = "Surveying for duplicates with 'doctrine backlog list -a -r <regex>' (~20 queries), every result, including zero-match ones, ended with the same 'boundary: IMP-386..389 needs QUE-218 (open)' block that has nothing to do with the filter. Each query output had to be visually stripped or grep-filtered. Skill: backlog (observation-analysis triage)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
