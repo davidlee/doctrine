@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f699-fd28-7b01-9d62-97a41d3f6cd3"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f699-fd28-7b01-9d62-97b0f0bc83e0"
+seq = 0
+a = "IMP-508"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 2.0
+est_upper = 5.0
+rater = "agent"
+note = "unit: agent-hours; compute admissible labels on refusal"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

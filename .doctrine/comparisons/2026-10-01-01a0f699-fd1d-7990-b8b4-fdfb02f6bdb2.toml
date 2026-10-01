@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f699-fd1d-7990-b8b4-fdfb02f6bdb2"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f699-fd1d-7990-b8b4-fe01b97d0f65"
+seq = 0
+a = "ISS-489"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 1.0
+est_upper = 3.0
+rater = "agent"
+note = "unit: agent-hours; mint key symlink on late-bind"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

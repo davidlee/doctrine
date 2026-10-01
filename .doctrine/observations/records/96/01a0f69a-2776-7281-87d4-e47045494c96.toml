@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0f69a-2776-7281-87d4-e47045494c96"
+recorded_at = "2026-10-01T08:34:52.918743241Z"
+kind = "friction"
+summary = "/backlog triage: next's estimate column renders '·' for items carrying agent-tier estimate claims"
+detail = "After 'doctrine estimate set --rater agent' on 28 items, 'doctrine next --columns id,score,estimate,value' shows '·' in the estimate column for every one, while the value column renders agent claims as '3.0~'. The estimates clearly feed the score (CHR-175 at 0.25-1h jumped to 10.2), so the claim is live but invisible in the table; confirming an estimate landed needs show/explain. Skill: backlog (priority calibration)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

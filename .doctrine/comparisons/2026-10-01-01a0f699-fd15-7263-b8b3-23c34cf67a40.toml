@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f699-fd15-7263-b8b3-23c34cf67a40"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f699-fd15-7263-b8b3-23d0afbe870b"
+seq = 0
+a = "CHR-175"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 0.25
+est_upper = 1.0
+rater = "agent"
+note = "unit: agent-hours; flake.nix package add; host jail rebuild"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

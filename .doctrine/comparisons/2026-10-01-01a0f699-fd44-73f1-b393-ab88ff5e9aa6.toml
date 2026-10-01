@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f699-fd44-73f1-b393-ab88ff5e9aa6"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f699-fd44-73f1-b393-ab9e90b6b2fe"
+seq = 0
+a = "IMP-480"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 3.0
+est_upper = 10.0
+rater = "agent"
+note = "unit: agent-hours; relation target widening"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

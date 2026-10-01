@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f699-fd48-7582-9135-3701fc536419"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f699-fd48-7582-9135-371ad886b270"
+seq = 0
+a = "IMP-221"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 4.0
+est_upper = 12.0
+rater = "agent"
+note = "unit: agent-hours; bundled: body edit, MCP, dirty-tree gate"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

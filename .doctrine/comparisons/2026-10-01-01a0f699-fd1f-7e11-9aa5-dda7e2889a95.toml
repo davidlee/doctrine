@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f699-fd1f-7e11-9aa5-dda7e2889a95"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f699-fd1f-7e11-9aa5-ddb4a7a59819"
+seq = 0
+a = "IMP-431"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 1.0
+est_upper = 3.0
+rater = "agent"
+note = "unit: agent-hours; read form for slice notes"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f699-fd39-7411-b7fd-61456ca0ce3c"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f699-fd39-7411-b7fd-6153040ee79d"
+seq = 0
+a = "ISS-463"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 1.0
+est_upper = 6.0
+rater = "agent"
+note = "unit: agent-hours; flake root cause uncertain"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"
