@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0f69d-b39a-7bd3-b390-7e45bf9922ce"
+recorded_at = "2026-10-01T08:38:45.402216548Z"
+kind = "friction"
+summary = "/backlog follow-up: memory search 'python3' reports no match although 10 local memories contain the token"
+detail = """Checking for memories that assert python3 is absent from the jail: 'doctrine memory search python3' printed 'No match for "python3"', but grep finds the token in 10 memory files under .doctrine/memory/items, including mem_01a0ba88 which states it is absent. Had I trusted the search, a stale claim would have survived the jail change. Possibly alphanumeric tokenisation. Skill: backlog/retrieve-memory."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
