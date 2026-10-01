@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5ed5-7290-af78-3bafc797f23e"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5ed5-7290-af78-3bb40f71a28c"
+seq = 0
+a = "ISS-510"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+note = "every design run pays ~3 refused applies"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

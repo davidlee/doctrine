@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5ee5-79b2-966b-278969284c29"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5ee5-79b2-966b-2794d02029c6"
+seq = 0
+a = "IMP-508"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 1.5
+rater = "agent"
+note = "link labels discoverable only by failing"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

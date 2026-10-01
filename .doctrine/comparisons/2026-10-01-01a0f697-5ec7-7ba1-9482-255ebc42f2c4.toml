@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5ec7-7ba1-9482-255ebc42f2c4"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5ec7-7ba1-9482-2563a40b9c8a"
+seq = 0
+a = "ISS-507"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.0
+rater = "agent"
+note = "24 obs; every capsule run; shipped agent defs teach the wrong form"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5ed7-7b33-97ac-a10e5803fd77"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5ed7-7b33-97ac-a1155f426dfc"
+seq = 0
+a = "ISS-514"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+note = "contradicts the audit-on-a-worktree ritual"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

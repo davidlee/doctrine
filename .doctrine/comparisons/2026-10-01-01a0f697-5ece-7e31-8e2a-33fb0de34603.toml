@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5ece-7e31-8e2a-33fb0de34603"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5ece-7e31-8e2a-340e86f34bc4"
+seq = 0
+a = "CHR-175"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.5
+rater = "agent"
+note = "12 obs; one-line flake change"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

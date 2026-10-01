@@ -8,8 +8,8 @@ kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-09-26"
-updated = "2026-09-26"
-tags = ["area:cli", "area:review", "cluster:review-system", "rfc-032"]
+updated = "2026-10-01"
+tags = ["area:cli", "area:review", "cluster:review-system", "observed", "rfc-032"]
 
 # outbound-only. Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -18,7 +18,7 @@ tags = ["area:cli", "area:review", "cluster:review-system", "rfc-032"]
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
 needs    = []                   # item→item hard prerequisite
-after    = []                   # item→item soft sequence: { to, rank? }
+after    = [{ to = "IMP-475", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]

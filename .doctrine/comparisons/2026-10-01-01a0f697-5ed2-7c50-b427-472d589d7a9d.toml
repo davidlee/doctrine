@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5ed2-7c50-b427-472d589d7a9d"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5ed2-7c50-b427-47327e55347f"
+seq = 0
+a = "IMP-431"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+note = "writer-shaped reader; recurring refusal"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

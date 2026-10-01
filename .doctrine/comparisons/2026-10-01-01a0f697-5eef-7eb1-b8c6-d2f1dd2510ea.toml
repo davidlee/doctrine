@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5eef-7eb1-b8c6-d2f1dd2510ea"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5eef-7eb1-b8c6-d305d959f7ff"
+seq = 0
+a = "ISS-515"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 1.0
+rater = "agent"
+note = "usage line misleads; trivial clap fix"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

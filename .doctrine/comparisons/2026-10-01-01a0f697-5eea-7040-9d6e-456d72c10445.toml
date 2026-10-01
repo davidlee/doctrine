@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5eea-7040-9d6e-456d72c10445"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5eea-7040-9d6e-457d68375fcb"
+seq = 0
+a = "IMP-480"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 1.0
+rater = "agent"
+note = "finding-born items cannot cite their RV"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

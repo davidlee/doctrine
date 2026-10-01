@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5ecc-7180-ac4a-a9e37a83bbb3"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5ecc-7180-ac4a-a9f4d093e9e1"
+seq = 0
+a = "ISS-226"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 3.0
+rater = "agent"
+note = "14 obs; verify-vt emits false evidence"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

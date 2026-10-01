@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5edd-7fd2-875a-b36582e66973"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5edd-7fd2-875a-b373abb4023b"
+seq = 0
+a = "ISS-463"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+note = "flake forces gate reruns; instrumentation worsens it"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

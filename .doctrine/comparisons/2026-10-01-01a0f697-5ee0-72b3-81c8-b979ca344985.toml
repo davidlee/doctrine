@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5ee0-72b3-81c8-b979ca344985"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5ee0-72b3-81c8-b98a03f456f4"
+seq = 0
+a = "ISS-358"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 1.5
+rater = "agent"
+note = "drift advisory noise on every phase"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

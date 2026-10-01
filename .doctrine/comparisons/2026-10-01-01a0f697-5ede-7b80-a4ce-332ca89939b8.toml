@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5ede-7b80-a4ce-332ca89939b8"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5ede-7b80-a4ce-333f628593c6"
+seq = 0
+a = "IMP-221"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+note = "memory verify unsatisfiable in a shared tree"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

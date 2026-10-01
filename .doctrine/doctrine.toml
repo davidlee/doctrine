@@ -6,8 +6,9 @@ risk = 1.0
 [priority.tag_coefficients]
 next = 3.0
 "area:dispatch" = 1.0
-"cluster:design-run" = 3.0
+"cluster:design-run" = 1.5
 "cluster:capsule" = 2.0
+observed = 3.0
 
 [priority.consequence]
 ref_coeff = 0.5

@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5ecf-7673-8d13-b536edad0559"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5ecf-7673-8d13-b5486783d291"
+seq = 0
+a = "ISS-486"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.5
+rater = "agent"
+note = "shell expansion leaked live API keys into a ledger"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"

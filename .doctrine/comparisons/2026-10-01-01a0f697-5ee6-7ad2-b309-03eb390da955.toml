@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "01a0f697-5ee6-7ad2-b309-03eb390da955"
+date = "2026-10-01"
+
+[[judgement]]
+uid = "01a0f697-5ee6-7ad2-b309-03f5cf3d0ab4"
+seq = 0
+a = "ISS-349"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 1.5
+rater = "agent"
+note = "silent prose corruption in authored records"
+date = "2026-10-01"
+basis = "friction-observation analysis 2026-10-01"
