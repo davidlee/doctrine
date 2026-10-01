@@ -59,7 +59,7 @@ impl Provenance {
     pub(crate) const IMPORTED_PROSE: &'static str = "imported-prose";
 
     /// The closed-vocabulary label this provenance renders as on a change row.
-    /// Bounded at admission by [`super::bounds::DESIGN_STAGE_LABEL_BYTES`] — the
+    /// Bounded at admission by [`super::bounds::DESIGN_LABEL_BYTES`] — the
     /// longest member, `shaping-question`, is 16 B.
     pub(crate) const fn label(&self) -> &'static str {
         match self {
@@ -143,7 +143,7 @@ impl Disposition {
 /// admission arm cannot drift apart.
 ///
 /// The spellings are chosen to fit
-/// [`super::bounds::DESIGN_STAGE_LABEL_BYTES`], because the form rides a change
+/// [`super::bounds::DESIGN_LABEL_BYTES`], because the form rides a change
 /// row as a [`super::change_log::ValueKind::Label`] term and a label is
 /// **refused, never trimmed**. `retain-unresolved` would be 17 B and refuse
 /// itself; the token is `unresolved`, and the compile-time assertion below is
@@ -193,8 +193,7 @@ impl DispositionForm {
 /// asserted** (EX-16(a)): the form vocabulary is closed, so a fifth form — or a
 /// re-spelling of one of these four — that outgrew the label bound stops the
 /// build instead of refusing itself at runtime, in one branch, later.
-const _: () =
-    assert!(widest_form(&DispositionForm::ALL) <= super::bounds::DESIGN_STAGE_LABEL_BYTES);
+const _: () = assert!(widest_form(&DispositionForm::ALL) <= super::bounds::DESIGN_LABEL_BYTES);
 
 /// The widest disposition label, at compile time.
 const fn widest_form(rest: &[DispositionForm]) -> usize {

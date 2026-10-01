@@ -46,7 +46,7 @@ mod runbook_fixture;
 mod design_run;
 
 use design_run::attestation::{ActKind, AgentAct, ReviewDisposition};
-use design_run::bounds::{DESIGN_ID_BYTES, DESIGN_STAGE_LABEL_BYTES};
+use design_run::bounds::{DESIGN_ID_BYTES, DESIGN_LABEL_BYTES};
 use design_run::change_log::{
     ChangeEvent, ChangeRow, PayloadTerm, StoredRow, Unreadable, ValueKind,
 };
@@ -1746,7 +1746,7 @@ fn rendered_payload_fits_its_cap_for_every_event_kind() {
             .map(|(key, kind)| match kind {
                 ValueKind::Token => PayloadTerm::token(*key, "x".repeat(DESIGN_ID_BYTES))
                     .expect("a saturated identity term is exactly at its admission bound"),
-                ValueKind::Label => PayloadTerm::label(*key, "x".repeat(DESIGN_STAGE_LABEL_BYTES))
+                ValueKind::Label => PayloadTerm::label(*key, "x".repeat(DESIGN_LABEL_BYTES))
                     .expect("a saturated label term is exactly at its admission bound"),
                 ValueKind::Digest => PayloadTerm::digest(*key, "a".repeat(64)),
                 ValueKind::Prose => PayloadTerm::prose(*key, "z".repeat(5000)),
@@ -2026,7 +2026,7 @@ fn no_id_is_constructed_outside_the_validating_constructor() {
 fn over_bound_payload_terms_are_refused_at_construction_and_on_the_wire() {
     // (a) the constructors.
     let over_id = "x".repeat(DESIGN_ID_BYTES + 1);
-    let over_label = "y".repeat(DESIGN_STAGE_LABEL_BYTES + 1);
+    let over_label = "y".repeat(DESIGN_LABEL_BYTES + 1);
     assert!(
         PayloadTerm::token(design_run::change_log::PayloadKey::Node, over_id.clone()).is_err(),
         "an identity term one byte over `DESIGN_ID_BYTES` is refused, never trimmed"
@@ -2037,7 +2037,7 @@ fn over_bound_payload_terms_are_refused_at_construction_and_on_the_wire() {
             over_label.clone()
         )
         .is_err(),
-        "and so is a label term one byte over `DESIGN_STAGE_LABEL_BYTES`"
+        "and so is a label term one byte over `DESIGN_LABEL_BYTES`"
     );
     assert!(
         PayloadTerm::token(

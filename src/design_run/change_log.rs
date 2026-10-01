@@ -22,7 +22,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::bounds::{
-    CHANGE_LOG_REVISIONS, DESIGN_EVENT_NAME_BYTES, DESIGN_ID_BYTES, DESIGN_STAGE_LABEL_BYTES,
+    CHANGE_LOG_REVISIONS, DESIGN_EVENT_NAME_BYTES, DESIGN_ID_BYTES, DESIGN_LABEL_BYTES,
 };
 use super::ids::DesignId;
 use super::refusal::Refusal;
@@ -657,7 +657,7 @@ pub(crate) enum ValueKind {
     /// admission by [`super::bounds::DESIGN_ID_BYTES`]; never truncated.
     Token,
     /// A closed-vocabulary label: stage name, provenance, lifecycle, disposition
-    /// form. Bounded at admission by [`super::bounds::DESIGN_STAGE_LABEL_BYTES`];
+    /// form, review policy. Bounded at admission by [`super::bounds::DESIGN_LABEL_BYTES`];
     /// never truncated.
     Label,
     /// A content fingerprint, stored whole and abbreviated when rendered.
@@ -705,8 +705,8 @@ impl ValueKind {
             // by the same constant the row arithmetic is derived from.
             ValueKind::Token => Some(("payload identity term", DESIGN_ID_BYTES)),
             // A label is a closed-vocabulary token — stage, lifecycle,
-            // provenance, disposition form — and shares the stage-label bound.
-            ValueKind::Label => Some(("payload label term", DESIGN_STAGE_LABEL_BYTES)),
+            // provenance, disposition form — and shares the label bound.
+            ValueKind::Label => Some(("payload label term", DESIGN_LABEL_BYTES)),
             ValueKind::Digest | ValueKind::Prose => None,
         }
     }
@@ -774,7 +774,7 @@ impl PayloadTerm {
     }
 
     /// A closed-vocabulary label term — rendered whole, bounded at admission by
-    /// [`super::bounds::DESIGN_STAGE_LABEL_BYTES`].
+    /// [`super::bounds::DESIGN_LABEL_BYTES`].
     pub(crate) fn label(key: PayloadKey, value: impl Into<String>) -> Result<Self, Refusal> {
         PayloadTerm::admit(key, ValueKind::Label, value.into())
     }

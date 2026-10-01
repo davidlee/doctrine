@@ -193,8 +193,7 @@ const fn widest_stage(rest: &[Stage]) -> usize {
     }
 }
 
-/// The provenance of [`bounds::DESIGN_STAGE_LABEL_BYTES`], **proved rather than
-/// asserted** (EX-16(a)): the stage vocabulary is closed, its longest member is
-/// `exploring` at 9 B, and the bound leaves room for one more without moving the
-/// rendered-row arithmetic.
-const _: () = assert!(widest_stage(&Stage::ALL) <= bounds::DESIGN_STAGE_LABEL_BYTES);
+/// The stage labels fit [`bounds::DESIGN_LABEL_BYTES`], **proved rather than
+/// asserted** (EX-16(a)) for the stage vocabulary: it is closed, and its longest
+/// member is `exploring` at 9 B.
+const _: () = assert!(widest_stage(&Stage::ALL) <= bounds::DESIGN_LABEL_BYTES);

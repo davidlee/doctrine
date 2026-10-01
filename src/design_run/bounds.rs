@@ -36,12 +36,16 @@
 /// in the sketch is computed from it (subject id term = 32 B).
 pub(crate) const DESIGN_ID_BYTES: usize = 32;
 
-/// Bytes of a **stage label** at admission.
+/// Bytes of a **closed-vocabulary label** at admission — every
+/// [`super::change_log::ValueKind::Label`] term shares this one bound.
 ///
-/// Derivation: the stage vocabulary is closed ([`super::Stage::ALL`]) and its
-/// longest member is `exploring` at 9 B. 16 is the next power of two above it,
-/// leaving room for one further stage name without moving the row arithmetic.
-pub(crate) const DESIGN_STAGE_LABEL_BYTES: usize = 16;
+/// Derivation: the widest member across the label vocabularies is a review
+/// policy, `adversarial-then-human` at 22 B ([`super::attestation::ReviewPolicy::ALL`]).
+/// 32 is the next power of two above it. Each vocabulary carries its own
+/// const-assert against this bound (stages in `mod.rs`, disposition forms in
+/// `inquiry.rs`, review policies in `attestation.rs`), so a wider member stops
+/// the build rather than being refused at apply (ISS-462).
+pub(crate) const DESIGN_LABEL_BYTES: usize = 32;
 
 /// Bytes of a **change-event name** at admission.
 ///

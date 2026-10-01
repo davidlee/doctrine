@@ -22,23 +22,23 @@
 //! The rule forbids emission bounds reaching storage, not the reverse.
 //!
 //! **What privacy does not catch, stated plainly:** a *copied literal* — someone
-//! typing `96` into storage code. Nothing here catches that; it is STD-001's
+//! typing `64` into storage code. Nothing here catches that; it is STD-001's
 //! no-magic-numbers rule and it is caught by review, not by construction.
 //!
 //! # The derivation (sketch § *The rendered payload, derived rather than asserted*)
 //!
 //! A rendered payload is space-separated `key=value`. The widest member of the
 //! closed vocabulary is `stage_moved` carrying a regression reason:
-//! `from=`(5) + 16 + `to=`(3) + 16 + `reason=`(7) + 96 + two separators (2) =
+//! `from=`(5) + 32 + `to=`(3) + 32 + `reason=`(7) + 64 + two separators (2) =
 //! **145 B**, so [`ENVELOPE_PAYLOAD_BYTES`] = 160 holds every member with 15 B
 //! spare. The whole row is revision (20) + index (10) + event name (32) +
 //! subject id (32) + payload (160) + framing (10) = **264 B**.
 //!
-//! Both stage-label and id terms are *admission* bounds, so a value arriving
+//! Both label and id terms are *admission* bounds, so a value arriving
 //! here is already within them by construction: the worst case holds because no
 //! value that large can exist, not because this module would truncate it to fit.
 
-use super::bounds::{DESIGN_EVENT_NAME_BYTES, DESIGN_ID_BYTES, DESIGN_STAGE_LABEL_BYTES};
+use super::bounds::{DESIGN_EVENT_NAME_BYTES, DESIGN_ID_BYTES, DESIGN_LABEL_BYTES};
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, ValueKind};
 use super::gate::Condition;
 
@@ -151,12 +151,13 @@ const ENVELOPE_NORMAL_BUDGET_BYTES: usize = 24576;
 
 /// Bytes of a regression reason as *rendered* on a change row.
 ///
-/// Derivation: the residual of the payload budget after the two stage labels and
-/// their keys — 160 − (5 + 16 + 3 + 16 + 2) = 118, rounded down to 96 so the
-/// widest payload lands 15 B inside the budget rather than flush against it.
+/// Derivation: the residual of the payload budget after the two labels, all
+/// three keys and the separators — 160 − (5 + 32 + 3 + 32 + 7 + 2) = 79, rounded
+/// down to 64 so the widest payload lands 15 B inside the budget rather than
+/// flush against it. It was 96 until the label bound grew to 32 (ISS-462).
 /// Prose is the only term that degrades gracefully, so it is the only one that
 /// absorbs the rounding.
-const ENVELOPE_CHANGE_REASON_BYTES: usize = 96;
+const ENVELOPE_CHANGE_REASON_BYTES: usize = 64;
 
 /// Bytes of one *rendered* change row's event payload. Derivation above.
 const ENVELOPE_PAYLOAD_BYTES: usize = 160;
@@ -216,9 +217,9 @@ const WIDEST_PAYLOAD_EVENT: ChangeEvent = ChangeEvent::StageMoved;
 /// The widest payload the closed vocabulary can produce: `stage_moved` carrying
 /// a regression reason. Every key width derives from [`PayloadKey::as_str`].
 const WIDEST_PAYLOAD_BYTES: usize = key_prefix_bytes(PayloadKey::From)
-    + DESIGN_STAGE_LABEL_BYTES
+    + DESIGN_LABEL_BYTES
     + key_prefix_bytes(PayloadKey::To)
-    + DESIGN_STAGE_LABEL_BYTES
+    + DESIGN_LABEL_BYTES
     + key_prefix_bytes(PayloadKey::Reason)
     + ENVELOPE_CHANGE_REASON_BYTES
     + WIDEST_PAYLOAD_SEPARATORS;

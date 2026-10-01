@@ -1308,6 +1308,24 @@ fn loosening_the_policy_clears_the_gate() {
     assert_eq!(fixture.stage(), Stage::Locked);
 }
 
+/// Every policy the contract advertises is declarable (ISS-462): the change row
+/// carries the policy as a label term, so a policy wider than the label bound
+/// was refused at apply despite being listed as valid.
+#[test]
+fn every_advertised_review_policy_is_declarable() {
+    let fixture = Fixture::reviewing();
+    for policy in ReviewPolicy::ALL {
+        fixture.apply(&fixture.payload(
+            &format!("policy-{}", policy.as_str()),
+            &json!({"review_policy": {
+                "policy": policy.as_str(),
+                "acceptance": {"basis": "the user chose this policy"},
+            }}),
+        ));
+        assert_eq!(fixture.read().run.review_policy, policy);
+    }
+}
+
 // ── SL-244 T13 / VT-10: neither arm is takeable except in the user's name ──
 
 /// The disposition payload with its acceptance **removed**.

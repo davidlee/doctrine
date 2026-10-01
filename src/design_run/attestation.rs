@@ -259,6 +259,24 @@ impl ReviewPolicy {
     ];
 }
 
+/// The policy label fits its admission bound, **proved rather than asserted**
+/// (EX-16(a)): a `review_policy_changed` row carries the policy as a label term,
+/// so a policy wider than the bound was advertised valid and refused at apply
+/// (ISS-462). A wider member now stops the build instead.
+const _: () = assert!(widest_policy(&ReviewPolicy::ALL) <= super::bounds::DESIGN_LABEL_BYTES);
+
+/// The widest policy label, at compile time.
+const fn widest_policy(rest: &[ReviewPolicy]) -> usize {
+    match rest {
+        [] => 0,
+        [head, tail @ ..] => {
+            let head = head.as_str().len();
+            let tail = widest_policy(tail);
+            if head > tail { head } else { tail }
+        }
+    }
+}
+
 /// A content-bound review attestation (DEC-073).
 ///
 /// The fingerprint is not decoration: an attestation names the exact bytes it
