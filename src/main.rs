@@ -541,6 +541,42 @@ mod write_class_tests {
         assert_eq!(args.lifespan, Some(memory::Lifespan::Working));
     }
 
+    /// The free-text query a `memory <verb> …` invocation resolves to.
+    fn memory_free_query(argv: &[&str]) -> Result<Option<String>, clap::Error> {
+        let cli = Cli::try_parse_from(["doctrine", "memory"].iter().chain(argv))?;
+        let Command::Memory { command } = cli.command else {
+            panic!("expected a memory command");
+        };
+        let args = match command {
+            MemoryCommand::Search { args } | MemoryCommand::Retrieve { args, .. } => args,
+            _ => panic!("expected memory search or retrieve"),
+        };
+        Ok(args.free_query())
+    }
+
+    // ISS-507: both verbs take the query positionally or via --query, not both.
+    #[test]
+    fn memory_search_and_retrieve_accept_the_query_either_way() {
+        for verb in ["search", "retrieve"] {
+            let topic = Some("topic".to_string());
+            assert_eq!(
+                memory_free_query(&[verb, "topic"]).unwrap(),
+                topic,
+                "{verb}"
+            );
+            assert_eq!(
+                memory_free_query(&[verb, "--query", "topic"]).unwrap(),
+                topic,
+                "{verb}"
+            );
+            assert_eq!(memory_free_query(&[verb]).unwrap(), None, "{verb}");
+            assert!(
+                memory_free_query(&[verb, "a", "--query", "b"]).is_err(),
+                "{verb}: positional and --query together must be rejected"
+            );
+        }
+    }
+
     #[test]
     fn memory_search_invalid_lifespan_is_rejected() {
         let cli = Cli::try_parse_from(["doctrine", "memory", "search", "--lifespan", "garbage"]);

@@ -43,6 +43,10 @@ fn parse_expand_depth(s: &str) -> Result<usize, String> {
 /// `#[command(flatten)]` — each shared field is defined once (DRY).
 #[derive(Args, Debug)]
 pub(crate) struct FindRetrieveArgs {
+    /// Free-text lexical query, positional (alias of `--query`; not both).
+    #[arg(conflicts_with = "flag_query")]
+    pub(crate) query: Option<String>,
+
     /// Path scope probe, repeatable (`-p`/`--path` is the project root).
     #[arg(long = "path-scope")]
     pub(crate) path_scope: Vec<String>,
@@ -60,7 +64,7 @@ pub(crate) struct FindRetrieveArgs {
     pub(crate) tag: Vec<String>,
 
     /// Free-text lexical query (not a scope constraint).
-    #[arg(long = "query")]
+    #[arg(long = "query", value_name = "QUERY")]
     pub(crate) flag_query: Option<String>,
 
     /// Hard filter by type: concept|fact|pattern|signpost|system|thread.
@@ -110,6 +114,13 @@ pub(crate) struct FindRetrieveArgs {
     /// Expand graph by traversing relations N levels deep (retrieve only).
     #[arg(long, value_parser = parse_expand_depth)]
     pub(crate) expand: Option<usize>,
+}
+
+impl FindRetrieveArgs {
+    /// The free-text query, from the positional or `--query` (clap forbids both).
+    pub(crate) fn free_query(&self) -> Option<String> {
+        self.query.clone().or_else(|| self.flag_query.clone())
+    }
 }
 
 #[derive(Subcommand)]
@@ -270,9 +281,6 @@ pub(crate) enum MemoryCommand {
     /// Rows carry trust + severity so the holdback-exempt search surface keeps risk visible.
     #[command(alias = "find")]
     Search {
-        /// Positional query (zero or one; maps to --query). Mutually exclusive with --query.
-        query: Option<String>,
-
         #[command(flatten)]
         args: FindRetrieveArgs,
     },
@@ -634,14 +642,8 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
                 run_list(&mut io::stdout(), path, memory_type, args)
             }
         }
-        MemoryCommand::Search { query, args } => {
-            // Merge positional query + --query; mutually exclusive.
-            let free_query = match (query, args.flag_query) {
-                (Some(_), Some(_)) => {
-                    anyhow::bail!("cannot specify both a positional query and --query")
-                }
-                (q, None) | (None, q) => q,
-            };
+        MemoryCommand::Search { args } => {
+            let free_query = args.free_query();
             let limit = resolve_limit(
                 args.limit,
                 crate::retrieve::SEARCH_LIMIT_DEFAULT,
@@ -669,6 +671,7 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
             )
         }
         MemoryCommand::Retrieve { args, min_trust } => {
+            let free_query = args.free_query();
             // Page by the capped limit — the size actually rendered (RV-410 F-2).
             let retrieve_limit = resolve_limit(
                 args.limit,
@@ -685,7 +688,7 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
                 args.command,
                 args.tag,
                 args.lifespan,
-                args.flag_query,
+                free_query,
                 args.memory_type,
                 args.status,
                 args.include_draft,
