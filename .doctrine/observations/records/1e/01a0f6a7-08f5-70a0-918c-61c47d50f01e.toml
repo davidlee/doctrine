@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0f6a7-08f5-70a0-918c-61c47d50f01e"
+recorded_at = "2026-10-01T08:48:57.077965247Z"
+kind = "friction"
+summary = "/knowledge: link refusal for EVD→RFC names legal target kinds, not the label that works"
+detail = """Linking a new evidence record to the RFCs it bears on: 'doctrine link EVD-031 supports RFC-027' refused with "supports target must be one of [ASM, DEC, QUE, CON, EVD, HYP, CPT]". The working form (references --role concerns --descriptor ...) had to be recalled from link --help. Third-plus recurrence of IMP-508's class within one session family. Skill: knowledge."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

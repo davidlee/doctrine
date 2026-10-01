@@ -1,0 +1,37 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 31
+slug = "plan-claims-are-frozen-prose-that-the-tree-outruns"
+title = "Plan claims are frozen prose that the tree outruns"
+record_kind = "evidence"
+status = "captured"
+created = "2026-10-01"
+updated = "2026-10-01"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = ""
+provenance   = ""               # inspection | experiment | reproduction | citation
+confidence   = ""               # low | medium | high
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "measured failure distribution for P1 and Stages 3-4"
+target = "RFC-027"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "observed demand ranking for Directions B, F, G"
+target = "RFC-023"
