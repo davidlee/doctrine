@@ -13,6 +13,14 @@ is missing, plausible text goes in instead, and that is the hardest defect in
 a design to find afterwards, because nothing about the result reads as
 incomplete.
 
+**Who should claim it.** Inquiry spends a lot of context, and what it settled
+now lives in the run's structured record, not only in this conversation.
+Drafting wants that record in a different shape than inquiry built it in. If
+you conducted the inquiry in this context, offer the user `/handover` before
+claiming readiness, so a fresh agent re-enters through `doctrine design resume`
+and makes this claim itself. If they decline, or you are already that fresh
+agent, carry on.
+
 **What is enough.** This is your own check, not a question for the user: can
 you name the decision behind every section you are about to write? If one is
 missing, say which and go back to inquiring. If none is, declare it and carry
