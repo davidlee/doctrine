@@ -22,37 +22,38 @@ is evidence, not canon; this slice's design locks it.
 
 ## Scope & Objectives
 
-Designed views for humans and agents, on three orthogonal axes:
+Designed views for humans and agents. Settled in the design run's inquiry
+(DEC-361..DEC-370):
 
 ```
-projection (what)          format (how)       filter (which)
-────────────────────       ────────────       ─────────────────────
-index        (default)  ×  table (default) ×  --open (non-terminal)
---finding F-n (repeat)     json               --status <s>
---full                                        --severity <s>
+depth (how much)              selector / filters (which)       format
+───────────────────────       ──────────────────────────       ──────
+index          (default)  ×   -f/--finding 3,5,7          ×    table (default)
+--full  (+ brief body)        --open  -s/--status              json
+                              -S/--severity  (ANDed)
 ```
 
-1. **One projection.** A serialisable `ReviewView` (finding view included) in
-   the ledger tier; table, CLI JSON and MCP are renders of it.
-2. **Projections on `review show`:**
-   - default — header (status, await, facet, target, rounds, concluded) + one
-     line per finding + the brief (as today);
-   - `--finding F-n` — that finding in full: severity, status, disposition,
-     route, title, detail, response, turn journal (no `anchor` until RFC-032
-     `D3`, slice 3);
-   - `--full` — brief, synthesis, every finding in full.
-3. **Filters** shared by `show` and the census: `--open`, `--status`,
-   `--severity`.
-4. **JSON is the projection, not the TOML** (`IMP-476`). CLI `--json` and MCP
-   `review_show` emit one shape, `findings` plural. `--json` defaults to the
-   index projection, not the full dump. Breaking change to CLI JSON, accepted
-   pre-1.0 (`D5`). Ledger findings have no `summary` field; IMP-476's empty
+1. **One view** — an owned, serialisable `ReviewView` / `FindingView` in
+   `review_ledger`; table, CLI JSON and MCP render it (DEC-361).
+2. **`review show` depth** — index by default; `-f` shows the selected findings
+   in full; `--full` shows every finding in full plus the brief (DEC-362).
+3. **Default render** — header with rounds and the concluded marker; an
+   outstanding line counting findings by severity and turn; the index, with a
+   route column when any finding has a route; a one-line brief hint; `BLOCKER`
+   and `MAJOR` in capitals in table output (DEC-367). `doctrine show RV-N`
+   prints the same (DEC-364).
+4. **Filters** — one finding predicate in `review_ledger`, shared by `show` and
+   the census (DEC-363).
+5. **JSON** — identical inner `ReviewView` for CLI (`{kind, review}`) and MCP
+   (`{"Showed": …}`), with a `depth` field; `review.finding` stops leaking
+   (DEC-368). Ledger findings have no `summary` field; IMP-476's empty
    `summary` is the design-run finding `D6` deletes (research X5).
-5. **MCP parity** — `review_show` takes the same projection and filter
-   arguments.
-6. **Census** (`IMP-477`) — `doctrine review findings`: one row per finding
-   across the corpus (review id, facet, target, finding columns), standard
-   listing machinery, `--format json`, the shared filters. No aggregation verb.
+6. **MCP** — `review_show` takes the CLI's projection arguments and defaults to
+   index; `view` and `format` retire (DEC-369).
+7. **Census** — `doctrine review findings` plus MCP `review_findings`; the bare
+   verb shows open findings across the corpus (DEC-370).
+8. **`--facet`** on `review list` and the census (DEC-365). Detail is never
+   truncated (DEC-366).
 
 Backlog fulfilled: `IMP-494` (entry point), `IMP-476`, `IMP-477`, and the
 remainder of `IMP-475`.
@@ -80,21 +81,15 @@ remainder of `IMP-475`.
 
 ## Risks, assumptions, open questions
 
-- **Q1 — `--full` vs `D5`'s rejected opt-in.** `D5` rejects a `--findings`
-  flag because the default should be right. `--full` is a larger opt-in render
-  on top of a correct default. Assumed compatible; confirm at design.
-- **Q2 — default JSON projection.** Index-by-default may break callers that
-  read `detail` from today's dump. Inventory callers (skills, scripts, MCP
-  consumers) at research.
-- **Q3 — `detail` carrying multi-KB entity dumps** (`IMP-476`): render
-  verbatim, truncate in the index, or stop writing them? Writing is out of
-  scope; rendering is in.
-- **Q4 — census verb name.** `review findings` vs the top-level `findings`
-  report (priority findings) — check for collision or confusion.
-- **R1 — two shapes forever.** Mitigated by building MCP and CLI from the same
-  struct and testing the JSON once.
+Q1-Q4 were settled by the design inquiry (DEC-362, DEC-368, DEC-366, DEC-370).
+
+- **R1 — two shapes forever.** Mitigated by one struct and one equality test
+  (DEC-368).
+- **R2 — breaking CLI JSON and MCP defaults.** Callers that read
+  `review.finding` or rely on MCP's full default move; research lists them
+  (`research.md` § callers).
 - **A1** — `SL-268`'s journal and `route` are reachable from the ledger module
-  without schema change.
+  without schema change (research fact 4).
 
 ## Verification / closure intent
 
