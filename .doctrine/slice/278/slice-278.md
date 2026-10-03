@@ -38,15 +38,16 @@ index        (default)  ×  table (default) ×  --open (non-terminal)
    - default — header (status, await, facet, target, rounds, concluded) + one
      line per finding + the brief (as today);
    - `--finding F-n` — that finding in full: severity, status, disposition,
-     route, anchor, title, detail, response, turn journal;
+     route, title, detail, response, turn journal (no `anchor` until RFC-032
+     `D3`, slice 3);
    - `--full` — brief, synthesis, every finding in full.
 3. **Filters** shared by `show` and the census: `--open`, `--status`,
    `--severity`.
 4. **JSON is the projection, not the TOML** (`IMP-476`). CLI `--json` and MCP
    `review_show` emit one shape, `findings` plural. `--json` defaults to the
    index projection, not the full dump. Breaking change to CLI JSON, accepted
-   pre-1.0 (`D5`). Settle finding `summary` (empty today) and inlined entity
-   dumps in `detail`.
+   pre-1.0 (`D5`). Ledger findings have no `summary` field; IMP-476's empty
+   `summary` is the design-run finding `D6` deletes (research X5).
 5. **MCP parity** — `review_show` takes the same projection and filter
    arguments.
 6. **Census** (`IMP-477`) — `doctrine review findings`: one row per finding
