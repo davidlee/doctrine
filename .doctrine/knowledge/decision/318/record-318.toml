@@ -7,7 +7,7 @@ title = "Keep RV's Unavailable status arm until D14"
 record_kind = "decision"
 status = "accepted"
 created = "2026-09-26"
-updated = "2026-09-26"
+updated = "2026-10-03"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
@@ -15,7 +15,7 @@ context = "DEC-233 keys RV's Unavailable status on derivation living at command 
 choice = "Keep DERIVED_STATUS=[RV] and its Unavailable arm in SL-268. Update the kinds comment and its pinning test to say derivation is engine-tier and the arm retires with D14 in slice 2."
 alternatives = ["Retire the arm in SL-268 and amend DEC-233 now."]
 rationale = "No consumer reads an RV status through the probe until D14. Retiring now changes backlog-footer behaviour for no user and amends DEC-233 twice."
-consequences = ["Slice 2 (D14) owns the retirement and the DEC-233 amendment."]
+consequences = ["SL-279 owns the retirement and the DEC-233 amendment (RFC-032 D14 carved from slice 2 SL-278)."]
 decided_by = "user"
 decided_on = "2026-09-26"
 
@@ -31,3 +31,7 @@ superseded_by = []   # set on superseded predecessor (verb-written)
 [[relation]]
 label = "shapes"
 target = "SL-268"
+
+[[relation]]
+label = "shapes"
+target = "SL-279"

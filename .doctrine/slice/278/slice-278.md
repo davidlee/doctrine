@@ -61,7 +61,8 @@ remainder of `IMP-475`.
 
 - **`D14` — RV as a relation target (`IMP-480`).** RFC-032 places it in slice
   2, but it changes the relation engine (`RELATION_RULES`,
-  `partition::status_class`), not the read surface. Carve to a sibling slice.
+  `partition::status_class`), not the read surface. Carved to SL-279; DEC-318
+  amended to name it owner (user direction, 2026-10-03).
 - Schema or write-verb changes to the ledger. This slice reads what `SL-268`
   wrote.
 - Design-run binding (`D3`/`D6`, slice 3) and identity/locus (`D7`/`D9`,
@@ -110,4 +111,4 @@ remainder of `IMP-475`.
 
 ## Follow-Ups
 
-- Sibling slice for `D14` / `IMP-480` (RV and REC as relation targets).
+- SL-279 — `D14` / `IMP-480` (RV and REC as relation targets).
