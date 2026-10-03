@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 361
+slug = "review-view-is-an-owned-reviewview-in-review-ledger"
+title = "Review view is an owned ReviewView in review_ledger"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-03"
+updated = "2026-10-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-278 (RFC-032 D5): one read projection must feed table, CLI JSON and MCP. Today ReviewView is command-tier (src/review/read.rs:184), borrows, has no serde, and its finding type review::Finding is one of three Finding types."
+choice = "Move ReviewView into the engine-tier review_ledger module as an owned, serialisable struct with a FindingView finding type. ReviewView owns canonical id, title, facet, derived status and await, target, raiser, responder, rounds, concluded marker, tags, findings, warnings and body. FindingView owns the current finding fields plus its turn journal. body is the review .md prose whole; brief and synthesis are not split."
+alternatives = ["Keep the view command-tier and add a separate JSON struct", "Split the prose into brief and synthesis by parsing headings"]
+rationale = "ADR-001 puts the shared projection in the engine tier where MCP and the census can reach it; one owned serde struct is the only way CLI and MCP shapes cannot drift. Heading parsing is fragile and no reader asked for the parts separately."
+consequences = ["review::Finding is replaced by review_ledger FindingView", "renders in src/review and src/mcp_server consume the view instead of ReviewDoc"]
+decided_by = "user"
+decided_on = "2026-10-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-278"

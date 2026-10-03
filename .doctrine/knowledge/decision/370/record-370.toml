@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 370
+slug = "findings-census-doctrine-review-findings-over-the-listing-machinery-plus-mcp-review-findings"
+title = "Findings census: doctrine review findings over the listing machinery, plus MCP review_findings"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-03"
+updated = "2026-10-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "No corpus view over findings exists (IMP-477). doctrine findings is an unrelated top-level priority-graph report (src/commands/cli.rs:455-475)."
+choice = "doctrine review findings lists one row per finding across the corpus: review, facet, target, id, severity, status, disposition, route, title. It flattens CommonListArgs: status means finding status and terminal findings are hidden unless -a or any -s is given, so the bare verb shows open work. It adds -S/--severity, --facet and --target. JSON uses the listing {kind, rows} envelope; warnings go to stderr and the JSON warnings field as review list does. A thin MCP review_findings tool exposes it."
+alternatives = ["Name it review census", "No MCP tool"]
+rationale = "findings is the noun readers reach for; nesting under review disambiguates it from doctrine findings. The list hide-set convention makes the default the useful one. Agents are the main corpus readers."
+consequences = ["new CLI verb and MCP tool", "census rows reuse the shared finding predicate"]
+decided_by = "user"
+decided_on = "2026-10-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-278"

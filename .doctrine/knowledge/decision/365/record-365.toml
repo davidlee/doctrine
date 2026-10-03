@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 365
+slug = "add-facet-to-review-list-and-the-findings-census"
+title = "Add --facet to review list and the findings census"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-03"
+updated = "2026-10-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "RFC-032 D5 names review list --target plus --facet; review list has --target only (src/review/cli.rs:53-68)."
+choice = "Add --facet to review list and to the census as a row filter."
+alternatives = ["Leave --facet out of SL-278"]
+rationale = "One row predicate, cheap, and the census needs it anyway."
+consequences = ["review list and the census gain --facet"]
+decided_by = "user"
+decided_on = "2026-10-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-278"

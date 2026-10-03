@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 363
+slug = "finding-filters-open-s-status-s-severity-anded-one-ledger-predicate"
+title = "Finding filters: --open, -s/--status, -S/--severity, ANDed, one ledger predicate"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-03"
+updated = "2026-10-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-278: show and the findings census both need to narrow the finding set. listing::retain filters only the row status of a review (active|done); no finding-level predicate or severity axis exists."
+choice = "One finding-filter predicate in review_ledger shared by review show and the census. --open matches non-terminal findings; an out-of-vocabulary status counts as open. -s/--status takes finding statuses, comma-separated and repeatable, validated against the finding vocabulary; on the census it is the CommonListArgs --status meaning the row (finding) status. -S/--severity takes severities, comma-separated and repeatable, exact OR-set; an out-of-vocabulary severity matches blocker. All filters AND."
+alternatives = ["--severity as an at-least threshold", "long-only --severity"]
+rationale = "Matches the -s draft,active precedent in CommonListArgs, so status means the listed row status everywhere. Exact sets compose without a severity ordinal. The user types severity often and possibly more than once per command, so it needs a short comma-separated form; -S is unused. Fail-safe reading of unknown vocab follows SPEC-032 D15."
+consequences = ["review_ledger gains a finding predicate", "show and the census share -s and -S"]
+decided_by = "user"
+decided_on = "2026-10-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-278"

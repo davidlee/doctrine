@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 362
+slug = "review-show-depth-index-by-default-full-via-finding-or-full"
+title = "review show depth: index by default, full via --finding or --full"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-03"
+updated = "2026-10-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-278: review show renders a finding index plus the whole brief; detail, response and turn journal are unreachable without --json. RFC-032 D5 proposed an index default and --finding / --full."
+choice = "Default depth is index: header plus one line per finding plus a one-line hint naming the brief and how to read it; the brief body is omitted. -f/--finding takes finding ids (F-3 or 3), comma-separated and repeatable, and renders those findings at full depth (detail, response, route, turn journal) with the header and without the body. --full renders every finding at full depth plus the body. --finding with --full renders the selected findings plus the body. Filters narrow the finding set at either depth and are refused alongside --finding. An unknown finding id is refused, naming the valid ids."
+alternatives = ["Keep the brief in the default render", "Repeatable --finding with no short form or comma list"]
+rationale = "The frequent read is the index (mostly agents); keeping it near D5s ~200-token budget matters more than first-read convenience, which --full serves. --full selects depth not presence, so it does not revive D5s rejected opt-in. Humans will not retype --finding; -f 3,5,7 is the usable form. -f is free on show (no --filter there) though it means --filter on list verbs."
+consequences = ["show grows -f/--finding and --full", "the default render no longer prints the brief"]
+decided_by = "user"
+decided_on = "2026-10-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-278"

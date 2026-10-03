@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 367
+slug = "default-review-show-rounds-outstanding-line-route-column-brief-hint-caps-for-blockermajor"
+title = "Default review show: rounds, outstanding line, route column, brief hint, caps for blocker/major"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-03"
+updated = "2026-10-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-278: DEC-362 makes the index the default and drops the brief; DEC-364 makes it the doctrine show RV-N render too, so it is the shared entry point. The user wanted more at-a-glance information."
+choice = "The table default renders: title line; facet, status, await, rounds and the concluded marker; the reviews edge with raiser and responder; an outstanding line counting non-terminal findings by severity and naming whose turn each group awaits (or none); the finding index with a route column shown only when any finding has a route; and a one-line hint giving the brief line count and the review show --full and -f invocations. In table renders the severities blocker and major print in capitals (BLOCKER, MAJOR); JSON keeps the lowercase vocabulary tokens."
+alternatives = ["Excerpt the first brief paragraph instead of a hint", "Keep severity lowercase and rely on colour"]
+rationale = "The outstanding line answers what is left and whose move it is without scanning; its counts reuse the close-gate tally. Capitals make gating severities scannable without colour. An excerpt needs prose parsing (rejected in DEC-361); the hint is enough."
+consequences = ["table severity rendering diverges from JSON tokens by case only", "e2e goldens for review show change"]
+decided_by = "user"
+decided_on = "2026-10-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-278"

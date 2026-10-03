@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 366
+slug = "finding-detail-is-never-truncated"
+title = "Finding detail is never truncated"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-03"
+updated = "2026-10-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Raisers paste evidence into detail (largest in repo ~3.2 KB); STD-003 forbids silent truncation."
+choice = "Index depth shows titles only, never detail; full depth prints detail verbatim. No truncation anywhere, so no disclosure is owed."
+alternatives = ["Truncate detail in the index with a disclosure marker"]
+rationale = "Nothing to cut at index depth and nothing hidden at full depth."
+consequences = ["renders never shorten detail"]
+decided_by = "user"
+decided_on = "2026-10-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-278"

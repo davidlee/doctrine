@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 369
+slug = "mcp-review-show-takes-the-cli-projection-arguments-view-and-format-retire"
+title = "MCP review_show takes the CLI projection arguments; view and format retire"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-03"
+updated = "2026-10-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "MCP review_show has view=full|summary (default full) via project_show_summary and a format argument that never changes MCP output (src/mcp_server/tools.rs:142-160, 703-723, 1599-1640)."
+choice = "review_show takes finding (list or comma-separated string), full, open, status and severity, and defaults to index depth like the CLI. view, project_show_summary and format are removed."
+alternatives = ["Keep view as an alias for depth", "Keep MCP defaulting to full depth"]
+rationale = "One projection means the same arguments and default on both transports. Unknown arguments are ignored by the handler, so old callers do not error; a view=summary caller now gets the smaller index."
+consequences = ["MCP review_show schema and description change", "project_show_summary is deleted"]
+decided_by = "user"
+decided_on = "2026-10-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-278"

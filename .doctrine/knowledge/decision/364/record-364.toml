@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 364
+slug = "doctrine-show-rv-n-equals-plain-review-show-the-router-carries-no-review-flags"
+title = "doctrine show RV-N equals plain review show; the router carries no review flags"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-03"
+updated = "2026-10-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SPEC-013 pins doctrine show RV-N byte-identical to review show RV-N; the kind-blind router forwards only --format (src/commands/show.rs:66-80)."
+choice = "doctrine show RV-N prints exactly what plain review show RV-N prints, in table and JSON. The router gains no review-specific flags; -f/--full/filters are reached through review show, which the default render names."
+alternatives = ["Extend the kind-blind router with review flags"]
+rationale = "Keeps the router kind-blind; the default render is the shared entry point and points onward. What that default contains is settled separately (inq-11)."
+consequences = ["the default render must name the review show flags that reach detail"]
+decided_by = "user"
+decided_on = "2026-10-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-278"

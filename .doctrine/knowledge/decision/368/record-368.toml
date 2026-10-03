@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 368
+slug = "one-review-json-shape-identical-inner-reviewview-transport-specific-head"
+title = "One review JSON shape: identical inner ReviewView, transport-specific head"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-03"
+updated = "2026-10-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = 'CLI review show --json emits {kind, review, body} with the raw review.finding array (src/review/read.rs:355-377); MCP review_show emits {"Showed": …} with findings plural; every MCP review tool tags its result by outcome.'
+choice = 'CLI emits {"kind":"review","review":<ReviewView>}; MCP emits {"Showed":<ReviewView>}; the inner object is identical and one test asserts it. The view carries depth (index|full); findings at index depth carry id, severity, status, disposition, route when set, title; full depth adds detail, response and turns. body is present only with --full, otherwise body_lines stands in. warnings sit inside the view, absent when empty. The ledger review.finding array no longer appears. CLI --json defaults to index depth.'
+alternatives = ["Drop the MCP outcome tag for show only", "Keep CLI serialising the raw ReviewDoc"]
+rationale = "Keeps the MCP outcome-tag convention uniform across review tools while making the payload single-sourced. depth makes absence mean not requested rather than empty. Breaking CLI JSON is accepted pre-1.0 (RFC-032 D5)."
+consequences = ["CLI review show --json is a breaking change", "callers reading review.finding move to review.findings"]
+decided_by = "user"
+decided_on = "2026-10-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-278"
