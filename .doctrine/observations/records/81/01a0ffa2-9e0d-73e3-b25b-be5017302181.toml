@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ffa2-9e0d-73e3-b25b-be5017302181"
+recorded_at = "2026-10-03T02:40:42.509910072Z"
+kind = "friction"
+summary = "[slice] skill example 'doctrine link SL-NNN specs SPEC-NNN' refused by CLI"
+detail = "/slice step 4 cites 'specs' as a slice relation label; doctrine link refuses: legal labels for SL are references, supersedes, governed_by, related, fulfils. Used references instead (SL-278)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

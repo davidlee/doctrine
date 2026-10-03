@@ -1,0 +1,69 @@
+id = 278
+slug = "review-read-surface"
+title = "Review read surface"
+status = "design"
+created = "2026-10-03"
+updated = "2026-10-03"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/review/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/review_ledger/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".agents/skills/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/**"
+intent = "scope-relevant"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-494"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-476"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-477"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-475"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-007"
+
+[[relation]]
+label = "references"
+role = "implements"
+target = "SPEC-032"
+
+[[relation]]
+label = "related"
+target = "RFC-032"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis. Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-NNN
+#   doctrine link SL-NNN governed_by ADR-NNN
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.

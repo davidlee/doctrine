@@ -27,3 +27,31 @@ passes `D5` or whether the default stays the index with `--finding` alone.
 Sequence after SL-268: v2 adds `route` and the turn journal, which the render
 should show. Related: IMP-475 (the D5 read-surface remainder) and IMP-476 (unify
 the CLI/MCP read shapes).
+
+## Reframe (2026-10-03): designed views, not piecemeal flags
+
+The user's framing: `review show` doesn't show everything a reader wants, and
+no flag reaches it. The want is a **designed set of CLI-emitted views** for both
+humans and agents (agents mostly JSON), with defaults and flags settled
+together. This item is the entry point for RFC-032 slice 2 (the read surface),
+carried with IMP-476.
+
+Sketch — three orthogonal axes:
+
+```
+projection (what)        format (how)       filter (which)
+──────────────────       ────────────       ──────────────
+index      (default)  ×  table (default) ×  --open   (non-terminal only)
+--finding F-n (rep.)     json               --severity >= X
+--full
+```
+
+- JSON is the same projection in another encoding: agents and humans pick the
+  same views. `--json` defaults to the index too, not the full dump.
+- Default stays index + brief (RFC-032 `D5`).
+- `--finding F-n` is a selector (no `D5` conflict); `--full` is the open
+  question above.
+- `--open` serves the commonest agent read: what remains owed on this ledger.
+- A full finding: severity, status, disposition, route, detail, response, turn
+  journal (SL-268).
+- One projection feeds CLI and MCP (`D5`, IMP-476).
