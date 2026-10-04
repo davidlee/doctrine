@@ -6,6 +6,7 @@
 use std::path::Path;
 
 use anyhow::Context;
+use serde::Serialize;
 
 use super::derive::{VocabDefect, vocabulary_defects};
 use super::schema::{FindingRow, ReviewDoc, canonical_id, parse_ref, read_review, read_reviews};
@@ -61,16 +62,26 @@ pub(crate) struct BlockerRef {
     pub(crate) reason: Option<String>,
 }
 
+/// A finding's authored severity, read fail-safe (SL-268 D15, SPEC-032 D15):
+/// the known severity, or [`Severity::Blocker`] for any out-of-vocabulary
+/// value — a typo'd severity must not quietly un-gate a closure. Extracted
+/// from [`outstanding_by_severity`]'s bucket match (SL-278 PHASE-01 T1) so the
+/// close gate ([`gates_as_blocker`]), the severity lamp, and the `review show`/
+/// census projection (SL-278) classify severity identically by construction.
+pub(crate) fn effective_severity(raw: &str) -> Severity {
+    match Vocab::<Severity>::read(raw) {
+        Vocab::Known(severity) => severity,
+        Vocab::Unknown(_) => Severity::Blocker,
+    }
+}
+
 /// Whether a finding's authored severity gates as a blocker (SL-268 D15, EX-2):
 /// `blocker` itself **or any out-of-vocabulary value**. The fail-safe read — a
 /// typo'd severity must not quietly un-gate a closure. This is the single
 /// severity classification all three predicates below share; they differ only in
 /// which statuses they hold.
 pub(crate) fn gates_as_blocker(raw_severity: &str) -> bool {
-    !matches!(
-        Vocab::<Severity>::read(raw_severity),
-        Vocab::Known(Severity::Major | Severity::Minor | Severity::Nit)
-    )
+    effective_severity(raw_severity) == Severity::Blocker
 }
 
 /// Pure check (design §7): the unresolved blocker findings *this* RV holds against
@@ -211,12 +222,27 @@ fn route_missing(finding: &FindingRow) -> Option<String> {
 /// and for the same reason (SL-244 `D4`): the *rendered* record belongs to the leaf
 /// that renders it, and a general ledger query does not take a dependency on one
 /// consumer's render vocabulary.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub(crate) struct OutstandingCounts {
     pub(crate) blocker: usize,
     pub(crate) major: usize,
     pub(crate) minor: usize,
     pub(crate) nit: usize,
+}
+
+impl OutstandingCounts {
+    /// Add one finding of `severity` to its bucket (SL-278 PHASE-01 T1) — the
+    /// one bucket-selecting match [`outstanding_by_severity`] and the view's
+    /// `Outstanding` (SL-278 PHASE-01 T5) both fold over.
+    pub(crate) fn add(&mut self, severity: Severity) {
+        let bucket = match severity {
+            Severity::Blocker => &mut self.blocker,
+            Severity::Major => &mut self.major,
+            Severity::Minor => &mut self.minor,
+            Severity::Nit => &mut self.nit,
+        };
+        *bucket = bucket.saturating_add(1);
+    }
 }
 
 /// Pure count (SL-244 `EX-2`): what this RV still holds, by severity — every
@@ -252,13 +278,7 @@ pub(crate) fn outstanding_by_severity(doc: &ReviewDoc) -> OutstandingCounts {
         .iter()
         .filter(|f| !Vocab::<FindingStatus>::read(&f.status).is_known_terminal())
     {
-        let bucket = match Vocab::<Severity>::read(&finding.severity) {
-            Vocab::Known(Severity::Major) => &mut counts.major,
-            Vocab::Known(Severity::Minor) => &mut counts.minor,
-            Vocab::Known(Severity::Nit) => &mut counts.nit,
-            Vocab::Known(Severity::Blocker) | Vocab::Unknown(_) => &mut counts.blocker,
-        };
-        *bucket = bucket.saturating_add(1);
+        counts.add(effective_severity(&finding.severity));
     }
     counts
 }
@@ -364,4 +384,46 @@ pub(crate) fn unresolved_blockers_for(
         }
     }
     Ok(blockers)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// SL-278 PHASE-01 T3: `OutstandingCounts` serialises each field by its own
+    /// name — no `as_str` token to drift against, but still worth pinning the
+    /// wire shape (STD-001) since the design's JSON (sec-2) names all four.
+    #[test]
+    fn outstanding_counts_serialises_all_four_fields() {
+        let counts = OutstandingCounts {
+            blocker: 1,
+            major: 2,
+            minor: 3,
+            nit: 4,
+        };
+        assert_eq!(
+            serde_json::to_value(counts).unwrap(),
+            serde_json::json!({"blocker": 1, "major": 2, "minor": 3, "nit": 4})
+        );
+    }
+
+    /// SL-278 PHASE-01 T1/VT-3: every known severity reads itself; an
+    /// out-of-vocabulary value reads as `Blocker` (SPEC-032 D15), and
+    /// `gates_as_blocker` agrees with it on every input.
+    #[test]
+    fn effective_severity_is_known_or_blocker() {
+        assert_eq!(effective_severity("major"), Severity::Major);
+        assert_eq!(effective_severity("minor"), Severity::Minor);
+        assert_eq!(effective_severity("nit"), Severity::Nit);
+        assert_eq!(effective_severity("blocker"), Severity::Blocker);
+        assert_eq!(effective_severity("crit"), Severity::Blocker);
+
+        for raw in ["major", "minor", "nit", "blocker", "crit"] {
+            assert_eq!(
+                gates_as_blocker(raw),
+                effective_severity(raw) == Severity::Blocker,
+                "{raw}"
+            );
+        }
+    }
 }

@@ -417,8 +417,11 @@ impl Role {
 pub(crate) const ROLES: &[&str] = &["raiser", "responder"];
 
 /// A review's derived status (design §8, D-C8) — **never stored**, computed from
-/// the findings at read time. Total over the finding-status enum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// the findings at read time. Total over the finding-status enum. Serialises
+/// via its `as_str` token (SL-278 PHASE-01 T3) — the round-trip pin in `tests`
+/// keeps the two from drifting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum ReviewStatus {
     Active,
     Done,
@@ -439,8 +442,10 @@ pub(crate) const REVIEW_STATUSES: &[&str] = &["active", "done"];
 
 /// Whose turn the review summarizes to (design §8, D-C2 — the baton caches this).
 /// A *priority summary* for display/handoff routing, **not** an independent gate
-/// (the gate is per-finding `can()`, D7).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// (the gate is per-finding `can()`, D7). Serialises via its `as_str` token
+/// (SL-278 PHASE-01 T3), round-trip pinned against drift.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum Await {
     Raiser,
     Responder,
@@ -494,6 +499,31 @@ impl From<Facet> for String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SL-278 PHASE-01 T3: `ReviewStatus`'s serde token and `as_str` cannot
+    /// drift — each variant round-trips to `"{as_str}"`
+    /// (`mem.pattern.lint.closed-vocabulary-tokens-in-diagnostics`).
+    #[test]
+    fn review_status_serde_matches_as_str() {
+        for status in [ReviewStatus::Active, ReviewStatus::Done] {
+            assert_eq!(
+                serde_json::to_string(&status).unwrap(),
+                format!("\"{}\"", status.as_str())
+            );
+        }
+    }
+
+    /// SL-278 PHASE-01 T3: `Await`'s serde token and `as_str` cannot drift,
+    /// including the `None` variant (`"none"`, not the serde-default `null`).
+    #[test]
+    fn await_serde_matches_as_str() {
+        for awaiting in [Await::Raiser, Await::Responder, Await::None] {
+            assert_eq!(
+                serde_json::to_string(&awaiting).unwrap(),
+                format!("\"{}\"", awaiting.as_str())
+            );
+        }
+    }
 
     /// VT-4: the `Disposition` known-set matches the enum's own variants —
     /// PHASE-05's drift canary, in the same shape as `severity_known_set_matches_variants`.

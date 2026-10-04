@@ -21,11 +21,11 @@ use crate::kinds::{REVIEW_DIR, REVIEW_KIND};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::review_ledger::{
     Act, Await, Disposition, FINDING_STATUSES, Facet, FindingRow, FindingState, FindingStatus,
-    REVIEW_STATUSES, ReviewDoc, ReviewMeta, ReviewStatus, Role, Route, Severity, Target,
-    TurnFields, Vocab, VocabDefect, admissible_from, append_finding, append_review_turn, apply_act,
+    REVIEW_STATUSES, ReviewDoc, ReviewMeta, ReviewStatus, ReviewWarning, Role, Route, Severity,
+    Target, TurnFields, Vocab, admissible_from, append_finding, append_review_turn, apply_act,
     authored_path, can, canonical_id, clear_concluded, counters, derived_status, finding_states_of,
     finding_status_of, finding_table_mut, parse_ref, read_authored, read_review, read_reviews,
-    review_table_mut, seed, vocabulary_defects, write_counter_seed,
+    review_table_mut, seed, warnings_of, write_counter_seed,
 };
 
 mod cli;
@@ -36,7 +36,7 @@ mod verbs;
 
 pub(crate) use cli::ReviewCommand;
 pub(crate) use prime::{PrimeArgs, run_prime};
-pub(crate) use read::{Finding, ListRow, ReviewWarning, run_list, run_show, run_status};
+pub(crate) use read::{Finding, ListRow, run_list, run_show, run_status};
 pub(crate) use turn::run_unlock;
 pub(crate) use verbs::{
     AmendArgs, DisposeArgs, NewArgs, RaiseArgs, materialise_review_at, mint_review, resolve_role,

@@ -7,9 +7,9 @@ use super::turn::{
 };
 use super::{
     Await, Column, Context, FindingRow, FindingStatus, Format, ListArgs, Path, PathBuf, REVIEW_DIR,
-    REVIEW_KIND, REVIEW_STATUSES, ReviewDoc, ReviewOutput, ReviewStatus, Serialize, Severity,
-    Target, Vocab, VocabDefect, canonical_id, counters, derived_status, finding_states_of, fs,
-    listing, parse_ref, read_authored, read_review, read_reviews, vocabulary_defects,
+    REVIEW_KIND, REVIEW_STATUSES, ReviewDoc, ReviewOutput, ReviewStatus, ReviewWarning, Serialize,
+    Severity, Target, Vocab, canonical_id, counters, derived_status, finding_states_of, fs,
+    listing, parse_ref, read_authored, read_review, read_reviews, warnings_of,
 };
 use crate::tomlfmt::toml_string;
 
@@ -86,16 +86,10 @@ fn push_line(out: &mut String, key: &str, value: &str) {
 
 /// The `reviews`-edge line shown in `show` and as the `target` column: the
 /// outbound edge to the subject, with an optional `@phase` scope (ADR-004).
+/// Delegates to the engine-tier [`Target::label`] (SL-278 PHASE-01 A1) — no
+/// second copy.
 fn edge_label(doc: &ReviewDoc) -> String {
-    match &doc.target.phase {
-        Some(p) => {
-            let mut s = doc.target.reference.clone();
-            s.push('@');
-            s.push_str(p);
-            s
-        }
-        None => doc.target.reference.clone(),
-    }
+    doc.target.label()
 }
 
 /// `doctrine review show <RV-NNN>` — read the RV as data and render the readable
@@ -195,37 +189,6 @@ pub(super) struct ReviewView<'a> {
     findings: Vec<Finding>,
     /// The ledger's closed-vocabulary defects (SL-268 D15), for disclosure.
     warnings: Vec<ReviewWarning>,
-}
-
-/// One closed-vocabulary defect as disclosed on a structured channel (`--json`,
-/// MCP): the defect plus the RV it sits on, so a multi-review surface (`list`)
-/// needs no second shape. Serialises as `{effect, field, finding, raw, rv}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct ReviewWarning {
-    pub(crate) rv: String,
-    #[serde(flatten)]
-    pub(crate) defect: VocabDefect,
-}
-
-impl ReviewWarning {
-    /// The text-channel line (`warning: RV-NNN F-n …`), newline-terminated.
-    pub(crate) fn line(&self) -> String {
-        let mut line = self.defect.warning_line(&self.rv);
-        line.push('\n');
-        line
-    }
-}
-
-/// Every closed-vocabulary defect in one ledger, as [`ReviewWarning`]s.
-fn warnings_of(doc: &ReviewDoc) -> Vec<ReviewWarning> {
-    let rv = canonical_id(doc.id);
-    vocabulary_defects(doc)
-        .into_iter()
-        .map(|defect| ReviewWarning {
-            rv: rv.clone(),
-            defect,
-        })
-        .collect()
 }
 
 /// The text-channel rendering of a set of warnings: one line each.

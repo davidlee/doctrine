@@ -60,6 +60,22 @@ impl Target {
             }
         }
     }
+
+    /// The `reviews`-edge label (`SL-024` or `SL-024@PHASE-03`, ADR-004):
+    /// moved here from the command-tier `review::read::edge_label` (SL-278
+    /// PHASE-01 A1) so the engine-tier [`super::view::ReviewView`] can build
+    /// it too, with no second copy.
+    pub(crate) fn label(&self) -> String {
+        match &self.phase {
+            Some(phase) => {
+                let mut s = self.reference.clone();
+                s.push('@');
+                s.push_str(phase);
+                s
+            }
+            None => self.reference.clone(),
+        }
+    }
 }
 
 /// The `[review]` metadata table (design §5): the facet, the two role labels, and
@@ -240,6 +256,48 @@ pub(crate) fn read_reviews(review_root: &Path) -> anyhow::Result<Vec<ReviewDoc>>
     Ok(docs)
 }
 
+/// One RV id that exists on disk but did not read as a [`ReviewDoc`] — a
+/// numeric dir with no `review-NNN.toml`, or one that fails to parse (SL-278
+/// PHASE-01 T6, design sec-5 § Tolerant scan). Wire shape `{"rv","reason"}`.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by review census from SL-278 PHASE-04")
+)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct UnreadableReview {
+    pub(crate) rv: String,
+    pub(crate) reason: String,
+}
+
+/// Tolerant scan (design sec-5 § Tolerant scan, A6): every readable review,
+/// plus every id that exists but did not read, disclosed rather than skipped
+/// (STD-003) — `rv` ascending for a deterministic `unreadable` order. Only a
+/// failure to *list* the tree (`entity::scan_ids`) is an `Err`; a per-id read
+/// failure becomes an [`UnreadableReview`] instead. [`read_reviews`] stays
+/// fail-fast unchanged (EX-5) — the close gate must still fail closed.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by review census from SL-278 PHASE-04")
+)]
+pub(crate) fn scan_reviews(
+    review_root: &Path,
+) -> anyhow::Result<(Vec<ReviewDoc>, Vec<UnreadableReview>)> {
+    let mut ids = entity::scan_ids(review_root)?;
+    ids.sort_unstable();
+    let mut docs = Vec::new();
+    let mut unreadable = Vec::new();
+    for id in ids {
+        match read_review(review_root, id) {
+            Ok(doc) => docs.push(doc),
+            Err(e) => unreadable.push(UnreadableReview {
+                rv: canonical_id(id),
+                reason: format!("{e:#}"),
+            }),
+        }
+    }
+    Ok((docs, unreadable))
+}
+
 /// The `RV-NNN` canonical id for a numeric review id, via the single id-form
 /// authority.
 pub(crate) fn canonical_id(id: u32) -> String {
@@ -283,6 +341,28 @@ mod tests {
                         raiser = \"r\"\nresponder = \"s\"\n";
     const FINDING: &str = "[target]\nref = \"SL-001\"\n[[finding]]\nid = \"F-1\"\n\
                            status = \"open\"\nseverity = \"major\"\ntitle = \"t\"\ndetail = \"d\"\n";
+
+    /// SL-278 PHASE-01 A1: `label` renders the bare ref with no phase, and
+    /// `ref@PHASE-NN` with one.
+    #[test]
+    fn target_label_appends_the_phase_when_set() {
+        assert_eq!(
+            Target {
+                reference: "SL-024".to_owned(),
+                phase: None,
+            }
+            .label(),
+            "SL-024"
+        );
+        assert_eq!(
+            Target {
+                reference: "SL-024".to_owned(),
+                phase: Some("PHASE-03".to_owned()),
+            }
+            .label(),
+            "SL-024@PHASE-03"
+        );
+    }
 
     /// `Target::parse` (SL-268 PHASE-07 T3, VT-3): the `ref@PHASE-NN` spelling
     /// and the separate `ref` + `--phase` flags parse to the same [`Target`].
@@ -360,6 +440,35 @@ mod tests {
         assert_eq!(
             (turn.act.as_str(), turn.role.as_str(), turn.route.as_deref()),
             ("frobnicate", "gremlin", Some("sideways"))
+        );
+    }
+
+    /// VT-2 (SL-278 PHASE-01 T6, A6): a valid `001` and a garbage `002` scan to
+    /// one doc plus one [`UnreadableReview`] naming `RV-002`, with a non-empty
+    /// `reason` and the `{"rv","reason"}` wire shape — the garbage ledger is
+    /// disclosed, never skipped (STD-003).
+    #[test]
+    fn scan_reviews_names_an_unparseable_ledger() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("001")).unwrap();
+        fs::write(
+            root.join("001").join("review-001.toml"),
+            format!("{HEAD}{FINDING}"),
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("002")).unwrap();
+        fs::write(root.join("002").join("review-002.toml"), "not = [valid").unwrap();
+
+        let (docs, unreadable) = scan_reviews(root).unwrap();
+        assert_eq!(docs.len(), 1);
+        assert_eq!(docs[0].id, 1);
+        assert_eq!(unreadable.len(), 1);
+        assert_eq!(unreadable[0].rv, "RV-002");
+        assert!(!unreadable[0].reason.is_empty());
+        assert_eq!(
+            serde_json::to_value(&unreadable[0]).unwrap(),
+            serde_json::json!({"rv": "RV-002", "reason": unreadable[0].reason}),
         );
     }
 }

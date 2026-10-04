@@ -21,6 +21,23 @@ pub(crate) struct FindingState {
     pub(crate) status: Vocab<FindingStatus>,
 }
 
+/// Whose move a non-terminal finding awaits (SL-278 PHASE-01 T2, design sec-2):
+/// the responder for `open`, `contested` or an out-of-vocabulary status
+/// (SL-268 D15 — unknown is non-terminal, so it awaits the responder, not
+/// nobody); the raiser for `answered`; [`Await::None`] for a *known* terminal
+/// status. `derived_status` folds this over every finding to keep its
+/// priority (any responder wins over any raiser), so the two agree by
+/// construction — the `Outstanding` view (SL-278 PHASE-01 T5) uses it too.
+pub(crate) fn finding_await(status: &Vocab<FindingStatus>) -> Await {
+    match status {
+        Vocab::Known(FindingStatus::Open | FindingStatus::Contested) | Vocab::Unknown(_) => {
+            Await::Responder
+        }
+        Vocab::Known(FindingStatus::Answered) => Await::Raiser,
+        Vocab::Known(FindingStatus::Verified | FindingStatus::Withdrawn) => Await::None,
+    }
+}
+
 /// The review's derived status + summarized turn (design §8, D-C8, SL-268 D2).
 /// Total over the finding-status enum; never stored (computed at
 /// `show`/`list`/`status`) — **derived on every read, never latched**. Implements
@@ -37,18 +54,11 @@ pub(crate) struct FindingState {
 /// `await` is a *priority summary* (open/contested wins display), never an
 /// exclusive gate — the turn gate is per-finding `can` (D7).
 pub(crate) fn derived_status(findings: &[FindingState], concluded: bool) -> (ReviewStatus, Await) {
-    if findings.iter().any(|f| {
-        matches!(
-            f.status,
-            Vocab::Known(FindingStatus::Open | FindingStatus::Contested) | Vocab::Unknown(_)
-        )
-    }) {
+    let awaits = || findings.iter().map(|f| finding_await(&f.status));
+    if awaits().any(|a| a == Await::Responder) {
         return (ReviewStatus::Active, Await::Responder);
     }
-    if findings
-        .iter()
-        .any(|f| f.status == Vocab::Known(FindingStatus::Answered))
-    {
+    if awaits().any(|a| a == Await::Raiser) {
         return (ReviewStatus::Active, Await::Raiser);
     }
     if !concluded {
@@ -203,6 +213,38 @@ pub(crate) fn counters(doc: &ReviewDoc, baton: (u32, u32)) -> Counters {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -- finding_await (SL-278 PHASE-01 T2, A5) ------------------------------
+
+    /// A5: the responder is awaited for open, contested and unknown; the
+    /// raiser for answered; a known-terminal status awaits nobody.
+    #[test]
+    fn finding_await_follows_a5() {
+        assert_eq!(
+            finding_await(&Vocab::Known(FindingStatus::Open)),
+            Await::Responder
+        );
+        assert_eq!(
+            finding_await(&Vocab::Known(FindingStatus::Contested)),
+            Await::Responder
+        );
+        assert_eq!(
+            finding_await(&Vocab::Unknown("zombie".to_owned())),
+            Await::Responder
+        );
+        assert_eq!(
+            finding_await(&Vocab::Known(FindingStatus::Answered)),
+            Await::Raiser
+        );
+        assert_eq!(
+            finding_await(&Vocab::Known(FindingStatus::Verified)),
+            Await::None
+        );
+        assert_eq!(
+            finding_await(&Vocab::Known(FindingStatus::Withdrawn)),
+            Await::None
+        );
+    }
 
     // -- derived_status: total + named cases (SL-268 D2, VT-1) --------------
 
