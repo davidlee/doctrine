@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1056d-bb28-79f2-af1b-575ac0a10bea"
+recorded_at = "2026-10-04T05:40:39.848109482Z"
+kind = "friction"
+summary = '[capsule-driver/phase-plan; SL-278] sweep regex review\.finding matches correct review.findings[]'
+detail = 'PHASE-05 sweep for the leaked key needs anchoring as review\.finding\[ to avoid false hits on the plural.'
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
