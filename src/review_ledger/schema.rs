@@ -259,10 +259,6 @@ pub(crate) fn read_reviews(review_root: &Path) -> anyhow::Result<Vec<ReviewDoc>>
 /// One RV id that exists on disk but did not read as a [`ReviewDoc`] — a
 /// numeric dir with no `review-NNN.toml`, or one that fails to parse (SL-278
 /// PHASE-01 T6, design sec-5 § Tolerant scan). Wire shape `{"rv","reason"}`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review census from SL-278 PHASE-04")
-)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct UnreadableReview {
     pub(crate) rv: String,
@@ -275,10 +271,6 @@ pub(crate) struct UnreadableReview {
 /// failure to *list* the tree (`entity::scan_ids`) is an `Err`; a per-id read
 /// failure becomes an [`UnreadableReview`] instead. [`read_reviews`] stays
 /// fail-fast unchanged (EX-5) — the close gate must still fail closed.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review census from SL-278 PHASE-04")
-)]
 pub(crate) fn scan_reviews(
     review_root: &Path,
 ) -> anyhow::Result<(Vec<ReviewDoc>, Vec<UnreadableReview>)> {

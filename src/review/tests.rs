@@ -444,7 +444,7 @@ fn unknown_severity_warned_on_every_surface() {
     assert!(rendered(&status).contains(line), "{}", rendered(&status));
     assert_eq!(wire(&status, "Status")["warnings"], warning);
 
-    let list = run_list(p(), crate::listing::ListArgs::default(), None).unwrap();
+    let list = run_list(p(), crate::listing::ListArgs::default(), None, None).unwrap();
     assert_eq!(wire(&list, "Listed")["warnings"], warning);
 
     let blockers = unresolved_blockers_for(root, "SL-001").unwrap();
@@ -4128,7 +4128,7 @@ fn golden_run_show() {
 fn golden_run_list() {
     let tmp = fixture_rv();
     let root = tmp.path();
-    let out = run_list(Some(root.to_path_buf()), list_args(), None).unwrap();
+    let out = run_list(Some(root.to_path_buf()), list_args(), None, None).unwrap();
     match &out {
         ReviewOutput::Listed {
             rows, formatted, ..
@@ -4362,7 +4362,7 @@ fn list_target_filters_to_the_subject_edge() {
     run_new(Some(root.to_path_buf()), &new_args(Facet::Plan, "SL-002")).unwrap();
 
     let listed =
-        |target: Option<&str>| match run_list(Some(root.to_path_buf()), list_args(), target)
+        |target: Option<&str>| match run_list(Some(root.to_path_buf()), list_args(), target, None)
             .unwrap()
         {
             ReviewOutput::Listed { rows, .. } => rows,
@@ -4376,6 +4376,101 @@ fn list_target_filters_to_the_subject_edge() {
     assert!(
         listed(Some("SL-404")).is_empty(),
         "an unmatched target lists none"
+    );
+}
+
+/// EX-3 (SL-278 PHASE-04a T2, DEC-365): `list --facet` narrows to reviews of
+/// the given facet — two RVs over two facets, `--facet plan` lists one.
+#[test]
+fn list_facet_narrows_to_the_facet() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    plant_slice_target(root, 1);
+    plant_slice_target(root, 2);
+    run_new(Some(root.to_path_buf()), &new_args(Facet::Design, "SL-001")).unwrap();
+    run_new(Some(root.to_path_buf()), &new_args(Facet::Plan, "SL-002")).unwrap();
+
+    let listed =
+        |facet: Option<Facet>| match run_list(Some(root.to_path_buf()), list_args(), None, facet)
+            .unwrap()
+        {
+            ReviewOutput::Listed { rows, .. } => rows,
+            other => panic!("expected Listed, got {other:?}"),
+        };
+
+    assert_eq!(listed(None).len(), 2, "no facet lists both reviews");
+    let only_plan = listed(Some(Facet::Plan));
+    assert_eq!(only_plan.len(), 1, "--facet plan admits one: {only_plan:?}");
+    assert_eq!(only_plan[0].facet, "plan");
+}
+
+/// VT-1 (SL-278 PHASE-04a T3, design sec-5 § Tolerant scan): `list` survives
+/// an unreadable RV rather than failing the whole list (STD-003) — one valid
+/// RV plus a garbage `review-002.toml` scan to one row plus one
+/// [`crate::review_ledger::UnreadableReview`] naming RV-002 with a non-empty
+/// reason; a clean corpus's JSON carries no `unreadable` key (absent when
+/// empty, EX-4).
+#[test]
+fn list_survives_an_unreadable_review() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    std::fs::create_dir_all(root.join(".doctrine/review/002")).unwrap();
+    std::fs::write(
+        root.join(".doctrine/review/002/review-002.toml"),
+        "not = [valid",
+    )
+    .unwrap();
+
+    let out = run_list(Some(root.to_path_buf()), list_args(), None, None).unwrap();
+    let ReviewOutput::Listed {
+        rows, unreadable, ..
+    } = &out
+    else {
+        panic!("expected Listed, got {out:?}");
+    };
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, "RV-001");
+    assert_eq!(unreadable.len(), 1);
+    assert_eq!(unreadable[0].rv, "RV-002");
+    assert!(!unreadable[0].reason.is_empty());
+
+    let mut json_args = list_args();
+    json_args.json = true;
+    json_args.format = Format::Json;
+    let json_out = run_list(Some(root.to_path_buf()), json_args, None, None).unwrap();
+    let ReviewOutput::Listed { formatted, .. } = &json_out else {
+        panic!("expected Listed, got {json_out:?}");
+    };
+    let value: serde_json::Value = serde_json::from_str(formatted).unwrap();
+    let unreadable_json = value["unreadable"].as_array().unwrap();
+    assert_eq!(
+        unreadable_json,
+        &vec![serde_json::json!({"rv": "RV-002", "reason": unreadable[0].reason})]
+    );
+
+    // A clean corpus's JSON carries no `unreadable` key at all (EX-4).
+    let clean = fixture_rv();
+    let mut clean_json_args = list_args();
+    clean_json_args.json = true;
+    clean_json_args.format = Format::Json;
+    let clean_out = run_list(
+        Some(clean.path().to_path_buf()),
+        clean_json_args,
+        None,
+        None,
+    )
+    .unwrap();
+    let ReviewOutput::Listed {
+        formatted: clean_formatted,
+        ..
+    } = &clean_out
+    else {
+        panic!("expected Listed, got {clean_out:?}");
+    };
+    let clean_value: serde_json::Value = serde_json::from_str(clean_formatted).unwrap();
+    assert!(
+        clean_value.get("unreadable").is_none(),
+        "a clean corpus carries no unreadable key: {clean_value}"
     );
 }
 

@@ -507,6 +507,130 @@ fn review_list_carries_warnings() {
     kill(child);
 }
 
+// ── SL-278 PHASE-04a T6: MCP `review_list` gains `facet` + `unreadable` ──
+
+/// VT-3: `review_list`'s `facet` argument (DEC-365) is advertised and
+/// threaded to the shared `ReviewScope` predicate (the behaviour it drives is
+/// proved in `review::tests::list_facet_narrows_to_the_facet`) — two RVs over
+/// two facets, `facet: "plan"` lists one.
+#[test]
+fn review_list_facet_filter_succeeds() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Slice One", "slice-one");
+    seed_slice(root, 2, "Slice Two", "slice-two");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    for (facet, target) in [("design", "SL-001"), ("plan", "SL-002")] {
+        let params = tools_call_params(
+            "review_new",
+            serde_json::json!({ "facet": facet, "target": target }),
+        );
+        let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+        assert!(resp.get("error").is_none(), "review_new {facet}: {resp:?}");
+    }
+
+    let params = tools_call_params("review_list", serde_json::json!({ "facet": "plan" }));
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let rows = out["Listed"]["rows"].as_array().expect("rows");
+    assert_eq!(rows.len(), 1, "facet: plan admits one: {rows:?}");
+    assert_eq!(rows[0]["facet"], "plan");
+
+    kill(child);
+}
+
+/// EX-4 / EX-5: the MCP `review_list` tool carries the tolerant scan's
+/// `unreadable` disclosure (design sec-5 § Tolerant scan, STD-003) — a
+/// hand-planted garbage `review-002.toml` scans to `Listed.unreadable`
+/// naming RV-002, alongside the readable RV-001 row. Control: before the
+/// garbage ledger exists, `review_list` carries no `unreadable` key at all
+/// (absent when empty, EX-4).
+#[test]
+fn review_list_carries_unreadable() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({ "facet": "design", "target": "SL-001" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "review_new: {resp:?}");
+
+    // Control: before the garbage ledger exists, no `unreadable` key.
+    let params = tools_call_params("review_list", serde_json::json!({}));
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    assert!(
+        out["Listed"].get("unreadable").is_none(),
+        "a clean corpus carries no unreadable key: {out}"
+    );
+
+    // Plant a garbage ledger at RV-002.
+    fs::create_dir_all(root.join(".doctrine/review/002")).unwrap();
+    fs::write(
+        root.join(".doctrine/review/002/review-002.toml"),
+        "not = [valid",
+    )
+    .unwrap();
+
+    let params = tools_call_params("review_list", serde_json::json!({}));
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let rows = out["Listed"]["rows"].as_array().expect("rows");
+    assert_eq!(rows.len(), 1, "the readable RV still lists: {rows:?}");
+    let unreadable = out["Listed"]["unreadable"]
+        .as_array()
+        .expect("unreadable is an array once a ledger is defective");
+    assert_eq!(unreadable.len(), 1);
+    assert_eq!(unreadable[0]["rv"], "RV-002");
+    assert!(
+        !unreadable[0]["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .is_empty()
+    );
+
+    kill(child);
+}
+
 /// VT-3 (SL-268 PHASE-08, sec-8 VT 13 prime arm): D11's degrade path over the
 /// MCP arm. `seed_slice` writes NO `[[selector]]` rows, so `SL-001` is a
 /// ready-made zero-selector target — `review_prime` must DEGRADE rather than

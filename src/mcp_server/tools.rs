@@ -70,6 +70,49 @@ const CAPTURE_REFUSED_KEYS: [&str; 10] = [
 
 // ── Tool definitions (function, not const — json!() is non-const) ─────────
 
+/// Render a closed vocabulary as the quoted `"a"|"b"|"c"` union a wire-shape
+/// sentence embeds inline (STD-001) — single-sourced from the vocab's own
+/// known-set so the documentation can't drift from the enum it describes
+/// (SL-278 PHASE-04a T7).
+fn quoted_union(values: &[&str]) -> String {
+    values
+        .iter()
+        .map(|v| format!("\"{v}\""))
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
+/// The `review_show` tool description (STD-001): the finding `severity`/
+/// `status` unions in the `Returns:` shape are spliced in from
+/// [`crate::review_ledger::SEVERITIES`] / [`crate::review_ledger::FINDING_STATUSES`]
+/// rather than retyped, so a vocab change can't leave the doc stale.
+fn review_show_description() -> String {
+    let severity_union = quoted_union(crate::review_ledger::SEVERITIES);
+    let status_union = quoted_union(crate::review_ledger::FINDING_STATUSES);
+    let head = "Show one review projected to a chosen depth (design SL-278 sec-2): by default every finding at index depth (identity + status, no prose); `finding` selects exact findings in full; `full` additionally carries the brief body; `open`/`status`/`severity` narrow the index by filter. `finding` cannot combine with `open`/`status`/`severity` (refused: \"--finding selects exact findings; drop --open/-s/-S\").\n\nReturns: {\"Showed\": { canonical: \"RV-NNN\", title: string, facet: string, status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", target: string, raiser: string, responder: string, rounds: int, concluded: bool, tags?: [string], depth: \"index\"|\"full\", finding_count: int, outstanding: { responder: {blocker,major,minor,nit: int}, raiser: {blocker,major,minor,nit: int} }, findings: [{ id: \"F-N\", severity: ";
+    let mid = ", status: ";
+    let tail = ", disposition?: string, route?: string, title: string, detail?: string, response?: string, turns?: [{act, role, note?, disposition?, route?, response?}] }], body?: string, body_lines?: int, warnings?: [{ rv: \"RV-NNN\", finding: \"F-N\", field: \"status\"|\"severity\", raw: string, effect: string }] }} — `detail`/`response`/`turns` on a finding, and the top-level `body`, appear only at full depth (`finding` selection or `full: true`); `body` itself needs `full: true`. `route` is absent while unset. `tags`/`warnings` are absent when empty; `warnings` carries any out-of-vocabulary status or severity found on the ledger.";
+    format!("{head}{severity_union}{mid}{status_union}{tail}")
+}
+
+/// The `review_show` `status` filter property description (STD-001), built
+/// from [`crate::review_ledger::FINDING_STATUSES`].
+fn finding_status_filter_description() -> String {
+    format!(
+        "Filter by finding status: {}. Comma-separated string or array. Cannot combine with finding.",
+        crate::review_ledger::FINDING_STATUSES.join(" | ")
+    )
+}
+
+/// The `review_show` `severity` filter property description (STD-001), built
+/// from [`crate::review_ledger::SEVERITIES`].
+fn finding_severity_filter_description() -> String {
+    format!(
+        "Filter by finding severity: {}. Comma-separated string or array. Cannot combine with finding.",
+        crate::review_ledger::SEVERITIES.join(" | ")
+    )
+}
+
 /// Return all 31 tool definitions with JSON Schema parameter descriptions.
 fn tools() -> Vec<McpTool> {
     vec![
@@ -110,7 +153,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_list".to_owned(),
-            description: "List reviews by id with derived status, facet, target, and title.\n\nReturns: {\"Listed\": { rows: [{ id: \"RV-NNN\", status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", facet: string, target: string, title: string }], total?: int }} — `total` absent (not null) when uncapped; present (pre-truncation count) when rows were dropped by `limit`.".to_owned(),
+            description: "List reviews by id with derived status, facet, target, and title.\n\nReturns: {\"Listed\": { rows: [{ id: \"RV-NNN\", status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", facet: string, target: string, title: string }], total?: int, unreadable?: [{ rv: \"RV-NNN\", reason: string }] }} — `total` absent (not null) when uncapped; present (pre-truncation count) when rows were dropped by `limit`. `unreadable` names any RV id that exists on disk but did not read (never capped — disclosure outranks the cap); absent when none.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -130,6 +173,11 @@ fn tools() -> Vec<McpTool> {
                         "type": "string",
                         "description": "Restrict to reviews whose reviews edge targets this ref (the subject canonical ref, e.g. SL-024); a bare ref admits any phase. SL-NNN@PHASE-NN narrows to that phase; the @ here is a phase scope, not an @path file read"
                     },
+                    "facet": {
+                        "type": "string",
+                        "enum": json!(crate::review_ledger::FACETS),
+                        "description": "Restrict to reviews of this facet (DEC-365)"
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Cap rows to the most recent N (default: 50; 0 = all). When capped, the response carries a `total` count."
@@ -140,7 +188,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_show".to_owned(),
-            description: "Show one review projected to a chosen depth (design SL-278 sec-2): by default every finding at index depth (identity + status, no prose); `finding` selects exact findings in full; `full` additionally carries the brief body; `open`/`status`/`severity` narrow the index by filter. `finding` cannot combine with `open`/`status`/`severity` (refused: \"--finding selects exact findings; drop --open/-s/-S\").\n\nReturns: {\"Showed\": { canonical: \"RV-NNN\", title: string, facet: string, status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", target: string, raiser: string, responder: string, rounds: int, concluded: bool, tags?: [string], depth: \"index\"|\"full\", finding_count: int, outstanding: { responder: {blocker,major,minor,nit: int}, raiser: {blocker,major,minor,nit: int} }, findings: [{ id: \"F-N\", severity: \"blocker\"|\"major\"|\"minor\"|\"nit\", status: \"open\"|\"answered\"|\"contested\"|\"verified\"|\"withdrawn\", disposition?: string, route?: string, title: string, detail?: string, response?: string, turns?: [{act, role, note?, disposition?, route?, response?}] }], body?: string, body_lines?: int, warnings?: [{ rv: \"RV-NNN\", finding: \"F-N\", field: \"status\"|\"severity\", raw: string, effect: string }] }} — `detail`/`response`/`turns` on a finding, and the top-level `body`, appear only at full depth (`finding` selection or `full: true`); `body` itself needs `full: true`. `route` is absent while unset. `tags`/`warnings` are absent when empty; `warnings` carries any out-of-vocabulary status or severity found on the ledger.".to_owned(),
+            description: review_show_description(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -159,11 +207,11 @@ fn tools() -> Vec<McpTool> {
                     },
                     "status": {
                         "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }],
-                        "description": "Filter by finding status: open | answered | contested | verified | withdrawn. Comma-separated string or array. Cannot combine with finding."
+                        "description": finding_status_filter_description()
                     },
                     "severity": {
                         "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }],
-                        "description": "Filter by finding severity: blocker | major | minor | nit. Comma-separated string or array. Cannot combine with finding."
+                        "description": finding_severity_filter_description()
                     }
                 },
                 "required": ["reference"]
@@ -176,7 +224,7 @@ fn tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
-                    "severity": { "type": "string", "enum": ["blocker", "major", "minor", "nit"], "description": "Severity (only blocker gates close)" },
+                    "severity": { "type": "string", "enum": json!(crate::review_ledger::SEVERITIES), "description": "Severity (only blocker gates close)" },
                     "title": { "type": "string", "description": "The finding's title (fixed at raise)" },
                     "detail": { "type": "string", "description": "The finding's detail (fixed at raise)" },
                     "as": { "type": "string", "description": "Cooperative role assertion: raiser | responder, or this ledger's declared labels (default: raiser)" }
@@ -714,7 +762,14 @@ fn call_tool(
             };
             let cap = effective_cap(fields.opt_usize_field("limit"));
             let target = fields.opt_str_field("target");
-            let out = review::run_list(Some(root.to_path_buf()), args, target.as_deref())
+            let facet = fields
+                .opt_str_field("facet")
+                .map(|raw| {
+                    crate::review_ledger::Facet::parse(&raw)
+                        .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
+                })
+                .transpose()?;
+            let out = review::run_list(Some(root.to_path_buf()), args, target.as_deref(), facet)
                 .map(|out| project_list_cap(out, cap))?;
             Ok(serde_json::to_string(&out)?)
         }
@@ -1651,32 +1706,47 @@ fn effective_cap(limit: Option<usize>) -> Option<usize> {
     }
 }
 
-/// Cap a `Listed` output to the most recent `cap` rows (the tail — highest ids),
-/// stamping `total` with the pre-truncation count so the omission is never silent
-/// (IMP-114). A `None` cap, or a list already within the cap, passes through with
-/// `total` left `None`. Non-`Listed` outputs pass through.
-fn project_list_cap(out: ReviewOutput, cap: Option<usize>) -> ReviewOutput {
-    match (out, cap) {
-        (
-            ReviewOutput::Listed {
-                mut rows,
-                warnings,
-                formatted,
-                ..
-            },
-            Some(n),
-        ) if rows.len() > n => {
+/// Cap `rows` to the most recent `cap` rows (the tail — highest ids),
+/// returning the pre-truncation count when truncation happened (IMP-114).
+/// `None` ⇒ unbounded; a `cap` at or above `rows.len()` is a no-op — both
+/// return `(rows, None)` so the caller's `total` stays absent on the wire.
+/// Generic over the row type (SL-278 PHASE-04a T5) so `review_list` and the
+/// census's `review_findings` share one tail-truncation, rather than each
+/// hand-rolling it against its own row struct.
+fn cap_tail<T>(mut rows: Vec<T>, cap: Option<usize>) -> (Vec<T>, Option<usize>) {
+    match cap {
+        Some(n) if rows.len() > n => {
             let total = rows.len();
             rows = rows.split_off(total - n);
-            // The full pre-cap warnings ride on: disclosure outranks the cap.
+            (rows, Some(total))
+        }
+        _ => (rows, None),
+    }
+}
+
+/// Cap a `Listed` output to the most recent `cap` rows, stamping `total` with
+/// the pre-truncation count so the omission is never silent (IMP-114).
+/// `warnings`/`unreadable` ride through uncapped — disclosure outranks the
+/// cap (A3). Non-`Listed` outputs pass through.
+fn project_list_cap(out: ReviewOutput, cap: Option<usize>) -> ReviewOutput {
+    match out {
+        ReviewOutput::Listed {
+            rows,
+            warnings,
+            unreadable,
+            formatted,
+            ..
+        } => {
+            let (rows, total) = cap_tail(rows, cap);
             ReviewOutput::Listed {
                 rows,
-                total: Some(total),
+                total,
                 warnings,
+                unreadable,
                 formatted,
             }
         }
-        (other, _) => other,
+        other => other,
     }
 }
 
@@ -2098,6 +2168,7 @@ mod tests {
             rows: vec![],
             total: None,
             warnings: vec![],
+            unreadable: vec![],
             formatted: "RENDERED TABLE".to_owned(),
         };
         let v = serde_json::to_value(&listed).unwrap();
@@ -2148,17 +2219,32 @@ mod tests {
             rows: vec![row("RV-1"), row("RV-2"), row("RV-3")],
             total: None,
             warnings: vec![],
+            unreadable: vec![crate::review_ledger::UnreadableReview {
+                rv: "RV-9".to_owned(),
+                reason: "bad toml".to_owned(),
+            }],
             formatted: String::new(),
         };
 
         // Capped below len: keep the newest 2 (tail), total = 3.
-        let ReviewOutput::Listed { rows, total, .. } = project_list_cap(make(), Some(2)) else {
+        let ReviewOutput::Listed {
+            rows,
+            total,
+            unreadable,
+            ..
+        } = project_list_cap(make(), Some(2))
+        else {
             panic!("expected Listed");
         };
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].id, "RV-2", "keeps the tail (most recent)");
         assert_eq!(rows[1].id, "RV-3");
         assert_eq!(total, Some(3), "pre-truncation count surfaced");
+        assert_eq!(
+            unreadable.len(),
+            1,
+            "unreadable rides through uncapped (A3)"
+        );
 
         // Cap at or above len: not truncated, total stays None.
         let ReviewOutput::Listed { rows, total, .. } = project_list_cap(make(), Some(5)) else {
@@ -2184,6 +2270,33 @@ mod tests {
             target: "t".to_owned(),
             tags: Vec::new(),
             title: "x".to_owned(),
+        }
+    }
+
+    // STD-001 (SL-278 PHASE-04a T7): the `review_show` tool text is built from
+    // the closed vocab lists, not retyped — a vocab member added to
+    // `FINDING_STATUSES`/`SEVERITIES` and forgotten in the description would
+    // fail this by construction, since both sides read the same lists.
+
+    #[test]
+    fn review_show_tool_text_names_every_finding_status_and_severity() {
+        let list = tools();
+        let show = list
+            .iter()
+            .find(|t| t.name == "review_show")
+            .expect("review_show tool registered");
+        let text = format!("{}{}", show.description, show.input_schema);
+        for &status in crate::review_ledger::FINDING_STATUSES {
+            assert!(
+                text.contains(status),
+                "review_show tool text missing finding status `{status}`: {text}"
+            );
+        }
+        for &severity in crate::review_ledger::SEVERITIES {
+            assert!(
+                text.contains(severity),
+                "review_show tool text missing severity `{severity}`: {text}"
+            );
         }
     }
 

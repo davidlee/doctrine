@@ -6,10 +6,11 @@ use super::turn::{
     Baton, LockGuard, read_baton, reconcile_baton_fields, resolve_review_root, write_baton,
 };
 use super::{
-    Await, Column, Context, FindingRow, Format, ListArgs, Path, PathBuf, REVIEW_DIR, REVIEW_KIND,
-    REVIEW_STATUSES, ReviewDoc, ReviewOutput, ReviewStatus, ReviewWarning, Serialize, Severity,
-    Target, Vocab, canonical_id, counters, derived_status, finding_states_of, fs, listing,
-    parse_ref, read_authored, read_review, read_reviews, warnings_of,
+    Await, Column, Context, Facet, FindingRow, Format, ListArgs, Path, PathBuf, REVIEW_DIR,
+    REVIEW_KIND, REVIEW_STATUSES, ReviewDoc, ReviewOutput, ReviewStatus, ReviewWarning, Serialize,
+    Severity, Target, UnreadableReview, Vocab, canonical_id, counters, derived_status,
+    finding_states_of, fs, listing, parse_ref, read_authored, read_review, scan_reviews,
+    warnings_of,
 };
 use crate::review_ledger::{
     Depth, FindingView, Outstanding, OutstandingCounts, Projection, ReviewView, TurnRow,
@@ -386,15 +387,22 @@ pub(super) fn format_show(
     parts.concat()
 }
 
-/// Attach a non-empty `warnings` array to a JSON object envelope (absent when
-/// empty — the clean-ledger shape stays byte-identical).
-fn with_warnings(value: &mut serde_json::Value, warnings: &[ReviewWarning]) -> anyhow::Result<()> {
-    if warnings.is_empty() {
+/// Attach a non-empty array under `key` to a JSON object envelope (absent
+/// when empty — the clean-ledger shape stays byte-identical). Generalised
+/// (SL-278 PHASE-04a) so `warnings` and `unreadable` share one "serialize +
+/// skip-if-empty" helper rather than each hand-rolling it.
+fn with_array<T: Serialize>(
+    value: &mut serde_json::Value,
+    key: &str,
+    items: &[T],
+) -> anyhow::Result<()> {
+    if items.is_empty() {
         return Ok(());
     }
-    let warnings = serde_json::to_value(warnings).context("failed to serialize review warnings")?;
+    let items =
+        serde_json::to_value(items).with_context(|| format!("failed to serialize review {key}"))?;
     if let Some(object) = value.as_object_mut() {
-        object.insert("warnings".to_owned(), warnings);
+        object.insert(key.to_owned(), items);
     }
     Ok(())
 }
@@ -470,36 +478,77 @@ fn key(d: &ReviewDoc) -> listing::FilterFields {
     }
 }
 
-/// What `list_rows` computes: the rendered list, its JSON rows, and the
-/// closed-vocabulary warnings across the listed RVs (in id order).
-type Listing = (String, Vec<ListRow>, Vec<ReviewWarning>);
+/// A review-scope predicate (design sec-5, DEC-365): an optional target ref
+/// (narrowed by an optional phase scope, the `--target` spelling) and an
+/// optional facet. The one place this match lives — `review list` (04a) and
+/// the census (04b) both filter through [`ReviewScope::admits`] rather than
+/// each growing its own copy.
+pub(super) struct ReviewScope {
+    target: Option<Target>,
+    facet: Option<Facet>,
+}
+
+impl ReviewScope {
+    /// Parse the `--target`/`--facet` pair. `target` accepts the
+    /// `ref@PHASE-NN` spelling via [`Target::parse`]; `facet` is already a
+    /// parsed [`Facet`] (clap/MCP validate the raw token before this point).
+    pub(super) fn parse(target: Option<&str>, facet: Option<Facet>) -> anyhow::Result<Self> {
+        let target = target.map(|want| Target::parse(want, None)).transpose()?;
+        Ok(Self { target, facet })
+    }
+
+    /// Whether `doc` is in scope. A target ref admits any phase unless the
+    /// scope's own `@PHASE-NN` narrows it (RFC-032 D5, SL-268 PHASE-07
+    /// D-T3-3). A facet compares the ledger's raw `review.facet` string to
+    /// the parsed facet's token — an out-of-vocabulary stored facet never
+    /// matches (A2).
+    pub(super) fn admits(&self, doc: &ReviewDoc) -> bool {
+        let target_ok = self.target.as_ref().is_none_or(|wanted| {
+            doc.target.reference == wanted.reference
+                && wanted
+                    .phase
+                    .as_deref()
+                    .is_none_or(|p| doc.target.phase.as_deref() == Some(p))
+        });
+        let facet_ok = self.facet.is_none_or(|f| doc.review.facet == f.as_str());
+        target_ok && facet_ok
+    }
+}
+
+/// What `list_rows` computes: the rendered projection, its JSON rows, the
+/// closed-vocabulary warnings, and any unreadable RVs across the listed set
+/// (all in id order) — a named struct rather than a growing tuple (R1), so
+/// the census (04b) can reuse the same shape.
+pub(super) struct Listing {
+    pub(super) formatted: String,
+    pub(super) rows: Vec<ListRow>,
+    pub(super) warnings: Vec<ReviewWarning>,
+    pub(super) unreadable: Vec<UnreadableReview>,
+}
 
 /// `review list` rows as a string — the compute half of [`run_list`]. No hide-set
 /// (an RV is either Active or Done; both are listed), sorted by id, each row
 /// carrying its derived status. The listed (post-filter) RVs' vocabulary defects
 /// are gathered once here, for the CLI's stderr and the MCP `warnings` field
-/// alike; `--json` also carries them top-level when there are any.
-fn list_rows(root: &Path, mut args: ListArgs, target: Option<&str>) -> anyhow::Result<Listing> {
+/// alike; `--json` also carries them top-level when there are any. The scan is
+/// tolerant (design sec-5 § Tolerant scan): an id that exists but does not read
+/// is disclosed as `unreadable` rather than failing the whole list (STD-003);
+/// unreadable RVs are never subject to `scope` (the scan can't know their
+/// target/facet, A3) and are never capped (A3, mirroring `warnings`).
+fn list_rows(
+    root: &Path,
+    mut args: ListArgs,
+    target: Option<&str>,
+    facet: Option<Facet>,
+) -> anyhow::Result<Listing> {
     listing::validate_statuses(&args.status, REVIEW_STATUSES)?;
     let render = args.render;
     let columns = args.columns.take();
     let (filter, format) = listing::build(args)?;
     let review_root = root.join(REVIEW_DIR);
-    let mut docs = read_reviews(&review_root)?;
-    // RFC-032 D5 + SL-268 PHASE-07 D-T3-3: a bare `--target` ref admits only
-    // reviews on the given subject edge, regardless of the edge's own phase
-    // scope (`SL-024` also admits a `SL-024@PHASE-03` edge). The `@PHASE-NN`
-    // spelling narrows further — it matches the reference AND that phase.
-    if let Some(want) = target {
-        let wanted = Target::parse(want, None)?;
-        docs.retain(|d| {
-            d.target.reference == wanted.reference
-                && wanted
-                    .phase
-                    .as_deref()
-                    .is_none_or(|p| d.target.phase.as_deref() == Some(p))
-        });
-    }
+    let (docs, unreadable) = scan_reviews(&review_root)?;
+    let scope = ReviewScope::parse(target, facet)?;
+    let docs: Vec<ReviewDoc> = docs.into_iter().filter(|d| scope.admits(d)).collect();
     let mut docs = listing::retain(docs, &filter, |_| false, key);
     docs.sort_by_key(|d| d.id);
     let any_tagged = docs.iter().any(|d| !d.tags.is_empty());
@@ -518,15 +567,22 @@ fn list_rows(root: &Path, mut args: ListArgs, target: Option<&str>) -> anyhow::R
                 listing::select_columns(&REVIEW_COLUMNS, &effective_default, columns.as_deref())?;
             listing::render_columns(&rows, &sel, render)
         }
-        // The shared `listing::json_envelope` shape, plus `warnings` when any.
+        // The shared `listing::json_envelope` shape, plus `warnings`/`unreadable`
+        // when any (absent when empty — the clean-ledger shape stays unchanged).
         Format::Json => {
             let mut value = serde_json::json!({ "kind": "review", "rows": json_rows(&rows) });
-            with_warnings(&mut value, &warnings)?;
+            with_array(&mut value, "warnings", &warnings)?;
+            with_array(&mut value, "unreadable", &unreadable)?;
             serde_json::to_string_pretty(&value)
                 .context("failed to serialize list JSON envelope")?
         }
     };
-    Ok((formatted, json_rows(&rows), warnings))
+    Ok(Listing {
+        formatted,
+        rows: json_rows(&rows),
+        warnings,
+        unreadable,
+    })
 }
 
 /// Faithful JSON rows for `list` — the prefixed id, derived status/await, facet,
@@ -556,20 +612,28 @@ fn json_rows(rows: &[ReviewRow]) -> Vec<ListRow> {
         .collect()
 }
 
+/// The CLI stderr line for one unreadable RV (EX-4, A4) — mirrors
+/// [`ReviewWarning::line`]'s `warning: ` prefix convention.
+pub(super) fn unreadable_line(u: &UnreadableReview) -> String {
+    format!("warning: {} unreadable: {}\n", u.rv, u.reason)
+}
+
 /// `doctrine review list` — list reviews by id with derived status, facet, and
 /// the `reviews`-edge target.
 pub(crate) fn run_list(
     path: Option<PathBuf>,
     args: ListArgs,
     target: Option<&str>,
+    facet: Option<Facet>,
 ) -> anyhow::Result<ReviewOutput> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let (formatted, rows, warnings) = list_rows(&root, args, target)?;
+    let listing = list_rows(&root, args, target, facet)?;
     Ok(ReviewOutput::Listed {
-        rows,
+        rows: listing.rows,
         total: None,
-        warnings,
-        formatted,
+        warnings: listing.warnings,
+        unreadable: listing.unreadable,
+        formatted: listing.formatted,
     })
 }
 

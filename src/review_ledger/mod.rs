@@ -19,8 +19,8 @@ pub(crate) use gate::{
     unresolved_blockers_for,
 };
 pub(crate) use schema::{
-    FindingRow, ReviewDoc, ReviewMeta, Target, TurnRow, authored_path, canonical_id, parse_ref,
-    read_authored, read_review, read_reviews,
+    FindingRow, ReviewDoc, ReviewMeta, Target, TurnRow, UnreadableReview, authored_path,
+    canonical_id, parse_ref, read_authored, read_review, scan_reviews,
 };
 pub(crate) use transition::{
     Act, TurnFields, admissible_from, append_finding, append_review_turn, apply_act, can,
@@ -31,8 +31,8 @@ pub(crate) use view::{
     warnings_of,
 };
 pub(crate) use vocab::{
-    Await, DISPOSITIONS, Disposition, FINDING_STATUSES, Facet, FindingStatus, REVIEW_STATUSES,
-    ROUTES, ReviewStatus, Role, Route, Severity, Vocab,
+    Await, DISPOSITIONS, Disposition, FACETS, FINDING_STATUSES, Facet, FindingStatus,
+    REVIEW_STATUSES, ROUTES, ReviewStatus, Role, Route, SEVERITIES, Severity, Vocab,
 };
 
 // Reached only by unit tests (review, slice, mcp_server, priority).
@@ -45,4 +45,4 @@ pub(crate) use gate::{
 #[cfg(test)]
 pub(crate) use transition::next_finding_id;
 #[cfg(test)]
-pub(crate) use vocab::{FACETS, ROLES, SEVERITIES};
+pub(crate) use vocab::ROLES;

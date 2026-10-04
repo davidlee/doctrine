@@ -22,10 +22,10 @@ use crate::listing::{self, Column, Format, ListArgs};
 use crate::review_ledger::{
     Act, Await, Disposition, FINDING_STATUSES, Facet, FindingRow, FindingState, FindingStatus,
     Projection, ProjectionArgs, REVIEW_STATUSES, ReviewDoc, ReviewMeta, ReviewStatus, ReviewView,
-    ReviewWarning, Role, Route, Severity, Target, TurnFields, Vocab, admissible_from,
-    append_finding, append_review_turn, apply_act, authored_path, can, canonical_id,
-    clear_concluded, counters, derived_status, finding_states_of, finding_status_of,
-    finding_table_mut, parse_ref, read_authored, read_review, read_reviews, review_table_mut, seed,
+    ReviewWarning, Role, Route, Severity, Target, TurnFields, UnreadableReview, Vocab,
+    admissible_from, append_finding, append_review_turn, apply_act, authored_path, can,
+    canonical_id, clear_concluded, counters, derived_status, finding_states_of, finding_status_of,
+    finding_table_mut, parse_ref, read_authored, read_review, review_table_mut, scan_reviews, seed,
     warnings_of, write_counter_seed,
 };
 
@@ -78,17 +78,31 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             write!(std::io::stdout(), "{rendered}")?;
             Ok(())
         }
-        ReviewCommand::List { list, target, path } => {
+        ReviewCommand::List {
+            list,
+            target,
+            facet,
+            path,
+        } => {
             use std::io::Write;
-            let out = run_list(path, list.into_list_args(color), target.as_deref())?;
+            let out = run_list(path, list.into_list_args(color), target.as_deref(), facet)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
-            // The list's stdout is the row table (or the JSON document), so its
-            // vocabulary defects go to stderr (SL-268 D15), after the rows.
-            if let ReviewOutput::Listed { warnings, .. } = &out {
+            // The list's stdout is the row table (or the JSON document); vocabulary
+            // defects and unreadable RVs both go to stderr (SL-268 D15, SL-278
+            // PHASE-04a A4), after the rows — one writer loop.
+            if let ReviewOutput::Listed {
+                warnings,
+                unreadable,
+                ..
+            } = &out
+            {
                 let mut stderr = std::io::stderr();
                 for warning in warnings {
                     write!(stderr, "{}", warning.line())?;
+                }
+                for u in unreadable {
+                    write!(stderr, "{}", read::unreadable_line(u))?;
                 }
             }
             Ok(())
@@ -396,6 +410,13 @@ pub(crate) enum ReviewOutput {
         /// none. The CLI writes them to stderr.
         #[serde(skip_serializing_if = "Vec::is_empty")]
         warnings: Vec<ReviewWarning>,
+        /// RV ids that exist on disk but did not read as a [`ReviewDoc`] (the
+        /// tolerant scan, design sec-5, SL-278 PHASE-04a) — disclosed rather
+        /// than skipped (STD-003), in `rv` order; never capped, like
+        /// `warnings`. Absent when empty — a clean corpus's JSON is
+        /// byte-unchanged (EX-4).
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        unreadable: Vec<UnreadableReview>,
         #[serde(skip)]
         formatted: String,
     },

@@ -63,6 +63,11 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         target: Option<String>,
 
+        /// Restrict to reviews of this facet (DEC-365): scope | design |
+        /// plan | phase-plan | implementation | code-review | reconciliation.
+        #[arg(long, value_parser = Facet::parse)]
+        facet: Option<Facet>,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
