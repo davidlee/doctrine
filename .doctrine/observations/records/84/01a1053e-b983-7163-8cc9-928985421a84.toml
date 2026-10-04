@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1053e-b983-7163-8cc9-928985421a84"
+recorded_at = "2026-10-04T04:49:19.235826298Z"
+kind = "friction"
+summary = "[capsule-driver/execute; SL-278] PHASE-01 sonnet worker hit 150 turns (~240k tokens)"
+detail = "Mostly dead-code lint churn from staged types with no consumer yet; phase too big for one worker."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1053e-b97c-7750-b180-bddf1e36288c"
+recorded_at = "2026-10-04T04:49:19.228135921Z"
+kind = "friction"
+summary = "[capsule-driver/phase-plan; SL-278] planner exhausted 40 turns on memory retrieval"
+detail = "doctrine memory retrieve has no title-only mode; its --json output didn't parse for the planner; --path-scope src/review_ledger returned nothing while src/review returned 10."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

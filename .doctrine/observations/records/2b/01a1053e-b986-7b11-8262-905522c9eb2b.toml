@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1053e-b986-7b11-8262-905522c9eb2b"
+recorded_at = "2026-10-04T04:49:19.238603032Z"
+kind = "friction"
+summary = "[capsule-driver/execute; SL-278] check gate halts at unit failures, integration suites never run"
+detail = "Jail git guard refuses git reset --hard / checkout -f in fixture temp repos (SL-276 territory): ~25 unit failures stop doctrine check gate before integration tests; workers run them separately."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

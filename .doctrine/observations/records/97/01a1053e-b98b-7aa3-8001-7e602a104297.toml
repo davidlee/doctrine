@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1053e-b98b-7aa3-8001-7e602a104297"
+recorded_at = "2026-10-04T04:49:19.243955808Z"
+kind = "friction"
+summary = "[capsule-driver/phase-plan; SL-278] fixture privacy, no design section filter, drifting line refs"
+detail = "review::tests fixture private so MCP tests can't share it; doctrine design show has no section filter; line ranges cited in sheets drift within a phase."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

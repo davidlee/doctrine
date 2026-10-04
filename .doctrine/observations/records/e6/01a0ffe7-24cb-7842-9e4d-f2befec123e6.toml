@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a0ffe7-24cb-7842-9e4d-f2befec123e6"
+recorded_at = "2026-10-03T03:55:33.45117387Z"
+kind = "friction"
+summary = "[design] apply refuses needs to nodes created in the same declare batch"
+detail = "SL-278: one declare batch creating inq-1..inq-10 with needs between them failed 'unknown node: inq-4' (needs resolve against pre-batch state, not in batch order). Workaround: two applies, nodes first then needs. The contract does not say so."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
