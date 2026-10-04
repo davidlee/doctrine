@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a10562-0f5a-7423-97c2-1ef080b7e2c5"
+recorded_at = "2026-10-04T05:27:54.970896969Z"
+kind = "friction"
+summary = "capsule-phase-planner SL-278 PHASE-05: design/plan cite gitignored skill mirror path, not the master"
+detail = "EX-2 and design sec-6 name .agents/skills/plan/SKILL.md:46-48, a gitignored mirror; masters live in plugins/doctrine/skills/. Planner had to work out the source of truth. Also VA-1 has no tokenizer in jail (tiktoken absent) -> bytes/4 estimate; EX-4 gate-green unreachable in jail."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

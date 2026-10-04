@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1055f-a942-7941-90ff-292886cf7ff1"
+recorded_at = "2026-10-04T05:25:17.76271643Z"
+kind = "friction"
+summary = "capsule-worker SL-278 PHASE-04b: sheet asks worker to write § Findings but capsule contract forbids runtime-state writes"
+detail = "Phase sheet instructs the worker to fill its Findings section; the capsule-worker contract forbids writing .doctrine runtime state. Conflicting instructions; worker put findings in hand-back instead. (04a worker did write the sheet — inconsistent behaviour across workers.)"
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

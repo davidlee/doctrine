@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a10544-e7a0-7b10-b24f-2a62b3235487"
+recorded_at = "2026-10-04T04:56:04.256746283Z"
+kind = "friction"
+summary = "capsule-phase-planner SL-278 PHASE-04: show SL-278 omits design; plan EX-6 demands gate green unreachable in jail"
+detail = "Planner: 'doctrine show SL-278' prints only the scope doc; sec-5 contract had to be read from raw design.md (doctrine design show is the verb). Plan exit criterion EX-6 requires doctrine check gate green, which cannot pass in the jail (git-guard fixture failures); gate must run on coord tree."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

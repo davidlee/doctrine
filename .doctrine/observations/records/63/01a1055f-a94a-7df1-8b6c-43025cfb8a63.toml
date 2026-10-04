@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1055f-a94a-7df1-8b6c-43025cfb8a63"
+recorded_at = "2026-10-04T05:25:17.770188648Z"
+kind = "friction"
+summary = "capsule-worker SL-278 PHASE-04b: tests/mcp-bridge.test.ts stale and unrunnable in jail"
+detail = "Bridge test's integration block asserts toBe(10) tools and all names start with review_, already wrong vs 31-32 server tools for several phases; no node_modules/vitest in jail so VT-4 edits ship unexecuted."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

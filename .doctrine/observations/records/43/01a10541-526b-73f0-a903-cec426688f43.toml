@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a10541-526b-73f0-a903-cec426688f43"
+recorded_at = "2026-10-04T04:52:09.451964667Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-278 PHASE-04: planner hit 40-turn cap with no sheet written"
+detail = "capsule-phase-planner spent all 40 turns reading (cli.rs, guard.rs, MCP tools) and wrote nothing; orchestrator has no SendMessage tool to resume it, so the 130k-token exploration was lost and a fresh planner must be spawned. Also: Agent spawn was backgrounded despite an explicit foreground request in the prompt."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

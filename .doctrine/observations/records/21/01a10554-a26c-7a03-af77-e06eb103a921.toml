@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a10554-a26c-7a03-af77-e06eb103a921"
+recorded_at = "2026-10-04T05:13:15.116565023Z"
+kind = "friction"
+summary = "capsule-worker SL-278 PHASE-04a: format! over large JSON-illustrating MCP description needs head/mid/tail split"
+detail = "Splicing vocab constants (STD-001) into the review_show tool description: the literal is full of {/} JSON illustration, so a whole-string format! needs every brace escaped. Worker split into head/mid/tail &str locals and interpolated only those. Sheet guidance undersold this. Also: 04a worker used 152 tool calls (~205k tokens) on a phase planned as bounded/mechanical — sizing still optimistic."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1055f-a948-71a0-a190-4f431f0b2f2c"
+recorded_at = "2026-10-04T05:25:17.768373541Z"
+kind = "friction"
+summary = "capsule-worker SL-278 PHASE-04b: subcommand --help renders only first long_about paragraph"
+detail = "commands::cli::render_subcommand_help shows only the first paragraph of long_about; doc-comment paragraphs after the first never reach --help. Undocumented; cost a build-and-rework cycle. Workaround: explicit #[command(about, long_about = concat!(...))] with single-newline joins (as design apply does)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
