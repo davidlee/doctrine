@@ -126,6 +126,13 @@ pub(crate) struct FindingFilter {
     pub(crate) statuses: Vec<FindingStatus>,
     pub(crate) severities: Vec<Severity>,
 }
+
+impl FindingFilter {
+    /// Split commas, validate against the vocabularies, build. Called by
+    /// `Projection::parse` and by the census, so both refuse alike.
+    pub(crate) fn parse(open: bool, status: &[String], severity: &[String])
+        -> anyhow::Result<Self>;
+}
 ```
 
 `Projection::parse` is the single validation point, so CLI and MCP refuse
@@ -148,6 +155,9 @@ impl FindingFilter {
     }
 }
 ```
+
+The census (sec-5) builds the same `FindingFilter` from its list flags, so
+this is the only implementation of the finding axes.
 
 `effective_severity(raw) -> Severity` maps an out-of-vocabulary severity to
 `Blocker` (SPEC-032 `D15`, the fail-safe read). It is extracted from
@@ -428,14 +438,20 @@ brief hint is how a reader of `doctrine show` finds `-f` and `--full`.
 Schema properties: `reference` (required), `finding` (string or array),
 `full`, `open` (booleans), `status`, `severity` (string or array). `view` and
 `format` are removed, and `project_show_summary` with its tests is deleted.
-The handler collects the arguments into `ProjectionArgs` with
-`ExtractFields` (the `review_list` idiom, so a scalar or array both work),
-calls `Projection::parse`, and passes `Format::Json` to `run_show` — the
+The handler collects the arguments into `ProjectionArgs` and calls `Projection::parse`, and passes `Format::Json` to `run_show` — the
 table string is `serde(skip)` on MCP and building it would only read config
 for nothing. Unknown arguments stay ignored, so an old `view=summary` caller
 now receives the smaller index rather than an error. The tool description is
 rewritten to state the index default, the full-depth fields, and how to reach
 them.
+
+`ExtractFields::vec_str_field` reads arrays only and drops a scalar or a
+non-string member silently, so it cannot serve here. A new
+`ExtractFields::str_list_field(name) -> anyhow::Result<Vec<String>>` accepts a
+string (kept whole; `Projection::parse` splits commas) or an array of strings,
+and refuses any other JSON type or a non-string member, naming the argument.
+`review_show` uses it for `finding`, `status` and `severity`;
+`review_findings` for `status`, `severity` and `tags`.
 
 ### `review list --facet` — DEC-365
 
@@ -494,18 +510,58 @@ pub(crate) struct CensusRow {
 }
 ```
 
-`run_findings` (in `src/review/census.rs`) reads all reviews, applies the
-review-level pre-filters (`--target`, `--facet`), flattens to one row per
-finding, and then filters rows:
+`run_findings` (in `src/review/census.rs`) scans all reviews tolerantly
+(below), applies the review-level pre-filters (`--target`, `--facet`),
+flattens to one row per finding, and filters rows in two steps with a strict
+split of axes:
 
-1. `listing::retain` with a hide-set of *known terminal* statuses and a key
-   whose `status` is the finding's raw status, `canonical` the review id,
-   `slug` the review slug, `title` the finding title, `tags` the review tags.
-   This gives the census the same `-s`/`-a` reveal rule, substring, regex and
-   tag semantics as every other list verb. An out-of-vocabulary status is not
-   hidden (fail-safe).
-2. `FindingFilter { severities, ..Default::default() }.admits` for `-S` — the
-   predicate `review show` uses, so severity means the same on both.
+1. **Finding axes — `FindingFilter::admits`**, the predicate `review show`
+   uses (DEC-363). The census builds it from its own flags:
+
+   ```rust
+   FindingFilter {
+       // The list hide-set convention: terminal findings are hidden unless
+       // -a or any -s is given — expressed as `open`, not as a second rule.
+       open: !all && statuses.is_empty(),
+       statuses,   // CommonListArgs -s
+       severities, // -S
+   }
+   ```
+
+   built through `FindingFilter::parse`, so a bad `-s` or `-S` value is
+   refused with the same message `review show` gives.
+
+   So `--open` semantics, unknown-status handling and severity classification
+   have exactly one implementation.
+2. **Text axes — `listing::retain`** for `-f`, `-r`, `-i`, `-t` only. The
+   census takes `status` and `all` out of `ListArgs` before `listing::build`
+   and passes an `is_hidden` that hides nothing, so `retain` never applies a
+   status rule of its own. Its key: `canonical` is `"RV-012 F-3"` (review id,
+   space, finding id), `slug` the review slug, `title` the finding title,
+   `tags` the review tags. The regex domain is therefore the review-and-finding
+   id, the review slug, and the finding title: `-r 'RV-012'`, `-r 'F-3$'` and
+   `-r 'RV-012 F-3'` all match that row. The help text states this domain.
+
+### Tolerant scan (STD-003)
+
+The census walks the whole corpus, so one unparseable `review-NNN.toml` must
+not deny every other review. A new reader in `review_ledger::schema`:
+
+```rust
+pub(crate) struct UnreadableReview { pub(crate) rv: String, pub(crate) reason: String }
+
+/// Every review that parses, plus a named entry for each that does not.
+pub(crate) fn scan_reviews(review_root: &Path)
+    -> anyhow::Result<(Vec<ReviewDoc>, Vec<UnreadableReview>)>;
+```
+
+Only failure to list the review directory itself is an error. Each skipped
+review is disclosed: a stderr line `warning: RV-012 unreadable: <reason>` in
+the CLI, and an `unreadable` array (absent when empty) in JSON and MCP.
+`review list` switches to `scan_reviews` too — it is the same walk with the
+same defect today — and gains the same disclosure. `read_reviews` stays for
+the close gate (`unresolved_blockers_for`), which must fail closed: a gate that
+skipped an unreadable ledger could pass a blocker it never saw.
 
 Rows sort by review id, then ledger order within a review. Table columns:
 `review, facet, target, id, severity, status, disposition, route, title`;
@@ -515,7 +571,8 @@ and `--columns` reaches the rest. Severities print in capitals as in the
 
 Warnings: the vocabulary defects of every review that contributed a row are
 gathered as `review list` gathers them — to stderr in the CLI, and in a
-top-level `warnings` array (absent when empty) in JSON and MCP.
+top-level `warnings` array (absent when empty) in JSON and MCP. Unreadable
+reviews ride beside them as `unreadable`.
 
 ### Output
 
@@ -529,10 +586,14 @@ FindingsListed {
     total: Option<usize>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     warnings: Vec<ReviewWarning>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    unreadable: Vec<UnreadableReview>,
     #[serde(skip)]
     formatted: String,
 }
 ```
+
+`ReviewOutput::Listed` gains the same `unreadable` field.
 
 MCP `review_findings` takes `substr`, `regexp`, `status`, `tags`, `all`,
 `severity`, `facet`, `target`, and `limit`, and returns
@@ -555,7 +616,7 @@ The census row's `kind` token is `"finding"`, a named constant beside
 | ADR-007 D-C5 | `turns` are emitted in file order; no global round is invented. |
 | ADR-007 D-C6 | the brief stays part of the render — whole under `--full`, as a hint otherwise. |
 | SPEC-032 `D8` | `disposition` and `route` render verbatim, legacy values included. |
-| SPEC-032 `D15`, DEC-319, STD-003 | unknown status reads open, unknown severity reads blocker; every surface discloses defects on its own channel; `detail` is never cut; a narrowed index says `N of M`. |
+| SPEC-032 `D15`, DEC-319, STD-003 | unknown status reads open, unknown severity reads blocker; every surface discloses defects on its own channel; `detail` is never cut; a narrowed index says `N of M`; the census and `review list` tolerate and name an unreadable review rather than aborting (the close gate stays fail-closed). |
 | SPEC-013 D1/D3 | `findings` is a kind-specific verb over `listing` and flattens `CommonListArgs` without shadowing it; `-S`, `--facet`, `--target` are additions. |
 | SPEC-013 show equivalence | `doctrine show RV-N` equals `review show RV-N` (DEC-364). |
 | DEC-112 | report-verb JSON heads are free; this design picks `{kind, review}` and `{kind, rows}`. |
@@ -606,18 +667,20 @@ not edit the spec directly; ADR-013 routes governance change through a REV.
 | `src/review_ledger/vocab.rs` | `ReviewStatus` and `Await` derive `Serialize` (lowercase). |
 | `src/review/read.rs` | delete `Finding`, the borrowed `ReviewView`, `finding_of_row`, `ShowJson`, `show_json`, `with_warnings`; `run_show` takes a `Projection`; table renders for index and full depth; `severity_cell`; brief hint; `render_finding` retypes onto `FindingRow`. |
 | `src/review/census.rs` | **new** — `CensusRow`, `CENSUS_COLUMNS`, `run_findings`. |
+| `src/review_ledger/schema.rs` | add `UnreadableReview` and `scan_reviews` (tolerant walk); `read_reviews` kept for the close gate. No schema change. |
+| `src/commands/guard.rs` | classify `ReviewCommand::Findings` as `Read` in `write_class` (the match is exhaustive, so this is required to compile). |
 | `src/review/cli.rs` | `Show` gains `-f/--finding`, `--full`, `--open`, `-s`, `-S`; `List` gains `--facet`; new `Findings` verb. |
 | `src/review/mod.rs` | dispatch builds `ProjectionArgs` → `Projection`; `Showed { view, formatted }`; new `FindingsListed`; re-exports. |
 | `src/commands/show.rs` (review route) | pass `Projection::index()`. |
-| `src/mcp_server/tools.rs` | `review_show` schema/handler/description; delete `project_show_summary` and its tests; `review_list` gains `facet`; new `review_findings`; `project_list_cap` generalised. |
+| `src/mcp_server/tools.rs` | `review_show` schema/handler/description; delete `project_show_summary` and its tests; `review_list` gains `facet`; new `review_findings`; `project_list_cap` generalised; new `ExtractFields::str_list_field`. |
 | `src/review/tests.rs` | the `json["review"]["finding"]` pin (`:379-408`) moves to the view shape; `render_finding` tests retype. |
 | `tests/e2e_review_golden.rs` | goldens regenerated for the new default render. |
 | `tests/e2e_mcp_server.rs` | `review_show` cases move to the new arguments and shape; `review_findings` added; tool-list count. |
 | `tests/mcp-bridge.test.ts` | tool-name list gains `review_findings`. |
 | `install/review-ledger.md`, `install/design-prompts/reviewing.md`, `.agents/skills/{plan,reconcile,audit}/SKILL.md` | guidance sweep (sec-6). |
 
-Untouched: `src/review_ledger/schema.rs` (no schema change), every write verb,
-`listing.rs` (the census rides its existing seams).
+Untouched: the ledger schema types, every write verb, `listing.rs` (the census
+rides its existing seams).
 
 <!-- doctrine:section sec-8 -->
 ## Verification
@@ -626,7 +689,8 @@ Behaviour tests over fixture ledgers, built with the existing review test
 helpers. One fixture set covers: an empty ledger; five findings across all
 four severities and every status; a routed finding; a finding with a turn
 journal; an out-of-vocabulary status and severity; a multi-line `detail`
-over 3 KB; a never-journalled ledger with a baton.
+over 3 KB; a never-journalled ledger with a baton; and, for corpus walks, one
+unparseable `review-NNN.toml` beside readable ones.
 
 ### Engine (`review_ledger::view`, unit)
 
@@ -666,8 +730,18 @@ over 3 KB; a never-journalled ledger with a baton.
 
 - Bare verb hides verified and withdrawn findings and shows unknown-status
   ones; `-a` and any `-s` reveal terminal findings.
-- `-S`, `--facet`, `--target` narrow; `-f`/`-r`/`-t` behave as on `review list`.
-- Severity matches `review show -S` on the same fixtures (shared predicate).
+- `-S`, `--facet`, `--target` narrow; `-f`/`-t` behave as on `review list`.
+- `-r 'F-3$'` matches a row whose finding id is `F-3` when neither the review
+  slug nor the title contains it.
+- `census_and_show_agree_on_finding_axes` — for `-s` (including an
+  out-of-vocabulary status), `-S` (including an out-of-vocabulary severity)
+  and the default open set, the census rows for one review equal `review show
+  RV-N` with the matching filter.
+- `census_survives_an_unreadable_review` — rows from the readable reviews,
+  plus `RV-NNN unreadable` on stderr and in `unreadable` (JSON and MCP). The
+  same case for `review list`.
+- `worker_guard` classifies `review findings` as a read (existing guard test
+  surface).
 - JSON envelope `{kind: "finding", rows}`; warnings on stderr and in JSON.
 - MCP `review_findings`: `limit` cap and `total`.
 
@@ -678,7 +752,8 @@ over 3 KB; a never-journalled ledger with a baton.
 - `tests/e2e_review_golden.rs` regenerated for the new default render and one
   full-depth golden.
 - `tests/e2e_mcp_server.rs`: `review_show` default is index; `finding` as
-  string and array; `full`; refusal of `finding` with `open`; `review_list`
+  string and as array select the same findings; a non-string `finding`
+  member is refused; `full`; refusal of `finding` with `open`; `review_list`
   `facet`.
 
 ### Token budget (VA)
@@ -706,6 +781,9 @@ asserted in CI.
 - **Census `kind` token.** `"finding"` is not an entity kind; it labels the
   row type in the listing envelope. If SPEC-013 later fixes report-verb heads
   (IMP-383), this follows it.
+- **The close gate still aborts on an unreadable review.** Deliberate:
+  `unresolved_blockers_for` is a gate, and skipping a ledger it cannot read
+  could pass a blocker. Loud failure is the fail-safe there.
 - **A1 holds.** The journal and `route` are read from `FindingRow` with no
   schema change (research fact 4, verified).
 - **Out of scope, unchanged:** RV as a relation target (SL-279), design-run

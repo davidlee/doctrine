@@ -106,6 +106,14 @@ intent = "design-target"
 selector = ".agents/skills/audit/SKILL.md"
 intent = "design-target"
 
+[[selector]]
+selector = "src/review_ledger/schema.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
 [[relation]]
 label = "fulfils"
 target = "IMP-494"
