@@ -54,10 +54,6 @@ pub(crate) fn warnings_of(doc: &ReviewDoc) -> Vec<ReviewWarning> {
 // ---------------------------------------------------------------------------
 
 /// How much of each shown finding a render carries.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Depth {
@@ -68,10 +64,6 @@ pub(crate) enum Depth {
 /// Which findings a view carries. Ids and filters are exclusive by
 /// construction: the CLI and MCP refuse the combination before this exists
 /// ([`Projection::parse`]).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-)]
 #[derive(Debug)]
 pub(crate) enum Selection {
     /// Every finding the filter admits (an empty filter admits all).
@@ -83,10 +75,6 @@ pub(crate) enum Selection {
 /// The selection plus whether the brief body rides along (design sec-2):
 /// everything `review show`/the census need to pick findings out of a
 /// ledger, transport-neutral.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-)]
 #[derive(Debug)]
 pub(crate) struct Projection {
     pub(crate) selection: Selection,
@@ -97,10 +85,6 @@ pub(crate) struct Projection {
 impl Projection {
     /// `Full` iff [`Self::with_body`] or [`Selection::Ids`]; else `Index` — a
     /// selection by id always shows what it asked for in full (DEC-362).
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-    )]
     pub(crate) fn depth(&self) -> Depth {
         if self.with_body || matches!(self.selection, Selection::Ids(_)) {
             Depth::Full
@@ -111,10 +95,6 @@ impl Projection {
 
     /// The default render — what `doctrine show RV-N` gets (DEC-364): every
     /// finding, index depth, no body.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-    )]
     pub(crate) fn index() -> Self {
         Self {
             selection: Selection::Filtered(FindingFilter::default()),
@@ -127,10 +107,6 @@ impl Projection {
     /// any filter is refused; otherwise `finding` (normalised, deduped, order
     /// kept) becomes [`Selection::Ids`], else the filter becomes
     /// [`Selection::Filtered`].
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-    )]
     pub(crate) fn parse(args: &ProjectionArgs) -> anyhow::Result<Self> {
         let ids = split_commas(&args.finding);
         let filtered = args.open || !args.status.is_empty() || !args.severity.is_empty();
@@ -164,10 +140,6 @@ impl Projection {
 /// validates. Each of `finding`/`status`/`severity` may carry pre-split
 /// elements (the CLI's `value_delimiter`) or a single comma-joined string (an
 /// MCP caller) — both read alike (`split_commas`).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-)]
 #[derive(Default)]
 pub(crate) struct ProjectionArgs {
     pub(crate) finding: Vec<String>,
@@ -180,10 +152,6 @@ pub(crate) struct ProjectionArgs {
 /// Split every element on `,`, trim, and drop empty segments — the one comma
 /// domain `Projection::parse`/`FindingFilter::parse` share, so a CLI's
 /// pre-split `Vec` and an MCP's single joined string read alike.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-)]
 fn split_commas(raw: &[String]) -> Vec<String> {
     raw.iter()
         .flat_map(|s| s.split(','))
@@ -196,10 +164,6 @@ fn split_commas(raw: &[String]) -> Vec<String> {
 /// A bare number becomes `F-n` (A3); `F-n` is kept; any other spelling (e.g.
 /// `f-3`) passes through verbatim and fails later as an unknown id —
 /// [`Projection::parse`] names only bare numbers as a second spelling.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-)]
 fn normalise_finding_id(raw: &str) -> String {
     if !raw.is_empty() && raw.bytes().all(|b| b.is_ascii_digit()) {
         let mut id = "F-".to_owned();
@@ -212,10 +176,6 @@ fn normalise_finding_id(raw: &str) -> String {
 
 /// Which findings a filtered selection admits (design sec-2, DEC-363): an
 /// empty filter admits every finding.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-)]
 #[derive(Debug, Default)]
 pub(crate) struct FindingFilter {
     pub(crate) open: bool,
@@ -229,10 +189,6 @@ impl FindingFilter {
     /// unknown status or severity names the vocabulary (the
     /// `listing::validate_statuses` shape, via `FindingStatus::parse`/
     /// `Severity::parse`, which already name it).
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-    )]
     pub(crate) fn parse(
         open: bool,
         status: &[String],
@@ -258,10 +214,6 @@ impl FindingFilter {
     /// empty `statuses`/`severities` admits every value, otherwise only a
     /// named one — through [`effective_severity`], so this agrees with the
     /// close gate's classification by construction.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-    )]
     pub(crate) fn admits(&self, row: &FindingRow) -> bool {
         let status = Vocab::<FindingStatus>::read(&row.status);
         (!self.open || !status.is_known_terminal())
@@ -279,10 +231,6 @@ impl FindingFilter {
 /// An owned, serialisable projection of one review (design sec-2, RFC-032 D5):
 /// the header facts (over the **whole** ledger, whatever the selection) plus
 /// the selected findings. Built once per read; pure.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct ReviewView {
     pub(crate) canonical: String,
@@ -313,10 +261,6 @@ pub(crate) struct ReviewView {
 
 /// One finding as projected (design sec-2): identity and status always;
 /// `detail`/`response`/`turns` only at [`Depth::Full`].
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct FindingView {
     pub(crate) id: String,
@@ -339,10 +283,6 @@ impl FindingView {
     /// Project one authored row (never truncated, DEC-366): `detail`/
     /// `response`/`turns` only at [`Depth::Full`] — [`Depth::Index`] carries
     /// no prose.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-    )]
     fn of(row: &FindingRow, depth: Depth) -> Self {
         let full = depth == Depth::Full;
         Self {
@@ -363,10 +303,6 @@ impl FindingView {
 /// (design sec-2): built with [`finding_await`] and [`effective_severity`],
 /// the same two functions `derived_status`/the close gate use, so the three
 /// cannot classify a finding differently.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub(crate) struct Outstanding {
     pub(crate) responder: OutstandingCounts,
@@ -374,10 +310,6 @@ pub(crate) struct Outstanding {
 }
 
 impl Outstanding {
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-    )]
     fn of(doc: &ReviewDoc) -> Self {
         let mut outstanding = Self::default();
         for finding in &doc.finding {
@@ -398,10 +330,6 @@ impl ReviewView {
     /// baton's legacy `(rounds, contests)` (design sec-2) — the single
     /// raw→typed read every render/census row shares. `Err` only for
     /// [`Selection::Ids`] naming an id the ledger does not have (A4).
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-    )]
     pub(crate) fn build(
         doc: &ReviewDoc,
         body: &str,
@@ -459,10 +387,6 @@ impl ReviewView {
 /// A4: `unknown finding F-9 on RV-012 (has F-1..F-5)` — the ledger's own ids,
 /// as a range when they are exactly `F-1..F-n` in order, else comma-joined;
 /// `(has none)` when the ledger is empty.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by review show from SL-278 PHASE-02")
-)]
 fn unknown_finding_error(doc: &ReviewDoc, id: &str) -> anyhow::Error {
     let ids: Vec<&str> = doc.finding.iter().map(|f| f.id.as_str()).collect();
     let known = if ids.is_empty() {

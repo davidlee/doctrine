@@ -11,6 +11,9 @@ use super::{
     Severity, Target, Vocab, canonical_id, counters, derived_status, finding_states_of, fs,
     listing, parse_ref, read_authored, read_review, read_reviews, warnings_of,
 };
+use crate::review_ledger::{
+    Depth, FindingView, Outstanding, OutstandingCounts, Projection, ReviewView, TurnRow,
+};
 use crate::tomlfmt::toml_string;
 
 // ---------------------------------------------------------------------------
@@ -92,13 +95,16 @@ fn edge_label(doc: &ReviewDoc) -> String {
     doc.target.label()
 }
 
-/// `doctrine review show <RV-NNN>` — read the RV as data and render the readable
-/// whole (`Table`) or the faithful toml-as-data + brief (`Json`). The status is
-/// DERIVED here (review never asks the shared reader for a stored status, D-C8);
-/// the `reviews` edge is rendered as `RV-NNN ──reviews──▶ <target>`.
+/// `doctrine review show <RV-NNN>` — read the RV and build its [`ReviewView`]
+/// ONCE under `projection` (SL-278 design sec-2), then render the readable
+/// table from the view (`Table`) or the faithful toml-as-data + brief (`Json`,
+/// unchanged until PHASE-02b). The status is DERIVED (review never asks the
+/// shared reader for a stored status, D-C8). The baton is read, never locked
+/// or written: it supplies only the legacy round counters.
 pub(crate) fn run_show(
     path: Option<PathBuf>,
     reference: &str,
+    projection: &Projection,
     format: Format,
 ) -> anyhow::Result<ReviewOutput> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
@@ -106,7 +112,8 @@ pub(crate) fn run_show(
     let id = parse_ref(reference)?;
     let doc = read_review(&review_root, id)?;
     let body = read_brief(&review_root, id)?;
-    let view = ReviewView::of(&doc);
+    let baton = read_baton(&root, id)?.unwrap_or_default();
+    let view = ReviewView::build(&doc, &body, (baton.rounds, baton.contests), projection)?;
     let formatted = match format {
         Format::Table => {
             let cfg = crate::dtoml::load_doctrine_toml(&root)?;
@@ -127,7 +134,6 @@ pub(crate) fn run_show(
             )?;
             format_show(
                 &view,
-                &body,
                 &estimation_unit,
                 value_line.as_deref(),
                 estimate_line.as_deref(),
@@ -137,27 +143,18 @@ pub(crate) fn run_show(
         }
         Format::Json => show_json(&doc, &body, &view.warnings)?,
     };
-    let canonical = view.canonical.clone();
-    let title = view.title.to_owned();
-    let facet = view.facet.to_owned();
-    let target = view.target.clone();
-    let status = view.status.as_str().to_owned();
-    let awaiting = view.awaiting.as_str().to_owned();
-    let findings_count = view.findings.len();
-    let findings = view.findings;
-    let warnings = view.warnings;
     Ok(ReviewOutput::Showed {
         id,
-        canonical,
-        title,
-        status,
-        awaiting,
-        facet,
-        target,
-        findings_count,
-        findings,
+        canonical: view.canonical,
+        title: view.title,
+        status: view.status.as_str().to_owned(),
+        awaiting: view.awaiting.as_str().to_owned(),
+        facet: view.facet,
+        target: view.target,
+        findings_count: doc.finding.len(),
+        findings: doc.finding.iter().map(finding_of_row).collect(),
         body,
-        warnings,
+        warnings: view.warnings,
         formatted,
     })
 }
@@ -169,58 +166,23 @@ pub(super) fn read_brief(review_root: &Path, id: u32) -> anyhow::Result<String> 
     fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))
 }
 
-/// The one read projection of a review ledger (RFC-032 D5, IMP-490). Everything
-/// a render needs — the derived status/await, the header fields, and the typed
-/// findings — computed ONCE from the authored doc. `show` renders it today; the
-/// JSON projection and the corpus census (D5 remainder) will read the same
-/// struct, so the ledger module can move (D4) without any renderer rewriting.
-/// Pure: no I/O, no clock.
-pub(super) struct ReviewView<'a> {
-    canonical: String,
-    title: &'a str,
-    facet: &'a str,
-    status: ReviewStatus,
-    awaiting: Await,
-    /// The `reviews`-edge label (`SL-024` or `SL-024@PHASE-03`).
-    target: String,
-    raiser: &'a str,
-    responder: &'a str,
-    tags: &'a [String],
-    findings: Vec<Finding>,
-    /// The ledger's closed-vocabulary defects (SL-268 D15), for disclosure.
-    warnings: Vec<ReviewWarning>,
-}
-
 /// The text-channel rendering of a set of warnings: one line each.
 fn warning_lines(warnings: &[ReviewWarning]) -> String {
     warnings.iter().map(ReviewWarning::line).collect()
 }
 
-impl<'a> ReviewView<'a> {
-    /// Build the projection from the authored doc — the single raw→typed parse of
-    /// a review. Pure.
-    pub(super) fn of(doc: &'a ReviewDoc) -> Self {
-        let (status, awaiting) = doc.derived();
-        Self {
-            canonical: canonical_id(doc.id),
-            title: &doc.title,
-            facet: &doc.review.facet,
-            status,
-            awaiting,
-            target: edge_label(doc),
-            raiser: &doc.review.raiser,
-            responder: &doc.review.responder,
-            tags: &doc.tags,
-            findings: doc.finding.iter().map(finding_of_row).collect(),
-            warnings: warnings_of(doc),
-        }
-    }
+/// The status-line suffix for the pass-level concluded marker — shared by
+/// `show` and `status`. It rides the line only when set: silence is the far
+/// commoner state, and a `concluded=no` on every unconcluded pass would be
+/// noise on the line a reader scans for the derived state.
+fn concluded_marker(concluded: bool) -> &'static str {
+    if concluded { " · concluded" } else { "" }
 }
 
-/// One authored `[[finding]]` row → the typed [`Finding`] (the MCP/`--json` shape
-/// and the index's row). No fallback (SL-268 D15): an out-of-vocabulary status
-/// or severity is carried as [`Vocab::Unknown`] with its raw string, so every
-/// render shows what the ledger says; the view's `warnings` disclose it.
+/// One authored `[[finding]]` row → the typed [`Finding`] (the MCP/`--json` shape).
+/// No fallback (SL-268 D15): an out-of-vocabulary status or severity is carried
+/// as [`Vocab::Unknown`] with its raw string, so every render shows what the
+/// ledger says; the view's `warnings` disclose it.
 fn finding_of_row(row: &FindingRow) -> Finding {
     Finding {
         id: row.id.clone(),
@@ -238,42 +200,179 @@ fn finding_of_row(row: &FindingRow) -> Finding {
 /// carries none (it is set only by `dispose`).
 const NO_DISPOSITION: &str = "—";
 
-/// Render the finding index (RFC-032 D5): one row per finding —
-/// `id │ severity │ status │ disposition │ title`. Rendered through the shared
+/// A severity as a table cell (SL-278 DEC-367; the census reuses it): the two
+/// gating-weight tokens in capitals, through the known variant — so an
+/// out-of-vocabulary lookalike is never capitalised — and anything else
+/// verbatim. JSON always carries the lowercase token.
+pub(super) fn severity_cell(severity: &Vocab<Severity>) -> String {
+    match severity.known() {
+        Some(Severity::Blocker) => "BLOCKER".to_owned(),
+        Some(Severity::Major) => "MAJOR".to_owned(),
+        _ => severity.as_str().to_owned(),
+    }
+}
+
+/// Render the finding index (RFC-032 D5, SL-278 sec-3): one row per finding —
+/// `id │ severity │ status │ disposition │ [route │] title`, the `route` column
+/// only when a shown finding has one. Rendered through the shared
 /// `listing::render_table` (not bespoke formatting) so colour/width policy and
-/// the census's column machinery stay in one place. An empty ledger renders
-/// nothing (the `findings: 0` count line stands alone).
-pub(super) fn render_finding_index(findings: &[Finding]) -> String {
+/// the census's column machinery stay in one place. No findings render
+/// nothing (the count line stands alone).
+pub(super) fn render_finding_index(findings: &[FindingView]) -> String {
     if findings.is_empty() {
         return String::new();
     }
+    let routed = findings.iter().any(|f| f.route.is_some());
+    let mut header = vec!["id", "severity", "status", "disposition"];
+    if routed {
+        header.push("route");
+    }
+    header.push("title");
     let mut grid: Vec<Vec<String>> = Vec::with_capacity(findings.len() + 1);
-    grid.push(
-        ["id", "severity", "status", "disposition", "title"]
-            .iter()
-            .map(|header| (*header).to_owned())
-            .collect(),
-    );
+    grid.push(header.into_iter().map(str::to_owned).collect());
     grid.extend(findings.iter().map(|f| {
-        vec![
+        let mut row = vec![
             f.id.clone(),
-            f.severity.as_str().to_owned(),
+            severity_cell(&f.severity),
             f.status.as_str().to_owned(),
             f.disposition
                 .clone()
                 .unwrap_or_else(|| NO_DISPOSITION.to_owned()),
-            f.title.clone(),
-        ]
+        ];
+        if routed {
+            row.push(f.route.clone().unwrap_or_default());
+        }
+        row.push(f.title.clone());
+        row
     }));
     listing::render_table(&grid, None)
 }
 
-/// Render the `Table` show: identity header, the derived status + await, the
-/// `reviews` edge, the finding index, then the brief body. House style —
-/// `Vec<String>` joined by `concat` (avoids the `push_str(&format!)` lint).
+/// `text` with every line prefixed by `indent` and newline-terminated; a blank
+/// line stays empty (no trailing indent). Indentation is the only change made
+/// to prose — nothing is wrapped or cut (DEC-366).
+fn indented(text: &str, indent: &str) -> String {
+    text.lines()
+        .map(|line| {
+            if line.is_empty() {
+                "\n".to_owned()
+            } else {
+                [indent, line, "\n"].concat()
+            }
+        })
+        .collect()
+}
+
+/// One finding at full depth (SL-278 sec-3): the header line, the title, then
+/// `detail`/`response`/`turns` — each only when set — with prose verbatim at
+/// four spaces and a turn's note/response at six.
+fn render_finding_block(finding: &FindingView) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    let mut head = vec![
+        finding.id.clone(),
+        severity_cell(&finding.severity),
+        finding.status.as_str().to_owned(),
+    ];
+    if let Some(disposition) = &finding.disposition {
+        head.push(format!("disposition {disposition}"));
+    }
+    if let Some(route) = &finding.route {
+        head.push(format!("route {route}"));
+    }
+    parts.push(format!("{}\n  {}\n\n", head.join(" · "), finding.title));
+    if let Some(detail) = &finding.detail {
+        parts.push(format!("  detail:\n{}", indented(detail, "    ")));
+    }
+    if let Some(response) = &finding.response {
+        parts.push(format!("  response:\n{}", indented(response, "    ")));
+    }
+    if !finding.turns.is_empty() {
+        parts.push("  turns:\n".to_owned());
+        parts.extend(finding.turns.iter().map(render_turn));
+    }
+    parts.concat()
+}
+
+/// One journal turn of a full block: `act · role[ · disposition][ → route]` at
+/// four spaces, then its note and response verbatim at six.
+fn render_turn(turn: &TurnRow) -> String {
+    let mut head = vec![turn.act.as_str(), turn.role.as_str()];
+    if let Some(disposition) = &turn.disposition {
+        head.push(disposition);
+    }
+    let route = turn
+        .route
+        .as_ref()
+        .map_or_else(String::new, |route| format!(" → {route}"));
+    let mut parts = vec![format!("    {}{route}\n", head.join(" · "))];
+    parts.extend(
+        [&turn.note, &turn.response]
+            .into_iter()
+            .flatten()
+            .map(|prose| indented(prose, "      ")),
+    );
+    parts.concat()
+}
+
+/// `outstanding: …` — the non-terminal findings grouped by the party they
+/// await, responder first, each group its non-zero severities in vocabulary
+/// order with a verb agreeing with the group total; `none` when nothing is
+/// owed (SL-278 sec-3).
+fn outstanding_line(outstanding: &Outstanding) -> String {
+    let groups: Vec<String> = [
+        (Await::Responder, &outstanding.responder),
+        (Await::Raiser, &outstanding.raiser),
+    ]
+    .into_iter()
+    .filter_map(|(party, counts)| outstanding_group(party, counts))
+    .collect();
+    if groups.is_empty() {
+        "outstanding: none\n".to_owned()
+    } else {
+        format!("outstanding: {}\n", groups.join(" · "))
+    }
+}
+
+/// One party's group of the outstanding line, or `None` when it owes nothing.
+fn outstanding_group(party: Await, counts: &OutstandingCounts) -> Option<String> {
+    let owed: Vec<(Severity, usize)> = counts
+        .by_severity()
+        .into_iter()
+        .filter(|&(_, n)| n > 0)
+        .collect();
+    if owed.is_empty() {
+        return None;
+    }
+    let cells: Vec<String> = owed
+        .iter()
+        .map(|&(severity, n)| format!("{n} {}", severity_cell(&Vocab::Known(severity))))
+        .collect();
+    let total: usize = owed.iter().map(|&(_, n)| n).sum();
+    let verb = if total > 1 { "await" } else { "awaits" };
+    Some(format!("{} {verb} {}", cells.join(", "), party.as_str()))
+}
+
+/// The hint that stands in for the brief body (SL-278 sec-3): its size and
+/// the two invocations that reach detail, naming the review's own id.
+fn brief_hint(canonical: &str, body_lines: usize) -> String {
+    let size = match body_lines {
+        0 => "empty".to_owned(),
+        1 => "1 line".to_owned(),
+        n => format!("{n} lines"),
+    };
+    format!(
+        "brief: {size} — doctrine review show {canonical} --full · -f F-n for chosen findings\n"
+    )
+}
+
+/// Render the `Table` show from the view (SL-278 sec-3): identity, the derived
+/// status line, the `reviews` edge, the parties, what is outstanding, the
+/// count, then the index (or, at full depth, one block per finding), the
+/// warnings, tags, estimate and value — and last the brief hint, or the body
+/// after a blank line when the view carries it. House style — `Vec<String>`
+/// joined by `concat` (avoids the `push_str(&format!)` lint).
 pub(super) fn format_show(
-    view: &ReviewView<'_>,
-    body: &str,
+    view: &ReviewView,
     _estimation_unit: &str,
     value_line: Option<&str>,
     estimate_line: Option<&str>,
@@ -283,19 +382,34 @@ pub(super) fn format_show(
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!("{} — {}\n", view.canonical, view.title));
     parts.push(format!(
-        "{} · {} · await={}\n",
+        "{} · {} · await={} · rounds {}{}\n",
         view.facet,
         view.status.as_str(),
-        view.awaiting.as_str()
+        view.awaiting.as_str(),
+        view.rounds,
+        concluded_marker(view.concluded)
     ));
     parts.push(format!("{} ──reviews──▶ {}\n", view.canonical, view.target));
     parts.push(format!(
-        "findings: {} (raiser {} · responder {})\n",
-        view.findings.len(),
-        view.raiser,
-        view.responder
+        "raiser {} · responder {}\n",
+        view.raiser, view.responder
     ));
-    parts.push(render_finding_index(&view.findings));
+    parts.push(outstanding_line(&view.outstanding));
+    let shown = view.findings.len();
+    parts.push(if shown == view.finding_count {
+        format!("findings: {shown}\n")
+    } else {
+        format!("findings: {shown} of {}\n", view.finding_count)
+    });
+    parts.push(match view.depth {
+        Depth::Index => render_finding_index(&view.findings),
+        Depth::Full => view
+            .findings
+            .iter()
+            .map(render_finding_block)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    });
     parts.push(warning_lines(&view.warnings));
     if !view.tags.is_empty() {
         parts.push(format!("tags: {}\n", view.tags.join(", ")));
@@ -308,7 +422,10 @@ pub(super) fn format_show(
     if let Some(line) = value_line {
         parts.push(format!("{line}\n"));
     }
-    parts.push(format!("\n{body}"));
+    parts.push(match &view.body {
+        Some(body) => format!("\n{body}"),
+        None => brief_hint(&view.canonical, view.body_lines.unwrap_or(0)),
+    });
     parts.concat()
 }
 
@@ -553,21 +670,14 @@ pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Resu
     // in only for a ledger never journalled (SL-268 sec-2).
     let rounds = counters(&doc, (rebuilt.rounds, rebuilt.contests)).rounds;
 
-    // The marker rides the status line only when set: silence is the far commoner
-    // state, and a `concluded=no` on every unconcluded pass would be noise on the
-    // line a reader scans for the derived state.
-    let concluded = if doc.review.concluded {
-        " · concluded"
-    } else {
-        ""
-    };
     let mut formatted = format!(
-        "{} — {} · await={} · findings {} · rounds {}{concluded}\n",
+        "{} — {} · await={} · findings {} · rounds {}{}\n",
         canonical_id(id),
         status.as_str(),
         awaited.as_str(),
         doc.finding.len(),
-        rounds
+        rounds,
+        concluded_marker(doc.review.concluded)
     );
     let warnings = warnings_of(&doc);
     formatted.push_str(&warning_lines(&warnings));

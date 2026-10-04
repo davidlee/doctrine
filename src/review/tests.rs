@@ -8,9 +8,10 @@ use super::*;
 use super::{prime::*, read::*, turn::*, verbs::*};
 use crate::review_ledger::{
     BlockerRef, DISPOSITIONS, EFFECT_UNKNOWN_SEVERITY, FACETS, FINDING_STATUSES, OutstandingCounts,
-    ROLES, ROUTES, SEVERITIES, Vocab, VocabDefect, VocabField, gates_as_blocker, next_finding_id,
-    observe_pass, outstanding_by_severity, read_pass_facts, undisposed_blockers,
-    unresolved_blockers_for, unrouted_severe, vocabulary_defects,
+    Projection, ProjectionArgs, ROLES, ROUTES, ReviewView, SEVERITIES, Vocab, VocabDefect,
+    VocabField, gates_as_blocker, next_finding_id, observe_pass, outstanding_by_severity,
+    read_pass_facts, undisposed_blockers, unresolved_blockers_for, unrouted_severe,
+    vocabulary_defects,
 };
 
 // -- can(): single-owner edges (VT-3) -----------------------------------
@@ -353,7 +354,7 @@ fn legacy_disposition_quiet() {
     let p = || Some(root.to_path_buf());
 
     assert_eq!(vocabulary_defects(&read_doc(root, 1)), []);
-    let quiet = rendered(&run_show(p(), "RV-001", Format::Table).unwrap());
+    let quiet = rendered(&run_show(p(), "RV-001", &Projection::index(), Format::Table).unwrap());
     assert!(quiet.contains("whatever"), "{quiet}");
     assert!(!quiet.contains("warning:"), "{quiet}");
 
@@ -366,7 +367,7 @@ fn legacy_disposition_quiet() {
             effect: EFFECT_UNKNOWN_SEVERITY,
         }]
     );
-    let loud = rendered(&run_show(p(), "RV-002", Format::Table).unwrap());
+    let loud = rendered(&run_show(p(), "RV-002", &Projection::index(), Format::Table).unwrap());
     assert!(
         loud.contains(
             "warning: RV-002 F-1 severity `crit` is out of vocabulary; gating as blocker\n"
@@ -392,7 +393,7 @@ fn unknown_vocab_renders_verbatim_everywhere() {
     hand_edit_finding(root, 1, "F-1", "status", "zombie");
     let p = || Some(root.to_path_buf());
 
-    let table = run_show(p(), "RV-001", Format::Table).unwrap();
+    let table = run_show(p(), "RV-001", &Projection::index(), Format::Table).unwrap();
     assert!(
         rendered(&table).contains("F-1 │ catastrophic │ zombie │"),
         "{}",
@@ -402,8 +403,10 @@ fn unknown_vocab_renders_verbatim_everywhere() {
     assert_eq!(finding["severity"], "catastrophic");
     assert_eq!(finding["status"], "zombie");
 
-    let json: serde_json::Value =
-        serde_json::from_str(&rendered(&run_show(p(), "RV-001", Format::Json).unwrap())).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&rendered(
+        &run_show(p(), "RV-001", &Projection::index(), Format::Json).unwrap(),
+    ))
+    .unwrap();
     assert_eq!(json["review"]["finding"][0]["severity"], "catastrophic");
     assert_eq!(json["review"]["finding"][0]["status"], "zombie");
 }
@@ -433,7 +436,7 @@ fn unknown_severity_warned_on_every_surface() {
         "rv": "RV-001",
     }]);
 
-    let show = run_show(p(), "RV-001", Format::Table).unwrap();
+    let show = run_show(p(), "RV-001", &Projection::index(), Format::Table).unwrap();
     assert!(rendered(&show).contains(line), "{}", rendered(&show));
     assert_eq!(wire(&show, "Showed")["warnings"], warning);
 
@@ -614,13 +617,17 @@ fn show_renders_empty_ledger_active_and_the_edge() {
         estimate: None,
         value: None,
     };
-    let view = ReviewView::of(&doc);
-    let out = format_show(&view, "## Brief\n", "points", None, None, 0.0, 1.0);
+    let view = ReviewView::build(&doc, "## Brief\n", (0, 0), &Projection::index()).unwrap();
+    let out = format_show(&view, "points", None, None, 0.0, 1.0);
     assert!(out.contains("RV-003 — Design review of SL-024"), "{out}");
     // empty and unconcluded ⇒ Active, await=Raiser (SL-268 D2, R2).
     assert!(out.contains("active · await=raiser"), "{out}");
     assert!(out.contains("RV-003 ──reviews──▶ SL-024"), "edge: {out}");
-    assert!(out.contains("findings: 0"), "{out}");
+    // an empty ledger: nothing outstanding, a bare count, no index.
+    assert!(
+        out.contains("\noutstanding: none\nfindings: 0\nbrief: 1 line"),
+        "{out}"
+    );
 }
 
 /// VT-4 (list): a fresh, unconcluded, empty-ledger RV lists with derived
@@ -4100,7 +4107,13 @@ fn golden_run_verify() {
 fn golden_run_show() {
     let tmp = fixture_rv();
     let root = tmp.path();
-    let out = run_show(Some(root.to_path_buf()), "RV-001", Format::Table).unwrap();
+    let out = run_show(
+        Some(root.to_path_buf()),
+        "RV-001",
+        &Projection::index(),
+        Format::Table,
+    )
+    .unwrap();
     let rendered = print_review(&out);
     // The show output is a multi-line table. Check key lines are present.
     assert!(rendered.contains("RV-001 — "), "show: {rendered}");
@@ -4162,7 +4175,13 @@ fn golden_run_status() {
 fn golden_run_show_json() {
     let tmp = fixture_rv();
     let root = tmp.path();
-    let out = run_show(Some(root.to_path_buf()), "RV-001", Format::Json).unwrap();
+    let out = run_show(
+        Some(root.to_path_buf()),
+        "RV-001",
+        &Projection::index(),
+        Format::Json,
+    )
+    .unwrap();
     let rendered = print_review(&out);
     assert!(rendered.contains("\"kind\""), "show json: {rendered}");
     assert!(rendered.contains("\"review\""), "show json: {rendered}");
@@ -4208,14 +4227,21 @@ fn show_renders_the_finding_index() {
         Role::Raiser,
     )
     .unwrap();
-    let out = run_show(Some(root.to_path_buf()), "RV-001", Format::Table).unwrap();
+    let out = run_show(
+        Some(root.to_path_buf()),
+        "RV-001",
+        &Projection::index(),
+        Format::Table,
+    )
+    .unwrap();
     let rendered = print_review(&out);
     // The index carries a column header...
     assert!(rendered.contains("severity"), "index header: {rendered}");
     assert!(rendered.contains("disposition"), "index header: {rendered}");
     // ...one line per finding with its tier columns...
     assert!(rendered.contains("F-1"), "index row: {rendered}");
-    assert!(rendered.contains("blocker"), "index row: {rendered}");
+    // SL-278 PHASE-02: the gating-weight severity prints in capitals.
+    assert!(rendered.contains("BLOCKER"), "index row: {rendered}");
     assert!(
         rendered.contains("Always render the index"),
         "index row: {rendered}"
@@ -4243,7 +4269,13 @@ fn show_index_carries_the_disposition() {
         Role::Responder,
     )
     .unwrap();
-    let out = run_show(Some(root.to_path_buf()), "RV-001", Format::Table).unwrap();
+    let out = run_show(
+        Some(root.to_path_buf()),
+        "RV-001",
+        &Projection::index(),
+        Format::Table,
+    )
+    .unwrap();
     let rendered = print_review(&out);
     assert!(rendered.contains("fix-now"), "disposition: {rendered}");
     assert!(rendered.contains("answered"), "status: {rendered}");
@@ -4283,4 +4315,235 @@ fn list_target_filters_to_the_subject_edge() {
         listed(Some("SL-404")).is_empty(),
         "an unmatched target lists none"
     );
+}
+
+// -- SL-278 PHASE-02a: `review show` renders the view (design sec-3) ------
+
+/// The sec-3 render fixture, inline: five findings over every known status
+/// and all four severities — a routed, disposed, journalled finding (F-2), a
+/// contested finding with blank-line prose and a noted turn (F-3), and an
+/// out-of-vocabulary severity on a terminal finding (F-5).
+const SHOW_LEDGER: &str = "id = 12\nslug = \"s\"\ntitle = \"Design review: SL-278\"\n\
+[review]\nfacet = \"design\"\nraiser = \"rev\"\nresponder = \"auth\"\n\
+[target]\nref = \"SL-278\"\n\
+[[finding]]\nid = \"F-1\"\nstatus = \"open\"\nseverity = \"blocker\"\ntitle = \"t1\"\ndetail = \"d1\"\n\
+[[finding]]\nid = \"F-2\"\nstatus = \"answered\"\nseverity = \"major\"\ntitle = \"t2\"\ndetail = \"d2\"\n\
+disposition = \"fix\"\nroute = \"review\"\nresponse = \"resp2\"\n\
+[[finding.turn]]\nact = \"raise\"\nrole = \"raiser\"\n\
+[[finding.turn]]\nact = \"dispose\"\nrole = \"responder\"\ndisposition = \"fix\"\nroute = \"review\"\nresponse = \"resp2\"\n\
+[[finding]]\nid = \"F-3\"\nstatus = \"contested\"\nseverity = \"minor\"\ntitle = \"t3\"\n\
+detail = \"line a\\n\\nline c\"\n\
+[[finding.turn]]\nact = \"raise\"\nrole = \"raiser\"\n\
+[[finding.turn]]\nact = \"contest\"\nrole = \"raiser\"\nnote = \"n1\\nn2\"\n\
+[[finding]]\nid = \"F-4\"\nstatus = \"verified\"\nseverity = \"nit\"\ntitle = \"t4\"\ndetail = \"d4\"\n\
+[[finding]]\nid = \"F-5\"\nstatus = \"withdrawn\"\nseverity = \"crit\"\ntitle = \"t5\"\ndetail = \"d5\"\n";
+
+/// The F-5 defect line [`SHOW_LEDGER`] discloses on every render.
+const SHOW_WARNING: &str =
+    "warning: RV-012 F-5 severity `crit` is out of vocabulary; gating as blocker\n";
+
+/// Render `ledger` through the real seam — `Projection::parse` over the
+/// transport-neutral args, `ReviewView::build`, `format_show` — with no
+/// estimate/value lines.
+fn show_text(ledger: &str, body: &str, args: &ProjectionArgs) -> String {
+    let doc: ReviewDoc = toml::from_str(ledger).unwrap();
+    let projection = Projection::parse(args).unwrap();
+    let view = ReviewView::build(&doc, body, (0, 0), &projection).unwrap();
+    format_show(&view, "points", None, None, 0.0, 1.0)
+}
+
+/// `-f` ids as the CLI collects them.
+fn finding_args(ids: &[&str]) -> ProjectionArgs {
+    ProjectionArgs {
+        finding: ids.iter().map(|id| (*id).to_owned()).collect(),
+        ..ProjectionArgs::default()
+    }
+}
+
+/// EX-3 / VT-1: the index render, whole — status line with rounds, raiser
+/// line, the outstanding line grouped by party (verb agreeing with the group
+/// total), the route column (blank where unset), `BLOCKER`/`MAJOR` capitals
+/// beside a verbatim out-of-vocabulary severity, the warning, and the brief
+/// hint naming the review's own id in place of the body.
+#[test]
+fn show_index_renders_the_sec3_layout() {
+    let out = show_text(SHOW_LEDGER, "## Brief\nprose\n", &ProjectionArgs::default());
+    let expected = [
+        "RV-012 — Design review: SL-278\n",
+        "design · active · await=responder · rounds 4\n",
+        "RV-012 ──reviews──▶ SL-278\n",
+        "raiser rev · responder auth\n",
+        "outstanding: 1 BLOCKER, 1 minor await responder · 1 MAJOR awaits raiser\n",
+        "findings: 5\n",
+        "id  │ severity │ status    │ disposition │ route  │ title\n",
+        "F-1 │ BLOCKER  │ open      │ —           │        │ t1\n",
+        "F-2 │ MAJOR    │ answered  │ fix         │ review │ t2\n",
+        "F-3 │ minor    │ contested │ —           │        │ t3\n",
+        "F-4 │ nit      │ verified  │ —           │        │ t4\n",
+        "F-5 │ crit     │ withdrawn │ —           │        │ t5\n",
+        SHOW_WARNING,
+        "brief: 2 lines — doctrine review show RV-012 --full · -f F-n for chosen findings\n",
+    ]
+    .concat();
+    assert_eq!(out, expected);
+}
+
+/// VT-1: a ledger with every finding terminal owes nobody a move.
+#[test]
+fn show_outstanding_none_when_every_finding_is_terminal() {
+    let ledger = SHOW_LEDGER
+        .replace("status = \"open\"", "status = \"verified\"")
+        .replace("status = \"answered\"", "status = \"verified\"")
+        .replace("status = \"contested\"", "status = \"withdrawn\"");
+    let out = show_text(&ledger, "", &ProjectionArgs::default());
+    assert!(out.contains("\noutstanding: none\n"), "{out}");
+}
+
+/// VT-1: a narrowed index says so (`of 5`), and drops the route column when
+/// no shown finding carries a route; the outstanding line still counts the
+/// whole ledger.
+#[test]
+fn show_narrowed_index_counts_of_the_whole_and_drops_the_route_column() {
+    let args = ProjectionArgs {
+        open: true,
+        ..ProjectionArgs::default()
+    };
+    let out = show_text(SHOW_LEDGER, "", &args);
+    assert!(out.contains("\nfindings: 3 of 5\n"), "{out}");
+    assert!(out.contains("│ route  │"), "F-2 is routed and open: {out}");
+
+    let args = ProjectionArgs {
+        status: vec!["open,contested".to_owned()],
+        ..ProjectionArgs::default()
+    };
+    let out = show_text(SHOW_LEDGER, "", &args);
+    assert!(out.contains("\nfindings: 2 of 5\n"), "{out}");
+    assert!(
+        out.contains("id  │ severity │ status    │ disposition │ title\n"),
+        "no shown route ⇒ no route column: {out}"
+    );
+    assert!(
+        out.contains("outstanding: 1 BLOCKER, 1 minor await"),
+        "{out}"
+    );
+}
+
+/// VT-1: only the two gating-weight tokens are capitalised, through the
+/// known variant — an out-of-vocabulary lookalike prints verbatim.
+#[test]
+fn severity_cell_capitalises_blocker_and_major_only() {
+    let cell = |raw: &str| severity_cell(&Vocab::<Severity>::read(raw));
+    assert_eq!(cell("blocker"), "BLOCKER");
+    assert_eq!(cell("major"), "MAJOR");
+    assert_eq!(cell("minor"), "minor");
+    assert_eq!(cell("nit"), "nit");
+    assert_eq!(cell("Blocker"), "Blocker");
+    assert_eq!(cell("crit"), "crit");
+}
+
+/// EX-4 / VT-1: `-f` replaces the index with full blocks, in the order asked —
+/// prose verbatim at four spaces (a blank line stays empty), the turn journal
+/// with each turn's note/response at six — and the brief stays a hint.
+#[test]
+fn show_full_blocks_render_verbatim_in_the_order_asked() {
+    let out = show_text(
+        SHOW_LEDGER,
+        "## Brief\nprose\n",
+        &finding_args(&["3", "F-2"]),
+    );
+    let expected = [
+        "findings: 2 of 5\n",
+        "F-3 · minor · contested\n",
+        "  t3\n",
+        "\n",
+        "  detail:\n",
+        "    line a\n",
+        "\n",
+        "    line c\n",
+        "  turns:\n",
+        "    raise · raiser\n",
+        "    contest · raiser\n",
+        "      n1\n",
+        "      n2\n",
+        "\n",
+        "F-2 · MAJOR · answered · disposition fix · route review\n",
+        "  t2\n",
+        "\n",
+        "  detail:\n",
+        "    d2\n",
+        "  response:\n",
+        "    resp2\n",
+        "  turns:\n",
+        "    raise · raiser\n",
+        "    dispose · responder · fix → review\n",
+        "      resp2\n",
+        SHOW_WARNING,
+        "brief: 2 lines — doctrine review show RV-012 --full · -f F-n for chosen findings\n",
+    ]
+    .concat();
+    let tail = out
+        .split_once("findings: ")
+        .map(|(_, t)| ["findings: ", t].concat());
+    assert_eq!(tail.as_deref(), Some(expected.as_str()), "{out}");
+}
+
+/// VT-1: the brief body rides only with `--full` (after a blank line, in
+/// place of the hint); `-f` alone keeps the hint. A one-line brief says
+/// `line`; an empty one says `empty`.
+#[test]
+fn show_body_only_with_full() {
+    let full = ProjectionArgs {
+        full: true,
+        ..ProjectionArgs::default()
+    };
+    let out = show_text(SHOW_LEDGER, "## Brief\nprose\n", &full);
+    assert!(out.ends_with("\n\n## Brief\nprose\n"), "{out}");
+    assert!(!out.contains("brief:"), "{out}");
+    assert!(out.contains("F-1 · BLOCKER · open\n"), "every block: {out}");
+
+    let chosen = show_text(SHOW_LEDGER, "## Brief\nprose\n", &finding_args(&["1"]));
+    assert!(!chosen.contains("prose"), "{chosen}");
+    assert!(chosen.ends_with(
+        "brief: 2 lines — doctrine review show RV-012 --full · -f F-n for chosen findings\n"
+    ));
+
+    let one = show_text(SHOW_LEDGER, "only\n", &ProjectionArgs::default());
+    assert!(
+        one.contains("\nbrief: 1 line — doctrine review show RV-012"),
+        "{one}"
+    );
+    let empty = show_text(SHOW_LEDGER, "", &ProjectionArgs::default());
+    assert!(
+        empty.contains("\nbrief: empty — doctrine review show RV-012"),
+        "{empty}"
+    );
+}
+
+/// EX-1: clap refuses `-f` beside a filter before `Projection::parse` sees
+/// it, and splits comma lists on every list flag.
+#[test]
+fn show_cli_refuses_finding_with_a_filter() {
+    use clap::Parser;
+    let parse = |args: &[&str]| {
+        crate::Cli::try_parse_from(["doctrine", "review", "show", "1"].iter().chain(args))
+    };
+    for filter in [&["--open"][..], &["-s", "open"], &["-S", "major"]] {
+        let args: Vec<&str> = ["-f", "2"].iter().chain(filter).copied().collect();
+        let err = parse(&args).err().unwrap();
+        assert_eq!(
+            err.kind(),
+            clap::error::ErrorKind::ArgumentConflict,
+            "{args:?}"
+        );
+    }
+    let cli = parse(&["-f", "2,F-3", "--full"]).unwrap();
+    let crate::commands::cli::Command::Review {
+        command: ReviewCommand::Show { finding, full, .. },
+    } = cli.command
+    else {
+        panic!("expected review show");
+    };
+    assert_eq!(finding, ["2", "F-3"]);
+    assert!(full);
+    assert!(parse(&["--open", "-s", "open,answered", "-S", "major"]).is_ok());
 }

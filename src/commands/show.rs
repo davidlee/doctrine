@@ -104,7 +104,8 @@ fn dispatch(
             // `review::run_show` returns a value; the kind's own dispatch prints
             // it via `print_review`. Mirror that exactly (design sec-2).
             use std::io::Write;
-            let out = crate::review::run_show(path, reference, format)?;
+            let projection = crate::review_ledger::Projection::index();
+            let out = crate::review::run_show(path, reference, &projection, format)?;
             write!(std::io::stdout(), "{}", crate::review::print_review(&out))?;
             Ok(())
         }

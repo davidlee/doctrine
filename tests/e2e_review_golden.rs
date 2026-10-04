@@ -2438,15 +2438,15 @@ fn show_with_findings_and_phase_table_and_json() {
     assert_eq!(
         stdout(&out),
         "RV-001 — T1\n\
-         design · active · await=responder\n\
+         design · active · await=responder · rounds 0\n\
          RV-001 ──reviews──▶ SL-001@PHASE-01\n\
-         findings: 2 (raiser raiser · responder responder)\n\
+         raiser raiser · responder responder\n\
+         outstanding: 1 BLOCKER awaits responder · 1 MAJOR awaits raiser\n\
+         findings: 2\n\
          id  │ severity │ status   │ disposition │ title\n\
-         F-1 │ blocker  │ open     │ —           │ Ti1\n\
-         F-2 │ major    │ answered │ fixed       │ Ti2\n\
-         \n\
-         ## Brief\n\
-         Some prose.\n"
+         F-1 │ BLOCKER  │ open     │ —           │ Ti1\n\
+         F-2 │ MAJOR    │ answered │ fixed       │ Ti2\n\
+         brief: 2 lines — doctrine review show RV-001 --full · -f F-n for chosen findings\n"
     );
 
     let out = run(dir.path(), &["show", "1", "--json"]);
@@ -2472,12 +2472,80 @@ fn show_empty_ledger_plain_no_phase() {
     assert_eq!(
         stdout(&out),
         "RV-001 — T1\n\
-         design · active · await=raiser\n\
+         design · active · await=raiser · rounds 0\n\
          RV-001 ──reviews──▶ SL-001\n\
-         findings: 0 (raiser raiser · responder responder)\n\
-         \n\
-         ## Brief\n\
-         plain.\n"
+         raiser raiser · responder responder\n\
+         outstanding: none\n\
+         findings: 0\n\
+         brief: 2 lines — doctrine review show RV-001 --full · -f F-n for chosen findings\n"
+    );
+}
+
+/// SL-278 PHASE-02 (VT-2): the full-depth table, byte-pinned. `-f F-1` swaps
+/// the index for F-1's block (route, response, the turn journal with the
+/// contest note) and keeps the brief hint; `--full` shows every block and
+/// then the brief body itself.
+#[test]
+fn show_full_depth_golden() {
+    let dir = tmp();
+    let routed = chain_step4_contest_f1().replacen(
+        "disposition = \"fix-now\"\nresponse = \"R1\"\n",
+        "disposition = \"fix-now\"\nroute = \"review\"\nresponse = \"R1\"\n",
+        2,
+    );
+    seed_review(dir.path(), 1, &routed, "## Brief\nSome prose.\n");
+    let head = "RV-001 — design review of SL-001\n\
+                design · active · await=responder · rounds 4\n\
+                RV-001 ──reviews──▶ SL-001\n\
+                raiser raiser · responder responder\n\
+                outstanding: 1 BLOCKER, 1 MAJOR await responder\n";
+    let f1 = "F-1 · BLOCKER · contested · disposition fix-now · route review\n\
+              \x20 T1\n\
+              \n\
+              \x20 detail:\n\
+              \x20   D1\n\
+              \x20 response:\n\
+              \x20   R1\n\
+              \x20 turns:\n\
+              \x20   raise · raiser\n\
+              \x20   dispose · responder · fix-now → review\n\
+              \x20     R1\n\
+              \x20   contest · raiser\n\
+              \x20     not really\n";
+    let f2 = "F-2 · MAJOR · open\n\
+              \x20 T2\n\
+              \n\
+              \x20 detail:\n\
+              \x20   D2\n\
+              \x20 turns:\n\
+              \x20   raise · raiser\n";
+
+    let out = run(dir.path(), &["show", "1", "-f", "F-1"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        [
+            head,
+            "findings: 1 of 2\n",
+            f1,
+            "brief: 2 lines — doctrine review show RV-001 --full · -f F-n for chosen findings\n",
+        ]
+        .concat()
+    );
+
+    let out = run(dir.path(), &["show", "1", "--full"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        [
+            head,
+            "findings: 2\n",
+            f1,
+            "\n",
+            f2,
+            "\n## Brief\nSome prose.\n"
+        ]
+        .concat()
     );
 }
 
@@ -2594,15 +2662,16 @@ fn vocab_defects_render_across_every_read_surface() {
     assert_eq!(
         stdout(&out),
         "RV-001 — T1\n\
-         design · active · await=responder\n\
+         design · active · await=responder · rounds 0\n\
          RV-001 ──reviews──▶ SL-001\n\
-         findings: 1 (raiser raiser · responder responder)\n\
+         raiser raiser · responder responder\n\
+         outstanding: 1 BLOCKER awaits responder\n\
+         findings: 1\n\
          id  │ severity     │ status │ disposition │ title\n\
          F-1 │ catastrophic │ zombie │ whatever    │ Ti1\n\
          warning: RV-001 F-1 status `zombie` is out of vocabulary; reading as non-terminal\n\
          warning: RV-001 F-1 severity `catastrophic` is out of vocabulary; gating as blocker\n\
-         \n\
-         # brief\n"
+         brief: 1 line — doctrine review show RV-001 --full · -f F-n for chosen findings\n"
     );
 
     let out = run(dir.path(), &["show", "1", "--json"]);

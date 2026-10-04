@@ -21,11 +21,12 @@ use crate::kinds::{REVIEW_DIR, REVIEW_KIND};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::review_ledger::{
     Act, Await, Disposition, FINDING_STATUSES, Facet, FindingRow, FindingState, FindingStatus,
-    REVIEW_STATUSES, ReviewDoc, ReviewMeta, ReviewStatus, ReviewWarning, Role, Route, Severity,
-    Target, TurnFields, Vocab, admissible_from, append_finding, append_review_turn, apply_act,
-    authored_path, can, canonical_id, clear_concluded, counters, derived_status, finding_states_of,
-    finding_status_of, finding_table_mut, parse_ref, read_authored, read_review, read_reviews,
-    review_table_mut, seed, warnings_of, write_counter_seed,
+    Projection, ProjectionArgs, REVIEW_STATUSES, ReviewDoc, ReviewMeta, ReviewStatus,
+    ReviewWarning, Role, Route, Severity, Target, TurnFields, Vocab, admissible_from,
+    append_finding, append_review_turn, apply_act, authored_path, can, canonical_id,
+    clear_concluded, counters, derived_status, finding_states_of, finding_status_of,
+    finding_table_mut, parse_ref, read_authored, read_review, read_reviews, review_table_mut, seed,
+    warnings_of, write_counter_seed,
 };
 
 mod cli;
@@ -94,12 +95,25 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
         }
         ReviewCommand::Show {
             reference,
+            finding,
+            full,
+            open,
+            status,
+            severity,
             format,
             json,
             path,
         } => {
             use std::io::Write;
-            let out = run_show(path, &reference, if json { Format::Json } else { format })?;
+            let projection = Projection::parse(&ProjectionArgs {
+                finding,
+                full,
+                open,
+                status,
+                severity,
+            })?;
+            let format = if json { Format::Json } else { format };
+            let out = run_show(path, &reference, &projection, format)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
             Ok(())

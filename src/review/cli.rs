@@ -68,10 +68,31 @@ pub(crate) enum ReviewCommand {
         path: Option<PathBuf>,
     },
 
-    /// Show one review: derived status, the `reviews` edge, and the brief.
+    /// Show one review: derived status, the `reviews` edge, what is
+    /// outstanding, and the finding index — or chosen findings in full.
     Show {
         /// Review reference — `RV-007` or the bare id `7`.
         reference: String,
+
+        /// Findings to show in full: `F-3` or `3`, comma-separated, repeatable.
+        #[arg(short = 'f', long = "finding", value_delimiter = ',')]
+        finding: Vec<String>,
+
+        /// Every finding in full, plus the brief.
+        #[arg(long)]
+        full: bool,
+
+        /// Only non-terminal findings.
+        #[arg(long, conflicts_with = "finding")]
+        open: bool,
+
+        /// Finding statuses, comma-separated, repeatable.
+        #[arg(short = 's', long, value_delimiter = ',', conflicts_with = "finding")]
+        status: Vec<String>,
+
+        /// Severities, comma-separated, repeatable.
+        #[arg(short = 'S', long, value_delimiter = ',', conflicts_with = "finding")]
+        severity: Vec<String>,
 
         /// Output format.
         #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]

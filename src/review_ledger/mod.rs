@@ -15,17 +15,21 @@ mod vocab;
 
 pub(crate) use derive::{FindingState, counters, derived_status, finding_states_of, seed};
 pub(crate) use gate::{
-    derived_status_string, observe_pass, read_pass_facts, relation_edges, unresolved_blockers_for,
+    OutstandingCounts, derived_status_string, observe_pass, read_pass_facts, relation_edges,
+    unresolved_blockers_for,
 };
 pub(crate) use schema::{
-    FindingRow, ReviewDoc, ReviewMeta, Target, authored_path, canonical_id, parse_ref,
+    FindingRow, ReviewDoc, ReviewMeta, Target, TurnRow, authored_path, canonical_id, parse_ref,
     read_authored, read_review, read_reviews,
 };
 pub(crate) use transition::{
     Act, TurnFields, admissible_from, append_finding, append_review_turn, apply_act, can,
     clear_concluded, finding_status_of, finding_table_mut, review_table_mut, write_counter_seed,
 };
-pub(crate) use view::{ReviewWarning, warnings_of};
+pub(crate) use view::{
+    Depth, FindingView, Outstanding, Projection, ProjectionArgs, ReviewView, ReviewWarning,
+    warnings_of,
+};
 pub(crate) use vocab::{
     Await, DISPOSITIONS, Disposition, FINDING_STATUSES, Facet, FindingStatus, REVIEW_STATUSES,
     ROUTES, ReviewStatus, Role, Route, Severity, Vocab,
@@ -36,8 +40,7 @@ pub(crate) use vocab::{
 pub(crate) use derive::{EFFECT_UNKNOWN_SEVERITY, VocabDefect, VocabField, vocabulary_defects};
 #[cfg(test)]
 pub(crate) use gate::{
-    BlockerRef, OutstandingCounts, gates_as_blocker, outstanding_by_severity, undisposed_blockers,
-    unrouted_severe,
+    BlockerRef, gates_as_blocker, outstanding_by_severity, undisposed_blockers, unrouted_severe,
 };
 #[cfg(test)]
 pub(crate) use transition::next_finding_id;

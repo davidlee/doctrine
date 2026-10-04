@@ -715,13 +715,15 @@ fn call_tool(
                 _ => crate::listing::Format::Table,
             };
             let summary = arguments.get("view").and_then(|v| v.as_str()) == Some("summary");
-            let out = review::run_show(Some(root.to_path_buf()), &reference, fmt).map(|out| {
-                if summary {
-                    project_show_summary(out)
-                } else {
-                    out
-                }
-            })?;
+            let projection = crate::review_ledger::Projection::index();
+            let out = review::run_show(Some(root.to_path_buf()), &reference, &projection, fmt)
+                .map(|out| {
+                    if summary {
+                        project_show_summary(out)
+                    } else {
+                        out
+                    }
+                })?;
             Ok(serde_json::to_string(&out)?)
         }
         "review_raise" => {

@@ -243,6 +243,17 @@ impl OutstandingCounts {
         };
         *bucket = bucket.saturating_add(1);
     }
+
+    /// Every bucket paired with its severity, in vocabulary order (SL-278
+    /// PHASE-02) — so a render walks the counts without matching fields.
+    pub(crate) const fn by_severity(&self) -> [(Severity, usize); 4] {
+        [
+            (Severity::Blocker, self.blocker),
+            (Severity::Major, self.major),
+            (Severity::Minor, self.minor),
+            (Severity::Nit, self.nit),
+        ]
+    }
 }
 
 /// Pure count (SL-244 `EX-2`): what this RV still holds, by severity — every
