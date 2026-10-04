@@ -6,8 +6,16 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use clap::Subcommand;
+use clap::builder::{PossibleValuesParser, TypedValueParser};
 
-use super::{Disposition, Facet, Format, Route, Severity};
+use super::{Disposition, FACETS, Facet, Format, Route, Severity};
+
+/// `--facet` value parser, single-sourced against [`FACETS`] (STD-001) — a
+/// closed-vocabulary [`PossibleValuesParser`] so `--help` renders the known
+/// set itself rather than a hand-maintained literal list drifting from it.
+fn facet_value_parser() -> impl clap::builder::TypedValueParser<Value = Facet> {
+    PossibleValuesParser::new(FACETS).try_map(|s| Facet::parse(&s))
+}
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum ReviewCommand {
@@ -63,9 +71,8 @@ pub(crate) enum ReviewCommand {
         #[arg(long)]
         target: Option<String>,
 
-        /// Restrict to reviews of this facet (DEC-365): scope | design |
-        /// plan | phase-plan | implementation | code-review | reconciliation.
-        #[arg(long, value_parser = Facet::parse)]
+        /// Restrict to reviews of this facet.
+        #[arg(long, value_parser = facet_value_parser())]
         facet: Option<Facet>,
 
         /// Explicit project root (default: auto-detect).
@@ -87,6 +94,14 @@ pub(crate) enum ReviewCommand {
             "(-r '^F-3$', -r '^RV-012$'). -f matches a substring of the finding id + ",
             "finding title, not the review id or slug (use --target or -r for those).",
         ),
+        // `--filter`'s help on `crate::CommonListArgs` ("slug+title") is generic
+        // across every flattened list command, but the census row has no slug —
+        // `-f` here matches the finding id + finding title (see `long_about`
+        // above). Override narrowly on this variant only; `review list` and
+        // every other flattened user keeps the shared text unchanged.
+        mut_arg("filter", |a| {
+            a.help("Substring filter on finding id + title (case-insensitive)")
+        }),
     )]
     Findings {
         #[command(flatten)]
@@ -98,9 +113,8 @@ pub(crate) enum ReviewCommand {
         #[arg(short = 'S', long, value_delimiter = ',')]
         severity: Vec<String>,
 
-        /// Restrict to reviews of this facet (DEC-365): scope | design |
-        /// plan | phase-plan | implementation | code-review | reconciliation.
-        #[arg(long, value_parser = Facet::parse)]
+        /// Restrict to reviews of this facet.
+        #[arg(long, value_parser = facet_value_parser())]
         facet: Option<Facet>,
 
         /// Restrict to reviews whose `reviews` edge targets this ref (as on

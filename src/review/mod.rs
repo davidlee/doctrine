@@ -20,13 +20,13 @@ use crate::entity::{self, Materialised};
 use crate::kinds::{REVIEW_DIR, REVIEW_KIND};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::review_ledger::{
-    Act, Await, Disposition, FINDING_STATUSES, Facet, FindingRow, FindingState, FindingStatus,
-    Projection, ProjectionArgs, REVIEW_STATUSES, ReviewDoc, ReviewMeta, ReviewStatus, ReviewView,
-    ReviewWarning, Role, Route, Severity, Target, TurnFields, UnreadableReview, Vocab,
-    admissible_from, append_finding, append_review_turn, apply_act, authored_path, can,
-    canonical_id, clear_concluded, counters, derived_status, finding_states_of, finding_status_of,
-    finding_table_mut, parse_ref, read_authored, read_review, review_table_mut, scan_reviews, seed,
-    warnings_of, write_counter_seed,
+    Act, Await, Disposition, FACETS, FINDING_STATUSES, Facet, FindingRow, FindingState,
+    FindingStatus, Projection, ProjectionArgs, REVIEW_STATUSES, ReviewDoc, ReviewMeta,
+    ReviewStatus, ReviewView, ReviewWarning, Role, Route, Severity, Target, TurnFields,
+    UnreadableReview, Vocab, admissible_from, append_finding, append_review_turn, apply_act,
+    authored_path, can, canonical_id, clear_concluded, counters, derived_status, finding_states_of,
+    finding_status_of, finding_table_mut, parse_ref, read_authored, read_review, review_table_mut,
+    scan_reviews, seed, warnings_of, write_counter_seed,
 };
 
 mod census;

@@ -91,6 +91,53 @@ fn cli_subcommand_help_depth2() {
     assert!(out.contains('│'), "cozy-table separator present at depth 2");
 }
 
+// ADR-024: shipped help text must never cite a repo-private id. `--facet`'s
+// help on `review list`/`review findings` cited `(DEC-365)` directly in the
+// user-facing string (SL-278 commits 0d90af9c, 32c6878c) — a defect, not a
+// design choice; fixed by dropping the citation and single-sourcing the facet
+// list from the vocabulary so clap renders it as `[possible values: ...]`.
+#[test]
+fn review_facet_help_has_no_private_citation() {
+    for args in [
+        ["review", "list", "--help"],
+        ["review", "findings", "--help"],
+    ] {
+        let (ok, _code, out) = run(&args);
+        assert!(ok, "{args:?} must exit 0");
+        assert!(
+            !out.contains("DEC-"),
+            "{args:?} help cites a private id: {out}"
+        );
+        assert!(
+            out.contains("[possible values: scope, design, plan, phase-plan, implementation, code-review, reconciliation]"),
+            "{args:?} help single-sources the facet list via clap's possible-values \
+             rendering: {out}"
+        );
+    }
+}
+
+// `--filter`'s help on the shared `CommonListArgs` says "slug+title" — correct
+// for `review list`, but the census row (`review findings`) has no slug: `-f`
+// there matches the finding id + finding title (as the command's own prose
+// preamble already said). Narrowed to the `Findings` variant via `mut_arg` so
+// `review list`'s help is untouched.
+#[test]
+fn review_findings_filter_help_describes_the_census_row_not_slug_title() {
+    let (ok, _code, out) = run(&["review", "findings", "--help"]);
+    assert!(ok, "review findings --help must exit 0");
+    assert!(
+        out.contains("Substring filter on finding id + title"),
+        "findings' -f/--filter help names what it actually matches: {out}"
+    );
+
+    let (ok, _code, list_out) = run(&["review", "list", "--help"]);
+    assert!(ok, "review list --help must exit 0");
+    assert!(
+        list_out.contains("Substring filter on slug+title"),
+        "review list keeps the shared, slug-accurate text: {list_out}"
+    );
+}
+
 // SL-233 PHASE-04 EX-5, RE-PREMISED by SL-246 `EX-8` (DEC-261) — not dropped.
 //
 // The original claim was that `design show`'s DEFAULT is a strict subset surface
