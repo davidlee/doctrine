@@ -121,6 +121,7 @@ ConceptMapCommand::New { .. } => Write("concept-map new"),
             ReviewCommand::Conclude { .. } => Write("review conclude"),
             ReviewCommand::Unlock { .. } => Write("review unlock"),
             ReviewCommand::List { .. }
+            | ReviewCommand::Findings { .. }
             | ReviewCommand::Show { .. }
             | ReviewCommand::Status { .. }
             | ReviewCommand::Prime { .. }
@@ -541,5 +542,20 @@ mod tests {
             },
         };
         assert!(matches!(write_class(&cmd), WriteClass::Read));
+    }
+
+    /// SL-278 PHASE-04b (VT-2): the findings census only reads the corpus, so
+    /// the worker-mode guard passes `review findings` through.
+    #[test]
+    fn review_findings_classifies_as_read() {
+        use clap::Parser as _;
+        let cli = crate::Cli::try_parse_from(["doctrine", "review", "findings"]).unwrap();
+        assert!(matches!(
+            &cli.command,
+            Command::Review {
+                command: crate::review::ReviewCommand::Findings { .. }
+            }
+        ));
+        assert!(matches!(write_class(&cli.command), WriteClass::Read));
     }
 }

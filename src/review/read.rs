@@ -73,7 +73,7 @@ fn push_line(out: &mut String, key: &str, value: &str) {
 /// outbound edge to the subject, with an optional `@phase` scope (ADR-004).
 /// Delegates to the engine-tier [`Target::label`] (SL-278 PHASE-01 A1) — no
 /// second copy.
-fn edge_label(doc: &ReviewDoc) -> String {
+pub(super) fn edge_label(doc: &ReviewDoc) -> String {
     doc.target.label()
 }
 
@@ -156,7 +156,7 @@ fn concluded_marker(concluded: bool) -> &'static str {
 
 /// The em-dash rendered in the index's `disposition` column when a finding
 /// carries none (it is set only by `dispose`).
-const NO_DISPOSITION: &str = "—";
+pub(super) const NO_DISPOSITION: &str = "—";
 
 /// A severity as a table cell (SL-278 DEC-367; the census reuses it): the two
 /// gating-weight tokens in capitals, through the known variant — so an
@@ -391,7 +391,7 @@ pub(super) fn format_show(
 /// when empty — the clean-ledger shape stays byte-identical). Generalised
 /// (SL-278 PHASE-04a) so `warnings` and `unreadable` share one "serialize +
 /// skip-if-empty" helper rather than each hand-rolling it.
-fn with_array<T: Serialize>(
+pub(super) fn with_array<T: Serialize>(
     value: &mut serde_json::Value,
     key: &str,
     items: &[T],
@@ -517,11 +517,11 @@ impl ReviewScope {
 
 /// What `list_rows` computes: the rendered projection, its JSON rows, the
 /// closed-vocabulary warnings, and any unreadable RVs across the listed set
-/// (all in id order) — a named struct rather than a growing tuple (R1), so
-/// the census (04b) can reuse the same shape.
-pub(super) struct Listing {
+/// (all in id order) — a named struct rather than a growing tuple (R1),
+/// generic over the row type so `review list` and the census share it.
+pub(super) struct Listing<R> {
     pub(super) formatted: String,
-    pub(super) rows: Vec<ListRow>,
+    pub(super) rows: Vec<R>,
     pub(super) warnings: Vec<ReviewWarning>,
     pub(super) unreadable: Vec<UnreadableReview>,
 }
@@ -540,7 +540,7 @@ fn list_rows(
     mut args: ListArgs,
     target: Option<&str>,
     facet: Option<Facet>,
-) -> anyhow::Result<Listing> {
+) -> anyhow::Result<Listing<ListRow>> {
     listing::validate_statuses(&args.status, REVIEW_STATUSES)?;
     let render = args.render;
     let columns = args.columns.take();

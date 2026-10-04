@@ -29,12 +29,14 @@ use crate::review_ledger::{
     warnings_of, write_counter_seed,
 };
 
+mod census;
 mod cli;
 mod prime;
 mod read;
 mod turn;
 mod verbs;
 
+pub(crate) use census::{CensusRow, finding_filter, run_findings};
 pub(crate) use cli::ReviewCommand;
 pub(crate) use prime::{PrimeArgs, run_prime};
 pub(crate) use read::{ListRow, run_list, run_show, run_status};
@@ -84,28 +86,24 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             facet,
             path,
         } => {
-            use std::io::Write;
             let out = run_list(path, list.into_list_args(color), target.as_deref(), facet)?;
-            let rendered = print_review(&out);
-            write!(std::io::stdout(), "{rendered}")?;
-            // The list's stdout is the row table (or the JSON document); vocabulary
-            // defects and unreadable RVs both go to stderr (SL-268 D15, SL-278
-            // PHASE-04a A4), after the rows — one writer loop.
-            if let ReviewOutput::Listed {
-                warnings,
-                unreadable,
-                ..
-            } = &out
-            {
-                let mut stderr = std::io::stderr();
-                for warning in warnings {
-                    write!(stderr, "{}", warning.line())?;
-                }
-                for u in unreadable {
-                    write!(stderr, "{}", read::unreadable_line(u))?;
-                }
-            }
-            Ok(())
+            write_listing(&out)
+        }
+        ReviewCommand::Findings {
+            list,
+            severity,
+            facet,
+            target,
+            path,
+        } => {
+            let out = run_findings(
+                path,
+                list.into_list_args(color),
+                &severity,
+                facet,
+                target.as_deref(),
+            )?;
+            write_listing(&out)
         }
         ReviewCommand::Show {
             reference,
@@ -420,6 +418,20 @@ pub(crate) enum ReviewOutput {
         #[serde(skip)]
         formatted: String,
     },
+    /// `doctrine review findings` / MCP `review_findings` (SL-278 design
+    /// sec-5, DEC-370): one row per finding across every review. `total`,
+    /// `warnings` and `unreadable` mean what they mean on [`Self::Listed`].
+    FindingsListed {
+        rows: Vec<CensusRow>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        total: Option<usize>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        warnings: Vec<ReviewWarning>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        unreadable: Vec<UnreadableReview>,
+        #[serde(skip)]
+        formatted: String,
+    },
     Primed {
         canonical: String,
         tracked_paths: Vec<String>,
@@ -453,6 +465,33 @@ pub(crate) enum ReviewOutput {
         #[serde(skip)]
         formatted: String,
     },
+}
+
+/// Write a listing verb's output (`review list`, `review findings`): the rows
+/// (table or JSON document) to stdout, then vocabulary defects and unreadable
+/// RVs to stderr (SL-268 D15, SL-278 PHASE-04a A4) — one writer for both.
+fn write_listing(out: &ReviewOutput) -> anyhow::Result<()> {
+    write!(io::stdout(), "{}", print_review(out))?;
+    if let ReviewOutput::Listed {
+        warnings,
+        unreadable,
+        ..
+    }
+    | ReviewOutput::FindingsListed {
+        warnings,
+        unreadable,
+        ..
+    } = out
+    {
+        let mut stderr = io::stderr();
+        for warning in warnings {
+            write!(stderr, "{}", warning.line())?;
+        }
+        for u in unreadable {
+            write!(stderr, "{}", read::unreadable_line(u))?;
+        }
+    }
+    Ok(())
 }
 
 /// Format a [`ReviewOutput`] for CLI human consumption — the single formatting
@@ -539,6 +578,7 @@ pub(crate) fn print_review(out: &ReviewOutput) -> String {
         }
         ReviewOutput::Showed { formatted, .. }
         | ReviewOutput::Listed { formatted, .. }
+        | ReviewOutput::FindingsListed { formatted, .. }
         | ReviewOutput::Status { formatted, .. } => formatted.clone(),
         ReviewOutput::Primed {
             canonical,

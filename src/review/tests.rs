@@ -4704,3 +4704,333 @@ fn show_cli_refuses_finding_with_a_filter() {
     assert!(full);
     assert!(parse(&["--open", "-s", "open,answered", "-S", "major"]).is_ok());
 }
+
+// -- findings census (SL-278 PHASE-04b, design sec-5 DEC-370) ---------------
+
+/// Two RVs: RV-001 (design, SL-001) holds F-1 major open "alpha", F-2 minor
+/// verified "beta", F-3 blocker with an out-of-vocabulary `zombie` status
+/// "gamma", F-4 open with an out-of-vocabulary `critical` severity "delta";
+/// RV-002 (plan, SL-002) holds F-1 nit open "epsilon". No title names its
+/// finding or review id, so an id match can only come from the id fields.
+fn census_fixture() -> tempfile::TempDir {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    let p = || Some(root.to_path_buf());
+    plant_slice_target(root, 2);
+    run_new(p(), &new_args(Facet::Plan, "SL-002")).unwrap();
+    for (sev, title) in [
+        (Severity::Major, "alpha"),
+        (Severity::Minor, "beta"),
+        (Severity::Blocker, "gamma"),
+        (Severity::Major, "delta"),
+    ] {
+        run_raise(p(), &raise_args("RV-001", sev, title), Role::Raiser).unwrap();
+    }
+    run_dispose(p(), &dispose_args("RV-001", "F-2"), Role::Responder).unwrap();
+    run_verify(p(), "RV-001", "F-2", None, Role::Raiser).unwrap();
+    run_raise(
+        p(),
+        &raise_args("RV-002", Severity::Nit, "epsilon"),
+        Role::Raiser,
+    )
+    .unwrap();
+    // Hand edits last: they move the ledger under the baton (reads don't care).
+    hand_edit_finding(root, 1, "F-3", "status", "zombie");
+    hand_edit_finding(root, 1, "F-4", "severity", "critical");
+    tmp
+}
+
+/// `ListArgs` for the census with only the status/all axes set.
+fn census_args(status: &[&str], all: bool) -> ListArgs {
+    ListArgs {
+        status: status.iter().map(|s| (*s).to_owned()).collect(),
+        all,
+        ..list_args()
+    }
+}
+
+/// Run the census and return its `(review, finding id)` pairs, in row order.
+fn census_ids(
+    root: &Path,
+    args: ListArgs,
+    severity: &[&str],
+    facet: Option<Facet>,
+    target: Option<&str>,
+) -> Vec<(String, String)> {
+    let severity: Vec<String> = severity.iter().map(|s| (*s).to_owned()).collect();
+    match run_findings(Some(root.to_path_buf()), args, &severity, facet, target).unwrap() {
+        ReviewOutput::FindingsListed { rows, .. } => {
+            rows.into_iter().map(|r| (r.review, r.id)).collect()
+        }
+        other => panic!("expected FindingsListed, got {other:?}"),
+    }
+}
+
+fn pairs(expected: &[(&str, &str)]) -> Vec<(String, String)> {
+    expected
+        .iter()
+        .map(|(r, f)| ((*r).to_owned(), (*f).to_owned()))
+        .collect()
+}
+
+/// The bare census hides terminal findings and keeps out-of-vocabulary ones
+/// (DEC-363's `--open`); `-a` and any `-s` reveal the terminal ones. Rows sort
+/// by review id, then ledger order.
+#[test]
+fn census_hides_terminal_by_default_and_reveals_on_all_or_status() {
+    let tmp = census_fixture();
+    let root = tmp.path();
+    assert_eq!(
+        census_ids(root, census_args(&[], false), &[], None, None),
+        pairs(&[
+            ("RV-001", "F-1"),
+            ("RV-001", "F-3"),
+            ("RV-001", "F-4"),
+            ("RV-002", "F-1")
+        ])
+    );
+    assert_eq!(
+        census_ids(root, census_args(&[], true), &[], None, None).len(),
+        5,
+        "-a reveals the verified finding"
+    );
+    assert_eq!(
+        census_ids(root, census_args(&["verified"], false), &[], None, None),
+        pairs(&[("RV-001", "F-2")])
+    ); // A comma-joined status (the MCP spelling) is split by the finding filter;
+    // `retain` must not also read it as one raw status and drop every row.
+    assert_eq!(
+        census_ids(
+            root,
+            census_args(&["verified,open"], false),
+            &[],
+            None,
+            None
+        ),
+        pairs(&[
+            ("RV-001", "F-1"),
+            ("RV-001", "F-2"),
+            ("RV-001", "F-4"),
+            ("RV-002", "F-1")
+        ])
+    );
+}
+
+/// EX-2: the regex domain gives each identifier its own field, so an anchored
+/// finding id or review id matches although no title contains it.
+#[test]
+fn census_regex_matches_each_id_anchored() {
+    let tmp = census_fixture();
+    let root = tmp.path();
+    let regex = |pattern: &str| ListArgs {
+        regexp: Some(pattern.to_owned()),
+        ..list_args()
+    };
+    assert_eq!(
+        census_ids(root, regex("^F-3$"), &[], None, None),
+        pairs(&[("RV-001", "F-3")])
+    );
+    assert_eq!(
+        census_ids(root, regex("^RV-001$"), &[], None, None),
+        pairs(&[("RV-001", "F-1"), ("RV-001", "F-3"), ("RV-001", "F-4")])
+    );
+    // The substring domain is finding id + finding title, not the review id.
+    let substr = |s: &str| ListArgs {
+        substr: Some(s.to_owned()),
+        ..list_args()
+    };
+    assert_eq!(
+        census_ids(root, substr("epsil"), &[], None, None),
+        pairs(&[("RV-002", "F-1")])
+    );
+    assert!(census_ids(root, substr("RV-00"), &[], None, None).is_empty());
+}
+
+/// `-S`, `--facet`, `--target` narrow; a bad `-s`/`-S` is refused with the
+/// message `review show` gives.
+#[test]
+fn census_narrows_by_severity_facet_and_target() {
+    let tmp = census_fixture();
+    let root = tmp.path();
+    assert_eq!(
+        census_ids(root, list_args(), &["nit"], None, None),
+        pairs(&[("RV-002", "F-1")])
+    );
+    assert_eq!(
+        census_ids(root, list_args(), &[], Some(Facet::Plan), None),
+        pairs(&[("RV-002", "F-1")])
+    );
+    assert_eq!(
+        census_ids(root, list_args(), &[], None, Some("SL-002")),
+        pairs(&[("RV-002", "F-1")])
+    );
+
+    let show_refusal = |status: &[&str], severity: &[&str]| {
+        Projection::parse(&ProjectionArgs {
+            finding: Vec::new(),
+            full: false,
+            open: false,
+            status: status.iter().map(|s| (*s).to_owned()).collect(),
+            severity: severity.iter().map(|s| (*s).to_owned()).collect(),
+        })
+        .unwrap_err()
+        .to_string()
+    };
+    let census_refusal = |args: ListArgs, severity: &[&str]| {
+        let severity: Vec<String> = severity.iter().map(|s| (*s).to_owned()).collect();
+        run_findings(Some(root.to_path_buf()), args, &severity, None, None)
+            .unwrap_err()
+            .to_string()
+    };
+    assert_eq!(
+        census_refusal(census_args(&["bogus"], false), &[]),
+        show_refusal(&["bogus"], &[])
+    );
+    assert_eq!(
+        census_refusal(list_args(), &["bogus"]),
+        show_refusal(&[], &["bogus"])
+    );
+}
+
+/// VT-1 (DEC-363): one predicate, two surfaces — for `-s`, `-S` (incl. the
+/// out-of-vocabulary `critical`, which gates as a blocker) and the default
+/// open set (incl. the out-of-vocabulary `zombie` status), the census rows for
+/// RV-001 equal `review show RV-001`'s index under the matching filter.
+#[test]
+fn census_and_show_agree_on_finding_axes() {
+    let tmp = census_fixture();
+    let root = tmp.path();
+    let cases: [(&[&str], &[&str], bool); 5] = [
+        (&[], &[], true),
+        (&["open"], &[], false),
+        (&["verified", "open"], &[], false),
+        (&[], &["blocker"], false),
+        (&[], &["major", "minor"], false),
+    ];
+    for (status, severity, open) in cases {
+        let shown = match run_show(
+            Some(root.to_path_buf()),
+            "RV-001",
+            &Projection::parse(&ProjectionArgs {
+                finding: Vec::new(),
+                full: false,
+                open,
+                status: status.iter().map(|s| (*s).to_owned()).collect(),
+                severity: severity.iter().map(|s| (*s).to_owned()).collect(),
+            })
+            .unwrap(),
+            Format::Json,
+        )
+        .unwrap()
+        {
+            ReviewOutput::Showed { view, .. } => {
+                view.findings.into_iter().map(|f| f.id).collect::<Vec<_>>()
+            }
+            other => panic!("expected Showed, got {other:?}"),
+        };
+        // `show` with no filter shows every finding; the census's bare default is
+        // the open set, so a severity-only case asks the census for `-a`.
+        let all = !open && status.is_empty();
+        let census: Vec<String> = census_ids(
+            root,
+            census_args(status, all),
+            severity,
+            None,
+            Some("SL-001"),
+        )
+        .into_iter()
+        .map(|(_, id)| id)
+        .collect();
+        assert_eq!(census, shown, "status {status:?} severity {severity:?}");
+    }
+}
+
+/// EX-4/EX-5 (STD-003): an unreadable RV denies nothing — the readable RV's
+/// rows come back and RV-002 is disclosed in `unreadable` (struct and JSON).
+/// The JSON is the listing envelope with the `"finding"` kind token, and
+/// carries the vocabulary warnings of the contributing reviews only.
+#[test]
+fn census_survives_an_unreadable_review() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    run_raise(
+        Some(root.to_path_buf()),
+        &raise_args("RV-001", Severity::Major, "alpha"),
+        Role::Raiser,
+    )
+    .unwrap();
+    std::fs::create_dir_all(root.join(".doctrine/review/002")).unwrap();
+    std::fs::write(
+        root.join(".doctrine/review/002/review-002.toml"),
+        "not = [valid",
+    )
+    .unwrap();
+
+    let out = run_findings(Some(root.to_path_buf()), list_args(), &[], None, None).unwrap();
+    let ReviewOutput::FindingsListed {
+        rows, unreadable, ..
+    } = &out
+    else {
+        panic!("expected FindingsListed, got {out:?}");
+    };
+    assert_eq!(rows.len(), 1);
+    assert_eq!(unreadable.len(), 1);
+    assert_eq!(unreadable[0].rv, "RV-002");
+
+    let json = ListArgs {
+        json: true,
+        format: Format::Json,
+        ..list_args()
+    };
+    let out = run_findings(Some(root.to_path_buf()), json, &[], None, None).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&rendered(&out)).unwrap();
+    assert_eq!(value["kind"], "finding");
+    assert_eq!(value["rows"][0]["review"], "RV-001");
+    assert_eq!(value["rows"][0]["id"], "F-1");
+    assert_eq!(value["rows"][0]["severity"], "major");
+    assert_eq!(value["unreadable"][0]["rv"], "RV-002");
+    assert!(value.get("warnings").is_none(), "clean ledger: {value}");
+}
+
+/// Table: the default column set, severities in capitals as in `show`; the
+/// JSON `warnings` carry only the contributing reviews' defects.
+#[test]
+fn census_table_and_warnings() {
+    let tmp = census_fixture();
+    let root = tmp.path();
+    let out = run_findings(
+        Some(root.to_path_buf()),
+        list_args(),
+        &[],
+        None,
+        Some("SL-001"),
+    )
+    .unwrap();
+    let table = rendered(&out);
+    let header = table.lines().next().unwrap();
+    for col in ["review", "id", "severity", "status", "target", "title"] {
+        assert!(header.contains(col), "header lacks {col}: {header}");
+    }
+    assert!(!header.contains("disposition"), "not default: {header}");
+    assert!(table.contains("BLOCKER"), "{table}");
+    let ReviewOutput::FindingsListed { warnings, .. } = &out else {
+        panic!("expected FindingsListed");
+    };
+    assert!(!warnings.is_empty(), "RV-001 carries vocab defects");
+
+    let quiet = run_findings(
+        Some(root.to_path_buf()),
+        list_args(),
+        &[],
+        None,
+        Some("SL-002"),
+    )
+    .unwrap();
+    let ReviewOutput::FindingsListed { warnings, .. } = &quiet else {
+        panic!("expected FindingsListed");
+    };
+    assert!(
+        warnings.is_empty(),
+        "RV-002 alone contributes: {warnings:?}"
+    );
+}

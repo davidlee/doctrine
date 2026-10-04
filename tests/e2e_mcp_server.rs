@@ -185,12 +185,14 @@ fn vt2_tools_list() {
     let tools = resp["result"]["tools"].as_array().expect("tools array");
     // 30 → 29 at SL-254 PHASE-06: `worker_commit` retired with the claude dispatch arm.
     // 29 → 31 at SL-268 PHASE-05: `review_amend`, `review_reopen` added.
-    assert_eq!(tools.len(), 31, "expected 31 tools, got {tools:?}");
+    // 31 → 32 at SL-278 PHASE-04b: `review_findings` (the findings census).
+    assert_eq!(tools.len(), 32, "expected 32 tools, got {tools:?}");
 
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in &[
         "review_new",
         "review_list",
+        "review_findings",
         "review_show",
         "review_raise",
         "review_dispose",
@@ -2700,6 +2702,84 @@ fn review_role_alias_accepted() {
         doc["finding"][0]["turn"][0]["role"].as_str(),
         Some("raiser")
     );
+
+    kill(child);
+}
+
+/// EX-6 / VT-3 (SL-278 PHASE-04b, design sec-5): MCP `review_findings` returns
+/// `{"FindingsListed": …}`. Two open findings with `limit: 1` come back as one
+/// row (the last) plus `total: 2`; the default limit drops nothing and so
+/// carries no `total`. `"facet"` narrows by the review's facet, and a bad
+/// `severity` is invalid params.
+#[test]
+fn review_findings_caps_and_narrows() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Slice One", "slice-one");
+    seed_slice(root, 2, "Slice Two", "slice-two");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+    let mut tool = |name: &str, args: Value| -> Value {
+        let params = tools_call_params(name, args);
+        call(&mut stdin, &mut reader, "tools/call", Some(&params))
+    };
+
+    for (facet, target, rv) in [("design", "SL-001", "RV-001"), ("plan", "SL-002", "RV-002")] {
+        let resp = tool(
+            "review_new",
+            serde_json::json!({ "facet": facet, "target": target }),
+        );
+        assert!(resp.get("error").is_none(), "review_new {facet}: {resp:?}");
+        let resp = tool(
+            "review_raise",
+            serde_json::json!({ "reference": rv, "severity": "major", "title": "t", "detail": "d" }),
+        );
+        assert!(resp.get("error").is_none(), "review_raise {rv}: {resp:?}");
+    }
+
+    let resp = tool("review_findings", serde_json::json!({}));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let listed = &out["FindingsListed"];
+    assert_eq!(listed["rows"].as_array().expect("rows").len(), 2, "{out}");
+    assert!(
+        listed.get("total").is_none(),
+        "uncapped carries no total: {out}"
+    );
+
+    let resp = tool("review_findings", serde_json::json!({ "limit": 1 }));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let rows = out["FindingsListed"]["rows"].as_array().expect("rows");
+    assert_eq!(rows.len(), 1, "{out}");
+    assert_eq!(rows[0]["review"], "RV-002", "the cap keeps the tail");
+    assert_eq!(out["FindingsListed"]["total"], 2);
+
+    let resp = tool("review_findings", serde_json::json!({ "facet": "design" }));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let rows = out["FindingsListed"]["rows"].as_array().expect("rows");
+    assert_eq!(rows.len(), 1, "{out}");
+    assert_eq!(rows[0]["review"], "RV-001");
+    assert_eq!(rows[0]["facet"], "design");
+
+    let resp = tool(
+        "review_findings",
+        serde_json::json!({ "severity": "bogus" }),
+    );
+    assert_eq!(resp["error"]["code"], -32602, "bad severity: {resp:?}");
 
     kill(child);
 }

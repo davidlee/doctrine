@@ -27,8 +27,8 @@ pub(crate) use transition::{
     clear_concluded, finding_status_of, finding_table_mut, review_table_mut, write_counter_seed,
 };
 pub(crate) use view::{
-    Depth, FindingView, Outstanding, Projection, ProjectionArgs, ReviewView, ReviewWarning,
-    warnings_of,
+    Depth, FindingFilter, FindingView, Outstanding, Projection, ProjectionArgs, ReviewView,
+    ReviewWarning, warnings_of,
 };
 pub(crate) use vocab::{
     Await, DISPOSITIONS, Disposition, FACETS, FINDING_STATUSES, Facet, FindingStatus,

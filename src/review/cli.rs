@@ -73,6 +73,47 @@ pub(crate) enum ReviewCommand {
         path: Option<PathBuf>,
     },
 
+    // `about` feeds the family table; `long_about` the focused `--help`, whose
+    // renderer keeps only the first paragraph (`commands::cli`) — so its lines
+    // join on single newlines, as `design apply` does.
+    #[command(
+        about = "List findings across every review, one row per finding.",
+        long_about = concat!(
+            "List findings across every review, one row per finding.\n",
+            "Bare, it lists every finding still open anywhere: verified and withdrawn ",
+            "findings are hidden unless -a or any -s is given; an out-of-vocabulary ",
+            "status counts as open. -s filters the finding status, -S the severity.\n",
+            "-r matches the review id, the finding id and the finding title, each whole ",
+            "(-r '^F-3$', -r '^RV-012$'). -f matches a substring of the finding id + ",
+            "finding title, not the review id or slug (use --target or -r for those).",
+        ),
+    )]
+    Findings {
+        #[command(flatten)]
+        list: crate::CommonListArgs,
+
+        /// Restrict to findings of these severities (comma-separated):
+        /// blocker | major | minor | nit. An out-of-vocabulary severity gates
+        /// as a blocker, so `-S blocker` includes it.
+        #[arg(short = 'S', long, value_delimiter = ',')]
+        severity: Vec<String>,
+
+        /// Restrict to reviews of this facet (DEC-365): scope | design |
+        /// plan | phase-plan | implementation | code-review | reconciliation.
+        #[arg(long, value_parser = Facet::parse)]
+        facet: Option<Facet>,
+
+        /// Restrict to reviews whose `reviews` edge targets this ref (as on
+        /// `review list`): a bare ref admits any phase; `SL-NNN@PHASE-NN`
+        /// narrows to that phase.
+        #[arg(long)]
+        target: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Show one review: derived status, the `reviews` edge, what is
     /// outstanding, and the finding index — or chosen findings in full.
     Show {

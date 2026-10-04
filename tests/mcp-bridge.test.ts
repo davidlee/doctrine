@@ -133,7 +133,7 @@ describe('Unit: pure functions', () => {
   });
 
   it('toolPiName / stripPiPrefix round-trip', () => {
-    const names = ['review_raise', 'review_list', 'review_show', 'review_dispose'];
+    const names = ['review_raise', 'review_list', 'review_findings', 'review_show', 'review_dispose'];
     for (const name of names) {
       expect(stripPiPrefix(toolPiName(name))).toBe(name);
     }
@@ -377,6 +377,7 @@ describe('Unit: pure functions', () => {
     const names = tools.map((t) => t.name);
     expect(names).toContain('review_raise');
     expect(names).toContain('review_list');
+    expect(names).toContain('review_findings');
     expect(names).toContain('review_show');
     expect(names).toContain('review_dispose');
   });

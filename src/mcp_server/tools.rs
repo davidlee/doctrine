@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! MCP tool definitions (JSON Schema) and handler dispatch.
 //!
-//! 31 tools: 12 review, 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
+//! 32 tools: 13 review, 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
 //! `memory_list`, `memory_validate`, `memory_record`, `memory_edit`, `doctrine_onboard`),
 //! the SL-199
 //! dispatch funnel write surface (`dispatch_import`, `dispatch_conclude_phase`,
@@ -95,25 +95,29 @@ fn review_show_description() -> String {
     format!("{head}{severity_union}{mid}{status_union}{tail}")
 }
 
-/// The `review_show` `status` filter property description (STD-001), built
-/// from [`crate::review_ledger::FINDING_STATUSES`].
-fn finding_status_filter_description() -> String {
+/// A finding `status`/`severity` filter property description (STD-001): the
+/// accepted tokens spliced in from the vocab constant, so `review_show` and
+/// `review_findings` can't drift from the enum they filter on.
+fn finding_filter_description(axis: &str, vocab: &[&str], note: &str) -> String {
     format!(
-        "Filter by finding status: {}. Comma-separated string or array. Cannot combine with finding.",
-        crate::review_ledger::FINDING_STATUSES.join(" | ")
+        "Filter by finding {axis}: {}. Comma-separated string or array. {note}",
+        vocab.join(" | ")
     )
 }
 
-/// The `review_show` `severity` filter property description (STD-001), built
-/// from [`crate::review_ledger::SEVERITIES`].
-fn finding_severity_filter_description() -> String {
+const SHOW_FILTER_NOTE: &str = "Cannot combine with finding.";
+
+/// The `review_findings` tool description (STD-001): the row's `severity`/
+/// `status` unions spliced in from the vocab constants, as `review_show` does.
+fn review_findings_description() -> String {
+    let severity_union = quoted_union(crate::review_ledger::SEVERITIES);
+    let status_union = quoted_union(crate::review_ledger::FINDING_STATUSES);
     format!(
-        "Filter by finding severity: {}. Comma-separated string or array. Cannot combine with finding.",
-        crate::review_ledger::SEVERITIES.join(" | ")
+        "List findings across every review, one row per finding (the findings census, SL-278 DEC-370). Bare, it lists every finding still open anywhere: verified/withdrawn findings are hidden unless `all` or any `status` is given; an out-of-vocabulary status counts as open. `regexp` matches the review id, the finding id and the finding title, each whole; `substr` matches the finding id + finding title.\n\nReturns: {{\"FindingsListed\": {{ rows: [{{ review: \"RV-NNN\", facet: string, target: string, id: \"F-N\", severity: {severity_union}, status: {status_union}, disposition?: string, route?: string, title: string }}], total?: int, warnings?: [{{ rv: \"RV-NNN\", finding: \"F-N\", field: \"status\"|\"severity\", raw: string, effect: string }}], unreadable?: [{{ rv: \"RV-NNN\", reason: string }}] }}}} — rows sort by review id, then ledger order. `total` absent (not null) when uncapped; present (pre-truncation count) when rows were dropped by `limit`. `warnings` carries the vocabulary defects of the reviews that contributed a row; `unreadable` names any RV that exists on disk but did not read. Neither is capped; both are absent when empty."
     )
 }
 
-/// Return all 31 tool definitions with JSON Schema parameter descriptions.
+/// Return all 32 tool definitions with JSON Schema parameter descriptions.
 fn tools() -> Vec<McpTool> {
     vec![
         McpTool {
@@ -187,6 +191,48 @@ fn tools() -> Vec<McpTool> {
             }),
         },
         McpTool {
+            name: "review_findings".to_owned(),
+            description: review_findings_description(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "substr": { "type": "string", "description": "Case-insensitive substring filter over finding id + finding title" },
+                    "regexp": { "type": "string", "description": "Regex matched against the review id, the finding id and the finding title, each whole (e.g. ^F-3$, ^RV-012$)" },
+                    "status": {
+                        "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }],
+                        "description": finding_filter_description("status", crate::review_ledger::FINDING_STATUSES, "Any status reveals terminal findings.")
+                    },
+                    "severity": {
+                        "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }],
+                        "description": finding_filter_description("severity", crate::review_ledger::SEVERITIES, "An out-of-vocabulary severity gates as a blocker.")
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Review tag filter (OR within the axis)"
+                    },
+                    "all": {
+                        "type": "boolean",
+                        "description": "Include verified/withdrawn findings (default: false)"
+                    },
+                    "facet": {
+                        "type": "string",
+                        "enum": json!(crate::review_ledger::FACETS),
+                        "description": "Restrict to reviews of this facet (DEC-365)"
+                    },
+                    "target": {
+                        "type": "string",
+                        "description": "Restrict to reviews whose reviews edge targets this ref (e.g. SL-024); a bare ref admits any phase, SL-NNN@PHASE-NN narrows to that phase"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Cap rows to the last N (default: 50; 0 = all). When capped, the response carries a `total` count."
+                    }
+                },
+                "required": []
+            }),
+        },
+        McpTool {
             name: "review_show".to_owned(),
             description: review_show_description(),
             input_schema: json!({
@@ -207,11 +253,11 @@ fn tools() -> Vec<McpTool> {
                     },
                     "status": {
                         "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }],
-                        "description": finding_status_filter_description()
+                        "description": finding_filter_description("status", crate::review_ledger::FINDING_STATUSES, SHOW_FILTER_NOTE)
                     },
                     "severity": {
                         "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }],
-                        "description": finding_severity_filter_description()
+                        "description": finding_filter_description("severity", crate::review_ledger::SEVERITIES, SHOW_FILTER_NOTE)
                     }
                 },
                 "required": ["reference"]
@@ -762,15 +808,38 @@ fn call_tool(
             };
             let cap = effective_cap(fields.opt_usize_field("limit"));
             let target = fields.opt_str_field("target");
-            let facet = fields
-                .opt_str_field("facet")
-                .map(|raw| {
-                    crate::review_ledger::Facet::parse(&raw)
-                        .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
-                })
-                .transpose()?;
+            let facet = parse_facet(fields.opt_str_field("facet"))?;
             let out = review::run_list(Some(root.to_path_buf()), args, target.as_deref(), facet)
                 .map(|out| project_list_cap(out, cap))?;
+            Ok(serde_json::to_string(&out)?)
+        }
+        "review_findings" => {
+            // Hand-extracted, as `review_list` is (ISS-033).
+            let fields = ExtractFields::from_value(arguments, &[]);
+            let args = crate::listing::ListArgs {
+                substr: fields.opt_str_field("substr"),
+                regexp: fields.opt_str_field("regexp"),
+                status: fields.str_list_field("status")?,
+                tags: fields.vec_str_field("tags"),
+                all: fields.opt_bool_field("all").unwrap_or(false),
+                ..Default::default()
+            };
+            let severity = fields.str_list_field("severity")?;
+            // Validate the finding axes up front so a bad token is invalid
+            // params, not an internal error; `run_findings` re-derives the same.
+            review::finding_filter(&args, &severity)
+                .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
+            let cap = effective_cap(fields.opt_usize_field("limit"));
+            let target = fields.opt_str_field("target");
+            let facet = parse_facet(fields.opt_str_field("facet"))?;
+            let out = review::run_findings(
+                Some(root.to_path_buf()),
+                args,
+                &severity,
+                facet,
+                target.as_deref(),
+            )
+            .map(|out| project_list_cap(out, cap))?;
             Ok(serde_json::to_string(&out)?)
         }
         "review_show" => {
@@ -1640,6 +1709,16 @@ fn require_slice(value: Option<&Value>) -> anyhow::Result<u32> {
 
 // ── Argument parse helpers for memory tools ─────────────────────────────
 
+/// Parse an optional review `Facet`, wrapping errors with the load-bearing
+/// "invalid arguments: " prefix (`review_list`, `review_findings`).
+fn parse_facet(s: Option<String>) -> anyhow::Result<Option<crate::review_ledger::Facet>> {
+    s.map(|v| {
+        crate::review_ledger::Facet::parse(&v)
+            .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
+    })
+    .transpose()
+}
+
 /// Parse a `MemoryType` from an optional string, wrapping errors with the
 /// load-bearing "invalid arguments: " prefix so the MCP error mapper (§2,
 /// branch 2) routes them to `-32602` (Invalid params) rather than `-32603`.
@@ -1724,10 +1803,10 @@ fn cap_tail<T>(mut rows: Vec<T>, cap: Option<usize>) -> (Vec<T>, Option<usize>) 
     }
 }
 
-/// Cap a `Listed` output to the most recent `cap` rows, stamping `total` with
+/// Cap a `Listed`/`FindingsListed` output to the last `cap` rows, stamping `total` with
 /// the pre-truncation count so the omission is never silent (IMP-114).
 /// `warnings`/`unreadable` ride through uncapped — disclosure outranks the
-/// cap (A3). Non-`Listed` outputs pass through.
+/// cap (A3). Other outputs pass through.
 fn project_list_cap(out: ReviewOutput, cap: Option<usize>) -> ReviewOutput {
     match out {
         ReviewOutput::Listed {
@@ -1739,6 +1818,22 @@ fn project_list_cap(out: ReviewOutput, cap: Option<usize>) -> ReviewOutput {
         } => {
             let (rows, total) = cap_tail(rows, cap);
             ReviewOutput::Listed {
+                rows,
+                total,
+                warnings,
+                unreadable,
+                formatted,
+            }
+        }
+        ReviewOutput::FindingsListed {
+            rows,
+            warnings,
+            unreadable,
+            formatted,
+            ..
+        } => {
+            let (rows, total) = cap_tail(rows, cap);
+            ReviewOutput::FindingsListed {
                 rows,
                 total,
                 warnings,
@@ -1911,6 +2006,7 @@ When MCP tools are available, use these tools instead of CLI commands:
 |---|---|---|
 | `doctrine review new` | `review_new` | |
 | `doctrine review list` | `review_list` | |
+| `doctrine review findings` | `review_findings` | `status`/`severity`/`all` for finding axes; `facet`/`target` narrow reviews; `limit` caps |
 | `doctrine review show <ref>` | `review_show` | `reference`; `finding`/`full` for detail, `open`/`status`/`severity` to narrow |
 | `doctrine review raise` | `review_raise` | |
 | `doctrine review dispose` | `review_dispose` | |
@@ -2009,11 +2105,12 @@ mod tests {
     // VT-3: tool list response contains exactly the registered tools, by name.
     // 30 → 29 at SL-254 PHASE-06 (`worker_commit` retired with the claude arm).
     // 29 → 31 at SL-268 PHASE-05 (`review_amend`, `review_reopen` added).
+    // 31 → 32 at SL-278 PHASE-04b (`review_findings`, the findings census).
 
     #[test]
-    fn tool_list_has_31_tools() {
+    fn tool_list_has_32_tools() {
         let list = tool_list();
-        assert_eq!(list.tools.len(), 31);
+        assert_eq!(list.tools.len(), 32);
         // The SL-199 funnel write surface is registered (named via the STD-001 consts).
         let names: Vec<&str> = list.tools.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_IMPORT));
@@ -2040,6 +2137,7 @@ mod tests {
         let names: Vec<&str> = list.tools.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&"review_new"));
         assert!(names.contains(&"review_list"));
+        assert!(names.contains(&"review_findings"));
         assert!(names.contains(&"review_show"));
         assert!(names.contains(&"review_raise"));
         assert!(names.contains(&"review_dispose"));
@@ -2482,7 +2580,7 @@ mod tests {
         let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 31);
+        assert_eq!(tools.len(), 32);
     }
 
     #[test]
