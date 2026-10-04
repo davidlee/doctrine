@@ -536,11 +536,14 @@ split of axes:
 2. **Text axes — `listing::retain`** for `-f`, `-r`, `-i`, `-t` only. The
    census takes `status` and `all` out of `ListArgs` before `listing::build`
    and passes an `is_hidden` that hides nothing, so `retain` never applies a
-   status rule of its own. Its key: `canonical` is `"RV-012 F-3"` (review id,
-   space, finding id), `slug` the review slug, `title` the finding title,
-   `tags` the review tags. The regex domain is therefore the review-and-finding
-   id, the review slug, and the finding title: `-r 'RV-012'`, `-r 'F-3$'` and
-   `-r 'RV-012 F-3'` all match that row. The help text states this domain.
+   status rule of its own. Its key gives each identifier its own field, because
+   `listing::regex_admits` tests each field whole: `canonical` is the review id
+   (`RV-012`), `slug` is the finding id (`F-3`), `title` the finding title,
+   `tags` the review tags. So `-r '^RV-012$'` and `-r '^F-3$'` both match that
+   row, as anchored id searches do on every other list verb. The substring
+   domain (`-f`, slug + title) becomes finding id + finding title. The review
+   slug is not searchable here; `--target` and the review id cover finding a
+   review. The help text states both domains.
 
 ### Tolerant scan (STD-003)
 
@@ -548,7 +551,9 @@ The census walks the whole corpus, so one unparseable `review-NNN.toml` must
 not deny every other review. A new reader in `review_ledger::schema`:
 
 ```rust
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct UnreadableReview { pub(crate) rv: String, pub(crate) reason: String }
+// wire shape: {"rv": "RV-012", "reason": "<parse error>"}
 
 /// Every review that parses, plus a named entry for each that does not.
 pub(crate) fn scan_reviews(review_root: &Path)
@@ -731,14 +736,16 @@ unparseable `review-NNN.toml` beside readable ones.
 - Bare verb hides verified and withdrawn findings and shows unknown-status
   ones; `-a` and any `-s` reveal terminal findings.
 - `-S`, `--facet`, `--target` narrow; `-f`/`-t` behave as on `review list`.
-- `-r 'F-3$'` matches a row whose finding id is `F-3` when neither the review
-  slug nor the title contains it.
+- `census_regex_matches_each_id_anchored` — `-r '^F-3$'` matches a row whose
+  finding id is `F-3` though its title does not contain it, and `-r
+  '^RV-012$'` matches every row of RV-012.
 - `census_and_show_agree_on_finding_axes` — for `-s` (including an
   out-of-vocabulary status), `-S` (including an out-of-vocabulary severity)
   and the default open set, the census rows for one review equal `review show
   RV-N` with the matching filter.
 - `census_survives_an_unreadable_review` — rows from the readable reviews,
-  plus `RV-NNN unreadable` on stderr and in `unreadable` (JSON and MCP). The
+  plus `RV-NNN unreadable` on stderr and `{rv, reason}` in `unreadable` (JSON
+  and MCP). The
   same case for `review list`.
 - `worker_guard` classifies `review findings` as a read (existing guard test
   surface).

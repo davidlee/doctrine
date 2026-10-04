@@ -1,0 +1,245 @@
+id    = 416
+slug  = "design-review-of-sl-278"
+title = "design review of SL-278"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Adversarial design pass over SL-278 design.md against DEC-361 through DEC-370, ADR-001/ADR-007, SPEC-032/SPEC-013, STD-001/STD-003, POL-003, the named review/ledger/listing/MCP/router source and e2e tests. Checked type and serde feasibility, command routing, census filter semantics, degraded reads, MCP parameter handling, and show equivalence; raised only evidenced divergences.
+"""
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Reviewed the responder's revised SL-278 design sections 5 and 8 for F-5 and F-6 against src/listing.rs regex_admits and substr_admits. Separate review and finding id fields support both anchored regex searches; the substring domain is documented. UnreadableReview derives Serialize, declares the {rv, reason} wire shape, and has a matching verification case. All six findings are verified; no new defect from these edits remains open.
+"""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-278"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Census bypasses the accepted shared status predicate"
+detail = """
+Expected: DEC-363 requires one finding predicate in `review_ledger` shared by `review show` and the census for `--open`, `-s`, and `-S` semantics.
+Observed: SL-278's design at `.doctrine/slice/278/design.md:497-508` sends raw finding status through `listing::retain` and calls `FindingFilter::admits` only for severity. `listing::retain` applies its own hide-set, status and reveal rules (`src/listing.rs:250-268`); the proposed `FindingFilter::admits` independently implements status/open in `.doctrine/slice/278/design.md:144-153`. This creates two implementations of the finding status semantics despite the stated one-predicate rule. A change to terminal classification or unknown-status handling can make `show` and the census disagree while the proposed `-S` parity test remains green.
+Suggested fix: design the census row pipeline to invoke the same `FindingFilter::admits` for the finding axes, with an explicit translation of CommonListArgs `-s` and the default/`-a` terminal reveal rule; leave `listing::retain` responsible for its substring, regex and tag axes. Add a show/census parity test for `-s` and out-of-vocabulary status, not only severity.
+"""
+disposition = "fix-now"
+route = "dedupe"
+response = """
+Accepted. The census now builds the same `FindingFilter` (via a new shared `FindingFilter::parse`) for status, open and severity; the list hide-set is expressed as `open = !all && statuses.is_empty()`. `listing::retain` keeps only the text axes (`-f/-r/-i/-t`): status and all are taken out of ListArgs and `is_hidden` hides nothing. Added `census_and_show_agree_on_finding_axes` covering -s, -S and the default open set, out-of-vocabulary values included. sec-2, sec-5, sec-8.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "dedupe"
+response = """
+Accepted. The census now builds the same `FindingFilter` (via a new shared `FindingFilter::parse`) for status, open and severity; the list hide-set is expressed as `open = !all && statuses.is_empty()`. `listing::retain` keeps only the text axes (`-f/-r/-i/-t`): status and all are taken out of ListArgs and `is_hidden` hides nothing. Added `census_and_show_agree_on_finding_axes` covering -s, -S and the default open set, out-of-vocabulary values included. sec-2, sec-5, sec-8.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "sec-2:130-160 and sec-5:518-539 route status, open, and severity through the same FindingFilter; listing retains only text axes."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "One malformed review aborts the corpus findings census"
+detail = """
+Expected: the census should continue past an unreadable review and disclose its id and read/parse failure, as STD-003 requires for authored-corpus walks.
+Observed: SL-278's design says `run_findings` reads all reviews and leaves `src/review_ledger/schema.rs` untouched (`.doctrine/slice/278/design.md:497-518,619-620`). The only current all-review reader, `read_reviews`, calls `read_review(...)?` inside its loop (`src/review_ledger/schema.rs:235-241`); `read_review` returns a parse error for one malformed ledger (`:225-232`). Reusing it makes `review findings` and MCP `review_findings` abort the entire report on a single bad sibling. The proposed fixture set and census verification (`design.md:625-629,665-672`) include unknown vocabulary but no unparseable ledger, so this path remains untested.
+Suggested fix: specify a tolerant per-review scan that collects named read/parse diagnostics and continues with readable reviews, surface those diagnostics on the census's CLI and JSON/MCP channels, and add a fixture with one malformed ledger beside a readable one.
+"""
+disposition = "fix-now"
+route = "review"
+response = """
+Accepted: STD-003 requires tolerate-and-disclose. New `review_ledger::schema::scan_reviews` returns parsed docs plus named `UnreadableReview { rv, reason }`; the census and `review list` (same walk, same defect today) use it and disclose on stderr and an `unreadable` JSON/MCP array. `read_reviews` stays for the close gate, which must fail closed (stated in sec-5 and sec-9). Fixture with one unparseable ledger added (sec-8); schema.rs added to code impact (sec-7).
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = """
+Accepted: STD-003 requires tolerate-and-disclose. New `review_ledger::schema::scan_reviews` returns parsed docs plus named `UnreadableReview { rv, reason }`; the census and `review list` (same walk, same defect today) use it and disclose on stderr and an `unreadable` JSON/MCP array. `read_reviews` stays for the close gate, which must fail closed (stated in sec-5 and sec-9). Fixture with one unparseable ledger added (sec-8); schema.rs added to code impact (sec-7).
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "sec-5:545-564 specifies a tolerant named scan and CLI/JSON/MCP disclosure; sec-8:740-742 covers malformed-ledger fixtures while the close gate stays strict."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "New findings command is absent from the exhaustive worker guard"
+detail = """
+Expected: adding the `ReviewCommand::Findings` variant must classify it as a read in the worker guard, so the CLI compiles and the corpus read is available to workers.
+Observed: SL-278's code-impact list (`.doctrine/slice/278/design.md:597-620`) names the new variant in `src/review/cli.rs` and dispatch in `src/review/mod.rs`, but omits `src/commands/guard.rs`. Its `write_class` match enumerates every `ReviewCommand` variant without a wildcard (`src/commands/guard.rs:112-127`). Adding `Findings` as designed will make this match non-exhaustive and fail compilation until the guard is updated. The verification list has no worker read classification case.
+Suggested fix: add `src/commands/guard.rs` to the code impact, classify `ReviewCommand::Findings` as `Read`, and pin that classification in the existing command-guard test surface.
+"""
+disposition = "fix-now"
+route = "refresh"
+response = """
+Accepted, verified at src/commands/guard.rs:112-127 (exhaustive match). `src/commands/guard.rs` added to sec-7 with `Findings` classified `Read`; a guard classification case added to sec-8.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "refresh"
+response = """
+Accepted, verified at src/commands/guard.rs:112-127 (exhaustive match). `src/commands/guard.rs` added to sec-7 with `Findings` classified `Read`; a guard classification case added to sec-8.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "sec-7:671 adds the exhaustive guard match change and sec-8:743-744 pins Findings as Read."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "MCP scalar finding selection needs a new extraction path"
+detail = """
+Expected: DEC-369 accepts `finding` as either a comma-separated string or an array, and `Projection::parse` receives both forms.
+Observed: SL-278's design says the handler uses `ExtractFields` as the `review_list` idiom "so a scalar or array both work" (`.doctrine/slice/278/design.md:428-434`). The existing `ExtractFields::vec_str_field` accepts only arrays and returns an empty vector for any scalar (`src/mcp_server/tools.rs:1501-1513`); `review_list` calls that helper for its vector arguments (`:685-700`). Directly copying that idiom silently drops `finding: "3,5"`, selecting the default index instead of the requested findings.
+Suggested fix: specify a scalar-or-array extraction helper, validate non-string array members rather than silently dropping them, and keep the proposed MCP string/array integration cases (`design.md:680-682`) as a behavioural gate.
+"""
+disposition = "fix-now"
+response = """
+Accepted, verified at src/mcp_server/tools.rs:1501-1513. sec-4 now specifies `ExtractFields::str_list_field` (string or array of strings; any other type or a non-string member is refused, naming the argument), used for review_show finding/status/severity and review_findings status/severity/tags. MCP e2e asserts string and array select the same findings and a non-string member is refused.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted, verified at src/mcp_server/tools.rs:1501-1513. sec-4 now specifies `ExtractFields::str_list_field` (string or array of strings; any other type or a non-string member is refused, naming the argument), used for review_show finding/status/severity and review_findings status/severity/tags. MCP e2e asserts string and array select the same findings and a non-string member is refused.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "sec-4:448-454 specifies strict scalar-or-array extraction and sec-8:754-756 tests equivalent selection and malformed members."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Census regex cannot find a finding by its id"
+detail = """
+Expected: a regex filter over a one-row-per-finding census should have an explicit way to match the row's `F-n` identity, or the design should state that it searches only review identity and finding title.
+Observed: SL-278 proposes `FilterFields { canonical: review id, slug: review slug, title: finding title }` (`.doctrine/slice/278/design.md:497-505`). `listing::regex_admits` checks only `canonical`, `slug`, and `title` (`src/listing.rs:283-293`). Thus `review findings -r '^F-3$'` cannot match an `F-3` row unless its unrelated review slug or finding title happens to contain that token. The census verification says `-r` behaves as on `review list` (`design.md:667-670`), which masks the missing finding-id domain rather than defining it.
+Suggested fix: define the census regex domain to include both review and finding ids while preserving the existing review-id search, and add one fixture where `F-3` appears only in the id field. State the exact domain in help so users can tell which identifiers are searchable.
+"""
+disposition = "fix-now"
+response = """
+Contest accepted: a composite field breaks both anchored forms. Each id now has its own field: canonical = review id (`RV-012`), slug = finding id (`F-3`), title = finding title, so `-r '^RV-012$'` and `-r '^F-3$'` both match. Cost: the review slug leaves the census search domains (`--target` and the review id cover it); substring domain becomes finding id + title. No change to listing.rs (FilterFields has 25 construction sites). Test `census_regex_matches_each_id_anchored` covers both anchored forms. sec-5, sec-8.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. Census FilterFields.canonical is now `RV-012 F-3`, so the regex domain is review-and-finding id, review slug, finding title; `-r 'F-3$'` matches. Domain stated in help (sec-5); fixture where F-3 appears only in the id (sec-8).
+"""
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+The composite canonical field does not preserve ID searches. design.md:539-543 sets it to "RV-012 F-3", while src/listing.rs:283-293 tests the regex against that whole field (or the unrelated slug/title). Thus `-r '^F-3$'` still misses F-3, and `-r '^RV-012$'` stops matching the review ID. The new test at design.md:734-735 only checks `F-3$`, so it misses both regressions. Give each ID its own regex match domain and test both anchored forms.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Contest accepted: a composite field breaks both anchored forms. Each id now has its own field: canonical = review id (`RV-012`), slug = finding id (`F-3`), title = finding title, so `-r '^RV-012$'` and `-r '^F-3$'` both match. Cost: the review slug leaves the census search domains (`--target` and the review id cover it); substring domain becomes finding id + title. No change to listing.rs (FilterFields has 25 construction sites). Test `census_regex_matches_each_id_anchored` covers both anchored forms. sec-5, sec-8.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified against src/listing.rs: regex_admits tests canonical, slug, and title independently; separate review and finding id fields admit both anchored forms. substr_admits searches slug and title, matching the documented finding-id/title substring domain. The revised census test covers both anchored ids."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "UnreadableReview needs Serialize for the new output fields"
+detail = """
+Expected: the new unreadable diagnostics compile in both `ReviewOutput::Listed` and `FindingsListed` and serialize on the promised JSON/MCP channels.
+Observed: design.md:550-555 defines `UnreadableReview` without a `Serialize` implementation, then design.md:582-596 places `Vec<UnreadableReview>` in serializable output variants. The existing `ReviewOutput` derives `Serialize` at src/review/mod.rs:318-322. Implementing the specified type literally makes that derive fail. Add `Serialize` to the new diagnostic type and pin its `{rv, reason}` wire shape.
+"""
+disposition = "fix-now"
+response = """
+Accepted. `UnreadableReview` derives `Serialize` (plus Debug/Clone/PartialEq/Eq); wire shape `{rv, reason}` stated in sec-5 and pinned by the unreadable-review test in sec-8.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. `UnreadableReview` derives `Serialize` (plus Debug/Clone/PartialEq/Eq); wire shape `{rv, reason}` stated in sec-5 and pinned by the unreadable-review test in sec-8.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified: the revised UnreadableReview derives Serialize, states the {rv, reason} wire shape, and sec-8 requires that shape in CLI JSON and MCP for the unreadable-review fixture."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
