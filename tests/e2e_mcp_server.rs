@@ -603,11 +603,8 @@ fn vt5_review_show_json() {
     let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
     assert!(resp.get("error").is_none(), "review_new: {resp:?}");
 
-    // review_show with format=json
-    let params = tools_call_params(
-        "review_show",
-        serde_json::json!({ "reference": "1", "format": "json" }),
-    );
+    // review_show with no projection arguments (index depth, the default)
+    let params = tools_call_params("review_show", serde_json::json!({ "reference": "1" }));
     let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
     assert!(resp.get("error").is_none(), "review_show: {resp:?}");
 
@@ -630,6 +627,171 @@ fn vt5_review_show_json() {
         showed.get("findings").is_some(),
         "should have findings field"
     );
+    assert!(
+        showed.get("body_lines").is_some(),
+        "index depth still carries body_lines: {showed}"
+    );
+    assert!(
+        showed.get("body").is_none(),
+        "index depth omits the body: {showed}"
+    );
+
+    kill(child);
+}
+
+// SL-278 PHASE-03 T5 (EX-5, VT-2): `review_show`'s projection arguments
+// (`finding`, `full`, `open`, `status`, `severity`) over one server session,
+// plus the retired `view`/`format` ignored-not-refused positive control (A1).
+
+#[test]
+fn review_show_projection_arguments() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+
+    let params = tools_call_params(
+        "review_new",
+        serde_json::json!({ "facet": "design", "target": "SL-001" }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "review_new: {resp:?}");
+
+    // Three findings, mixed severities (F-1 minor, F-2 major, F-3 blocker).
+    for severity in ["minor", "major", "blocker"] {
+        let params = tools_call_params(
+            "review_raise",
+            serde_json::json!({
+                "reference": "1", "severity": severity, "title": "t", "detail": "d"
+            }),
+        );
+        let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+        assert!(resp.get("error").is_none(), "review_raise: {resp:?}");
+    }
+
+    let show = |stdin: &mut std::process::ChildStdin,
+                reader: &mut BufReader<std::process::ChildStdout>,
+                args: Value|
+     -> Value {
+        call(
+            stdin,
+            reader,
+            "tools/call",
+            Some(&tools_call_params("review_show", args)),
+        )
+    };
+
+    // 1. No args → index depth, every finding present, no `detail`.
+    let resp = show(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({ "reference": "1" }),
+    );
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let showed = &out["Showed"];
+    assert_eq!(showed["depth"], "index");
+    let findings = showed["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 3, "{findings:?}");
+    assert!(
+        findings.iter().all(|f| f.get("detail").is_none()),
+        "index depth carries no detail: {findings:?}"
+    );
+
+    // 2. `finding` as a comma string and as a mixed-spelling array select the
+    // same findings, at full depth, with detail present.
+    let by_string = show(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({ "reference": "1", "finding": "1,3" }),
+    );
+    let by_array = show(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({ "reference": "1", "finding": ["F-1", "3"] }),
+    );
+    for resp in [&by_string, &by_array] {
+        assert!(resp.get("error").is_none(), "{resp:?}");
+        let out: Value = serde_json::from_str(tool_result_text(resp)).unwrap();
+        let showed = &out["Showed"];
+        assert_eq!(showed["depth"], "full");
+        let ids: Vec<&str> = showed["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, vec!["F-1", "F-3"], "{showed}");
+        assert!(
+            showed["findings"][0].get("detail").is_some(),
+            "full depth carries detail: {showed}"
+        );
+    }
+
+    // 3. A non-string array member refuses with -32602 naming `finding`.
+    let resp = show(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({ "reference": "1", "finding": ["1", 3] }),
+    );
+    let err = resp["error"].clone();
+    assert_eq!(err["code"], -32602, "{err}");
+    let parse_error = err["data"]["parse_error"].as_str().unwrap();
+    assert!(parse_error.contains("finding"), "{parse_error}");
+
+    // 4. `full: true` → full depth, body present.
+    let resp = show(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({ "reference": "1", "full": true }),
+    );
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let showed = &out["Showed"];
+    assert_eq!(showed["depth"], "full");
+    assert!(showed.get("body").is_some(), "{showed}");
+
+    // 5. `finding` + `open` refuses: the shared `Projection::parse` message.
+    let resp = show(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({ "reference": "1", "finding": "1", "open": true }),
+    );
+    let err = resp["error"].clone();
+    assert_eq!(err["code"], -32602, "{err}");
+    let parse_error = err["data"]["parse_error"].as_str().unwrap();
+    assert!(
+        parse_error.contains("--finding selects exact findings"),
+        "{parse_error}"
+    );
+
+    // 6. A retired `view` argument is silently ignored (A1 positive control):
+    // the old `view: summary` caller still succeeds, and still gets the index.
+    let resp = show(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({ "reference": "1", "view": "summary" }),
+    );
+    assert!(resp.get("error").is_none(), "{resp:?}");
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    assert_eq!(out["Showed"]["depth"], "index", "{out}");
 
     kill(child);
 }

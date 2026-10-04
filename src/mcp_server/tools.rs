@@ -140,15 +140,31 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_show".to_owned(),
-            // SL-278 PHASE-02b: `id`/`body`/`view=summary` dropped — no longer
-            // true of the wire shape. PHASE-03 rewrites this properly.
-            description: "Show one review: derived status, the reviews edge, and the brief.\n\nReturns: {\"Showed\": { canonical: \"RV-NNN\", title: string, status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", facet: string, target: string, finding_count: int, findings: [{ id: \"F-N\", status: \"open\"|\"answered\"|\"contested\"|\"verified\"|\"withdrawn\", severity: \"blocker\"|\"major\"|\"minor\"|\"nit\", title: string, detail: string, disposition?: string|null, route?: string, response?: string|null }], warnings?: [{ rv: \"RV-NNN\", finding: \"F-N\", field: \"status\"|\"severity\", raw: string, effect: string }] }} — `route` (where the finding's answer routes: review|demonstrate|probe|control|dedupe|refresh) is absent when unset; `warnings` is absent unless the ledger holds an out-of-vocabulary status or severity.".to_owned(),
+            description: "Show one review projected to a chosen depth (design SL-278 sec-2): by default every finding at index depth (identity + status, no prose); `finding` selects exact findings in full; `full` additionally carries the brief body; `open`/`status`/`severity` narrow the index by filter. `finding` cannot combine with `open`/`status`/`severity` (refused: \"--finding selects exact findings; drop --open/-s/-S\").\n\nReturns: {\"Showed\": { canonical: \"RV-NNN\", title: string, facet: string, status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", target: string, raiser: string, responder: string, rounds: int, concluded: bool, tags?: [string], depth: \"index\"|\"full\", finding_count: int, outstanding: { responder: {blocker,major,minor,nit: int}, raiser: {blocker,major,minor,nit: int} }, findings: [{ id: \"F-N\", severity: \"blocker\"|\"major\"|\"minor\"|\"nit\", status: \"open\"|\"answered\"|\"contested\"|\"verified\"|\"withdrawn\", disposition?: string, route?: string, title: string, detail?: string, response?: string, turns?: [{act, role, note?, disposition?, route?, response?}] }], body?: string, body_lines?: int, warnings?: [{ rv: \"RV-NNN\", finding: \"F-N\", field: \"status\"|\"severity\", raw: string, effect: string }] }} — `detail`/`response`/`turns` on a finding, and the top-level `body`, appear only at full depth (`finding` selection or `full: true`); `body` itself needs `full: true`. `route` is absent while unset. `tags`/`warnings` are absent when empty; `warnings` carries any out-of-vocabulary status or severity found on the ledger.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
-                    "format": { "type": "string", "enum": ["table", "json"], "description": "Output format (default: json)" },
-                    "view": { "type": "string", "enum": ["full", "summary"], "description": "summary blanks `body` → \"\", each finding's `detail` → \"\" and `response` → null; preserves `id`, `status`, `severity`, `title`, `disposition`, `route` (default: full)" }
+                    "finding": {
+                        "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }],
+                        "description": "Select exact findings by id (F-3 or bare 3); comma-separated string or array. Forces full depth for the findings named. Cannot combine with open/status/severity."
+                    },
+                    "full": {
+                        "type": "boolean",
+                        "description": "Full depth over every finding: each finding's detail/response/turns, plus the review's full brief body (default: false — index depth, no body)"
+                    },
+                    "open": {
+                        "type": "boolean",
+                        "description": "Keep only non-terminal (outstanding) findings. Cannot combine with finding."
+                    },
+                    "status": {
+                        "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }],
+                        "description": "Filter by finding status: open | answered | contested | verified | withdrawn. Comma-separated string or array. Cannot combine with finding."
+                    },
+                    "severity": {
+                        "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }],
+                        "description": "Filter by finding severity: blocker | major | minor | nit. Comma-separated string or array. Cannot combine with finding."
+                    }
                 },
                 "required": ["reference"]
             }),
@@ -703,23 +719,23 @@ fn call_tool(
             Ok(serde_json::to_string(&out)?)
         }
         "review_show" => {
-            let reference = arguments
-                .get("reference")
-                .and_then(|v| v.as_str())
-                .map(str::to_owned)
-                .unwrap_or_default();
-            let format = arguments
-                .get("format")
-                .and_then(|v| v.as_str())
-                .map(str::to_owned);
-            let fmt = match format.as_deref() {
-                Some("json") => crate::listing::Format::Json,
-                _ => crate::listing::Format::Table,
+            let fields = ExtractFields::from_value(arguments, &["reference"]);
+            let reference = fields.str_field("reference");
+            let args = crate::review_ledger::ProjectionArgs {
+                finding: fields.str_list_field("finding")?,
+                full: fields.opt_bool_field("full").unwrap_or(false),
+                open: fields.opt_bool_field("open").unwrap_or(false),
+                status: fields.str_list_field("status")?,
+                severity: fields.str_list_field("severity")?,
             };
-            // SL-278 PHASE-02b: `view` is retired (PHASE-03 replaces the
-            // projection arguments); until then every call reads the index.
-            let projection = crate::review_ledger::Projection::index();
-            let out = review::run_show(Some(root.to_path_buf()), &reference, &projection, fmt)?;
+            let projection = crate::review_ledger::Projection::parse(&args)
+                .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
+            let out = review::run_show(
+                Some(root.to_path_buf()),
+                &reference,
+                &projection,
+                crate::listing::Format::Json,
+            )?;
             Ok(serde_json::to_string(&out)?)
         }
         "review_raise" => {
@@ -1496,6 +1512,37 @@ impl ExtractFields {
             .map(str::to_owned)
     }
 
+    /// Extract a projection filter axis (`finding`/`status`/`severity`):
+    /// missing ⇒ `Ok(vec![])`; a single string is kept **whole** (comma
+    /// splitting is `Projection::parse`'s job — SL-278 design sec-2, so a
+    /// caller's pre-split CLI-style array and a comma-joined MCP string both
+    /// reach `parse` the same way); a string array is kept as given. Any
+    /// other JSON type — including an explicit `null`, and including a
+    /// non-string array member — refuses with an `invalid arguments:`-
+    /// prefixed message naming `name`, routing to -32602 via
+    /// `map_review_error`. Contrast with `vec_str_field`, which *tolerates*
+    /// a non-array or mixed array by silently dropping what doesn't fit —
+    /// do not reach for that one here.
+    fn str_list_field(&self, name: &str) -> anyhow::Result<Vec<String>> {
+        match self.inner.get(name) {
+            None => Ok(Vec::new()),
+            Some(Value::String(s)) => Ok(vec![s.clone()]),
+            Some(Value::Array(items)) => items
+                .iter()
+                .map(|v| {
+                    v.as_str().map(str::to_owned).ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "invalid arguments: '{name}' must be a string or array of strings"
+                        )
+                    })
+                })
+                .collect(),
+            Some(_) => Err(anyhow::anyhow!(
+                "invalid arguments: '{name}' must be a string or array of strings"
+            )),
+        }
+    }
+
     /// Extract a string array (missing or non-array ⇒ empty vec; non-string
     /// members dropped). Mirrors the missing-tolerant `*_str_field` posture.
     fn vec_str_field(&self, name: &str) -> Vec<String> {
@@ -1794,7 +1841,7 @@ When MCP tools are available, use these tools instead of CLI commands:
 |---|---|---|
 | `doctrine review new` | `review_new` | |
 | `doctrine review list` | `review_list` | |
-| `doctrine review show <ref>` | `review_show` | `reference` param |
+| `doctrine review show <ref>` | `review_show` | `reference`; `finding`/`full` for detail, `open`/`status`/`severity` to narrow |
 | `doctrine review raise` | `review_raise` | |
 | `doctrine review dispose` | `review_dispose` | |
 | `doctrine review amend` | `review_amend` | |
@@ -2339,6 +2386,106 @@ mod tests {
         assert_eq!(err.code, -32602);
     }
 
+    // SL-278 PHASE-03 T6 (EX-4, VT-1): the CLI's `run_show` JSON and the MCP
+    // `review_show` response are one shape off the same `ReviewView` (B10 —
+    // key order differs, `Value` equality does not care), over four
+    // projections built from the one `(ProjectionArgs, mcp arguments)` table
+    // so the two sides cannot drift apart.
+
+    #[test]
+    fn cli_json_and_mcp_show_carry_identical_view() {
+        let (_dir, root) = temp_root();
+        crate::catalog::test_helpers::seed_slice(&root, 1, &[]);
+
+        let new_req = tools_call_req(
+            "review_new",
+            json!({ "facet": "design", "target": "SL-001" }),
+        );
+        let resp = dispatch(&new_req, &root, crate::commands::prompt::model_keys);
+        assert!(resp.error.is_none(), "review_new: {:?}", resp.error);
+
+        for severity in ["minor", "major", "blocker"] {
+            let req = tools_call_req(
+                "review_raise",
+                json!({ "reference": "1", "severity": severity, "title": "t", "detail": "d" }),
+            );
+            let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+            assert!(resp.error.is_none(), "review_raise: {:?}", resp.error);
+        }
+
+        // Dispose F-1 — cheap, and gives a filtered projection a strict
+        // subset to show relative to the index.
+        let req = tools_call_req(
+            "review_dispose",
+            json!({
+                "reference": "1", "finding": "F-1", "disposition": "fix-now", "response": "done"
+            }),
+        );
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        assert!(resp.error.is_none(), "review_dispose: {:?}", resp.error);
+
+        let cases: [(crate::review_ledger::ProjectionArgs, Value); 4] = [
+            (crate::review_ledger::ProjectionArgs::default(), json!({})),
+            (
+                crate::review_ledger::ProjectionArgs {
+                    finding: vec!["F-2".to_owned()],
+                    ..Default::default()
+                },
+                json!({ "finding": "F-2" }),
+            ),
+            (
+                crate::review_ledger::ProjectionArgs {
+                    full: true,
+                    ..Default::default()
+                },
+                json!({ "full": true }),
+            ),
+            (
+                crate::review_ledger::ProjectionArgs {
+                    severity: vec!["major".to_owned()],
+                    ..Default::default()
+                },
+                json!({ "severity": "major" }),
+            ),
+        ];
+
+        let mut views = Vec::with_capacity(cases.len());
+        for (args, mut mcp_args) in cases {
+            let projection = crate::review_ledger::Projection::parse(&args).unwrap();
+            let cli_out = review::run_show(
+                Some(root.clone()),
+                "RV-001",
+                &projection,
+                crate::listing::Format::Json,
+            )
+            .unwrap();
+            let ReviewOutput::Showed { formatted, .. } = cli_out else {
+                panic!("expected Showed, got {cli_out:?}");
+            };
+            let cli_view = serde_json::from_str::<Value>(&formatted).unwrap()["review"].clone();
+
+            mcp_args["reference"] = json!("1");
+            let req = tools_call_req("review_show", mcp_args);
+            let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+            assert!(resp.error.is_none(), "review_show: {:?}", resp.error);
+            let result = resp.result.unwrap();
+            let text = result["content"][0]["text"].as_str().unwrap();
+            let mcp_view = serde_json::from_str::<Value>(text).unwrap()["Showed"].clone();
+
+            assert_eq!(cli_view, mcp_view, "shape parity: {cli_view} vs {mcp_view}");
+            views.push(cli_view);
+        }
+
+        // Positive control: the severity-filtered case (index 3) is strictly
+        // narrower than the unfiltered index (index 0) — proves the test can fail.
+        let index_count = views[0]["findings"].as_array().unwrap().len();
+        let filtered_count = views[3]["findings"].as_array().unwrap().len();
+        assert!(
+            filtered_count < index_count,
+            "positive control: filtered ({filtered_count}) should be < index ({index_count})"
+        );
+    }
+
     #[test]
     fn memory_record_invalid_type_returns_32602() {
         let (_dir, root) = temp_root();
@@ -2874,5 +3021,55 @@ mod tests {
             parsed.is_object(),
             "memory_search result must be a JSON object"
         );
+    }
+
+    // SL-278 PHASE-03 T1 (EX-1): `str_list_field` keeps a single string whole
+    // (comma-splitting is `Projection::parse`'s job, not the extractor's),
+    // accepts a string array, defaults missing to empty, and refuses every
+    // other shape — unlike `vec_str_field`, which tolerates and drops.
+
+    #[test]
+    fn str_list_field_keeps_a_single_string_whole() {
+        let fields = ExtractFields::from_value(json!({ "finding": "3,5" }), &[]);
+        assert_eq!(fields.str_list_field("finding").unwrap(), vec!["3,5"]);
+    }
+
+    #[test]
+    fn str_list_field_keeps_a_string_array() {
+        let fields = ExtractFields::from_value(json!({ "finding": ["3", "5"] }), &[]);
+        assert_eq!(
+            fields.str_list_field("finding").unwrap(),
+            vec!["3".to_owned(), "5".to_owned()]
+        );
+    }
+
+    #[test]
+    fn str_list_field_missing_is_empty() {
+        let fields = ExtractFields::from_value(json!({}), &[]);
+        assert_eq!(
+            fields.str_list_field("finding").unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn str_list_field_refuses_wrong_types() {
+        for bad in [json!(5), json!(true), json!({}), json!(null)] {
+            let fields = ExtractFields::from_value(json!({ "finding": bad }), &[]);
+            let err = fields.str_list_field("finding").unwrap_err().to_string();
+            assert!(
+                err.starts_with("invalid arguments:"),
+                "unexpected message for {bad:?}: {err}"
+            );
+            assert!(err.contains("finding"), "names the arg for {bad:?}: {err}");
+        }
+    }
+
+    #[test]
+    fn str_list_field_refuses_a_non_string_array_member() {
+        let fields = ExtractFields::from_value(json!({ "finding": ["3", 5] }), &[]);
+        let err = fields.str_list_field("finding").unwrap_err().to_string();
+        assert!(err.starts_with("invalid arguments:"), "{err}");
+        assert!(err.contains("finding"), "{err}");
     }
 }
