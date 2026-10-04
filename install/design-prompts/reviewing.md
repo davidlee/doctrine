@@ -162,7 +162,7 @@ The form rule is not style. Passed inline as one shell argument, a backtick span
 or a dollar sign is expanded away before doctrine sees it, and the receipt still
 reads clean. Prefer the MCP tool, or pass `--response -` with a quoted heredoc
 (`<<'EOF'`) or `--response @path`. Read your response back with
-`review show <RV> --json` before moving on. If what you read back is wrong,
+`review show <RV> -f F-n` before moving on. If what you read back is wrong,
 repair it with `review amend <RV> --finding F-n --response … --note …` while the
 finding is still `answered`.
 

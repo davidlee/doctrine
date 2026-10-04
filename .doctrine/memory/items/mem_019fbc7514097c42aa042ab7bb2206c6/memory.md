@@ -61,5 +61,5 @@ unaffected.
 
 ## Verify before moving on
 
-`review show <RV> --json` and read the stored `response` back. A `Disposed …`
+`review show <RV> -f F-n` and read the stored `response` back. A `Disposed …`
 receipt is not evidence about what was stored.

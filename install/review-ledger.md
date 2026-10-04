@@ -49,7 +49,7 @@ spots a new defect raises it `--as raiser`; one agent may drive both roles.
 refuses two identical labels, and a label that names the other role.
 
 The remaining verbs read or maintain the ledger: `new`, `list`, `show`,
-`status`, `prime`, `unlock` (removes a stale per-review lock left by a hard
+`findings` (see Reading the ledger), `status`, `prime`, `unlock` (removes a stale per-review lock left by a hard
 kill), and `paths` (prints a review's file paths).
 
 ### Passing prose
@@ -243,9 +243,10 @@ did; the route records what instrument can settle the finding. The CLI refuses a
 `route:` prefix inside `--disposition`, and omitting `--route` keeps the
 finding's current route.
 
-The table view of `review show` renders the disposition, not the route: read it
-from `doctrine review show RV-NNN --json` (`.review.finding[].route`), or from
-the MCP `review_show` output (`Showed.findings[].route`, absent while unset). An older
+The index view of `review show` renders the disposition, not the route: read it
+with `doctrine review show RV-NNN -f F-n` (full depth renders the route), or
+from JSON `findings[].route` — CLI `--json` and MCP `review_show` alike, absent
+while unset (see Reading the ledger). An older
 ledger carries the route as a `route:` prefix inside its disposition string,
 which still reads verbatim.
 
@@ -284,6 +285,43 @@ again after it. Open findings do not block conclude — disposing them is the
 responder's work — but the ledger is not done until they are terminal (§6). A
 design run's `conducted` disposition is refused over an unconcluded ledger.
 
+## Reading the ledger
+
+`review show` renders at three depths; read the cheapest one that answers the
+question.
+
+- **Index** (bare `doctrine review show RV-NNN`): derived status, who is
+  awaited, outstanding counts, one line per finding (id, severity, status,
+  disposition, title) and a hint at the brief. Detail, response, route and
+  turns are not shown.
+- **Chosen findings** (`-f F-3`, or `-f 3,5`; repeatable): those findings in
+  full — detail, response, route and their turns.
+- **Everything** (`--full`): every finding in full, plus the brief.
+
+`--open`, `-s <status>` and `-S <severity>` narrow which findings show; a
+narrowed index says `N of M`. An out-of-vocabulary status reads as open and an
+out-of-vocabulary severity reads as blocker, so neither filter hides a
+malformed finding.
+
+Across reviews, `doctrine review findings` is the census: one row per finding
+(review, finding id, severity, status, facet, target, title). Bare, it lists
+every finding still open anywhere; `-a` or any `-s` reveals terminal ones,
+and `-S`, `--facet`, `--target` and `-r` narrow it. Note that `-f` on the
+census is the substring `--filter`, not a finding selector.
+
+**JSON.** `--json` carries the same view as the table, at the same depth:
+`{kind, review}`, where the review's `findings[]` holds `id, title,
+severity, status, disposition` and `route` (absent while unset); full depth adds
+`detail`, `response` and the finding's `turns`, and `--full` adds the brief
+as `body`. The census emits `{kind: "finding", rows}`, plus `warnings` and
+`unreadable` when a ledger is malformed or cannot be read — disclosed, never
+silently skipped. The MCP `review_show` and `review_findings` tools return the
+same shapes.
+
+At full depth a dispose turn's response appears twice — as the finding's
+`response` and inside that finding's turns. That is by design: the first is
+the current answer, the second the history.
+
 ## §5 — Synthesis + harvest
 
 When the findings are resolved, append a `## Synthesis` section to
@@ -321,8 +359,8 @@ than tree shape: every review write (`new`, the turn verbs — `raise`,
 `dispose`, `amend`, `verify`, `contest`, `reopen`, `withdraw`, `conclude` —
 `status`, `prime` and `unlock`) is refused in a dispatch worker process, one
 with `DOCTRINE_WORKER` set, and `new` refuses before allocating an id. Workers
-read with `review show` / `review list`; the orchestrator writes the ledger.
-Branch name plays no part. The turn baton is a cache in the resolved tree's
+read with `review show` / `review list` / `review findings`; the orchestrator
+writes the ledger. Branch name plays no part. The turn baton is a cache in the resolved tree's
 own gitignored state, rebuilt from the ledger wherever the review is next
 used.
 

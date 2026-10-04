@@ -42,11 +42,9 @@ Inputs:
 
     **Routed findings from the design review (provisional).**
     Before authoring phases, open the slice's design-review RV and read every
-    finding whose `route` is `demonstrate`, `probe` or `control`. The table view
-    of `review show` does not render the route — see
-    `lib:reference/review-ledger.md` § Route axis for how to read it: JSON
-    `.review.finding[].route`, MCP `findings[].route`, or an older ledger's
-    `route:` disposition prefix (`route:probe fix-now`, say). Each is an
+    finding whose `route` is `demonstrate`, `probe` or `control`. The index
+    view of `review show` does not render the route — see
+    `lib:reference/review-ledger.md` § Route axis for how to read it. Each is an
     obligation deliberately not repaired in prose. Its response carries a
     criterion sketch and a placement constraint: transcribe the sketch into an
     entry or exit criterion citing `RV-NNN F-n` inline in the criterion text, on

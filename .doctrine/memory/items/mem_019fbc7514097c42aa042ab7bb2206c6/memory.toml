@@ -6,7 +6,7 @@ status = "active"
 title = "Shell backticks silently mangle review dispose responses"
 summary = "Shell backticks in `doctrine review dispose --response` silently eat code-quoted spans, and the turn-based ledger makes it permanent — build the text in a file and invoke without a shell"
 created = "2026-08-01"
-updated = "2026-08-01"
+updated = "2026-10-04"
 
 [scope]
 paths = []

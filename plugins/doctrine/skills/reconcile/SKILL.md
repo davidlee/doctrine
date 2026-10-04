@@ -82,9 +82,10 @@ project's engagement default and the human's verbal changes.
 ### 1. Read inputs
 
 Read `review-NNN.md` for the `## Reconciliation Brief` section. Read finding
-status with `doctrine review show RV-NNN` — confirm **every finding is terminal**
-(`verified` / `withdrawn`) and the pass concluded (`doctrine review status
-RV-NNN` reads `done · await=none`). A finding still `open` / `answered` /
+status with `doctrine review show RV-NNN --open` — confirm **every finding is
+terminal** (`verified` / `withdrawn`; the index reads `findings: 0 of N`) and
+the pass concluded (`doctrine review status RV-NNN` reads `done · await=none`).
+A finding still `open` / `answered` /
 `contested`, or an unconcluded pass, is an incomplete audit — stop and hand back
 to `/audit`.
 
