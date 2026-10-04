@@ -20,7 +20,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/mcp_server/tools.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".agents/skills/**"
@@ -29,6 +29,82 @@ intent = "scope-relevant"
 [[selector]]
 selector = "install/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/review_ledger/view.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review_ledger/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review_ledger/gate.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review_ledger/derive.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review_ledger/vocab.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review/read.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review/census.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review/tests.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/show.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_review_golden.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_mcp_server.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/mcp-bridge.test.ts"
+intent = "design-target"
+
+[[selector]]
+selector = "install/review-ledger.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/design-prompts/reviewing.md"
+intent = "design-target"
+
+[[selector]]
+selector = ".agents/skills/plan/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = ".agents/skills/reconcile/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = ".agents/skills/audit/SKILL.md"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"
