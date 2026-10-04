@@ -6,10 +6,10 @@ use super::turn::{
     Baton, LockGuard, read_baton, reconcile_baton_fields, resolve_review_root, write_baton,
 };
 use super::{
-    Await, Column, Context, FindingRow, FindingStatus, Format, ListArgs, Path, PathBuf, REVIEW_DIR,
-    REVIEW_KIND, REVIEW_STATUSES, ReviewDoc, ReviewOutput, ReviewStatus, ReviewWarning, Serialize,
-    Severity, Target, Vocab, canonical_id, counters, derived_status, finding_states_of, fs,
-    listing, parse_ref, read_authored, read_review, read_reviews, warnings_of,
+    Await, Column, Context, FindingRow, Format, ListArgs, Path, PathBuf, REVIEW_DIR, REVIEW_KIND,
+    REVIEW_STATUSES, ReviewDoc, ReviewOutput, ReviewStatus, ReviewWarning, Serialize, Severity,
+    Target, Vocab, canonical_id, counters, derived_status, finding_states_of, fs, listing,
+    parse_ref, read_authored, read_review, read_reviews, warnings_of,
 };
 use crate::review_ledger::{
     Depth, FindingView, Outstanding, OutstandingCounts, Projection, ReviewView, TurnRow,
@@ -20,29 +20,14 @@ use crate::tomlfmt::toml_string;
 // Render (pure — user free-text spliced via `toml_string`, design §4/§5)
 // ---------------------------------------------------------------------------
 
-/// A finding as raised, for rendering. Raiser-owned fixed fields plus the
-/// responder-owned mutable pair; `status` is transition-graph-owned. The
-/// authored on-disk shape of a `[[finding]]` (design §5).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct Finding {
-    pub(crate) id: String,
-    pub(crate) status: Vocab<FindingStatus>,
-    pub(crate) severity: Vocab<Severity>,
-    pub(crate) title: String,
-    pub(crate) detail: String,
-    pub(crate) disposition: Option<String>,
-    /// Where the answer routes, set by `dispose`/`amend`. Absent on the wire
-    /// while unset, so an unrouted finding serialises as it always did.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) route: Option<String>,
-    pub(crate) response: Option<String>,
-}
-
-/// Render a single `[[finding]]` TOML block (design §5). Every user free-text
-/// field (`title`, `detail`, `disposition`, `response`) is emitted through
-/// `toml_string` so a `"`, `\`, newline, or `]` can neither break the document
-/// nor inject a key (mem.pattern.render.toml-splice-escape-user-values). The
-/// id/status/severity fields are closed vocabularies, rendered bare.
+/// Render a single `[[finding]]` TOML block (design §5), from the authored
+/// row (SL-278 PHASE-02b T11 — the `--json`/MCP typed [`Finding`] this once
+/// read is gone; the raw strings on [`FindingRow`] carry the same values).
+/// Every user free-text field (`title`, `detail`, `disposition`, `response`)
+/// is emitted through `toml_string` so a `"`, `\`, newline, or `]` can
+/// neither break the document nor inject a key
+/// (mem.pattern.render.toml-splice-escape-user-values). The id/status/
+/// severity fields are closed vocabularies, rendered bare.
 #[cfg_attr(
     not(test),
     expect(
@@ -50,16 +35,12 @@ pub(crate) struct Finding {
         reason = "read only by the review drift canaries / tests (SL-268 D4 split)"
     )
 )]
-pub(crate) fn render_finding(finding: &Finding) -> String {
+pub(crate) fn render_finding(finding: &FindingRow) -> String {
     let mut out = String::new();
     out.push_str("[[finding]]\n");
     push_line(&mut out, "id", &toml_string(&finding.id));
-    push_line(&mut out, "status", &toml_string(finding.status.as_str()));
-    push_line(
-        &mut out,
-        "severity",
-        &toml_string(finding.severity.as_str()),
-    );
+    push_line(&mut out, "status", &toml_string(&finding.status));
+    push_line(&mut out, "severity", &toml_string(&finding.severity));
     push_line(&mut out, "title", &toml_string(&finding.title));
     push_line(&mut out, "detail", &toml_string(&finding.detail));
     if let Some(disposition) = &finding.disposition {
@@ -97,8 +78,8 @@ fn edge_label(doc: &ReviewDoc) -> String {
 
 /// `doctrine review show <RV-NNN>` — read the RV and build its [`ReviewView`]
 /// ONCE under `projection` (SL-278 design sec-2), then render the readable
-/// table from the view (`Table`) or the faithful toml-as-data + brief (`Json`,
-/// unchanged until PHASE-02b). The status is DERIVED (review never asks the
+/// table (`Table`) or the one JSON envelope (`Json`), both off the same view
+/// (design sec-3/sec-4, B10). The status is DERIVED (review never asks the
 /// shared reader for a stored status, D-C8). The baton is read, never locked
 /// or written: it supplies only the legacy round counters.
 pub(crate) fn run_show(
@@ -141,22 +122,15 @@ pub(crate) fn run_show(
                 upper_pct,
             )
         }
-        Format::Json => show_json(&doc, &body, &view.warnings)?,
+        // SL-278 PHASE-02b (design sec-4, B10): the one JSON shape, straight off
+        // the view — no second, hand-mirrored `ShowJson` row.
+        Format::Json => serde_json::to_string_pretty(&serde_json::json!({
+            "kind": "review",
+            "review": &view,
+        }))
+        .context("failed to serialize review show JSON")?,
     };
-    Ok(ReviewOutput::Showed {
-        id,
-        canonical: view.canonical,
-        title: view.title,
-        status: view.status.as_str().to_owned(),
-        awaiting: view.awaiting.as_str().to_owned(),
-        facet: view.facet,
-        target: view.target,
-        findings_count: doc.finding.len(),
-        findings: doc.finding.iter().map(finding_of_row).collect(),
-        body,
-        warnings: view.warnings,
-        formatted,
-    })
+    Ok(ReviewOutput::Showed { view, formatted })
 }
 
 /// Read the `review-NNN.md` brief body (the prose companion).
@@ -177,23 +151,6 @@ fn warning_lines(warnings: &[ReviewWarning]) -> String {
 /// noise on the line a reader scans for the derived state.
 fn concluded_marker(concluded: bool) -> &'static str {
     if concluded { " · concluded" } else { "" }
-}
-
-/// One authored `[[finding]]` row → the typed [`Finding`] (the MCP/`--json` shape).
-/// No fallback (SL-268 D15): an out-of-vocabulary status or severity is carried
-/// as [`Vocab::Unknown`] with its raw string, so every render shows what the
-/// ledger says; the view's `warnings` disclose it.
-fn finding_of_row(row: &FindingRow) -> Finding {
-    Finding {
-        id: row.id.clone(),
-        status: Vocab::read(&row.status),
-        severity: Vocab::read(&row.severity),
-        title: row.title.clone(),
-        detail: row.detail.clone(),
-        disposition: row.disposition.clone(),
-        route: row.route.clone(),
-        response: row.response.clone(),
-    }
 }
 
 /// The em-dash rendered in the index's `disposition` column when a finding
@@ -427,31 +384,6 @@ pub(super) fn format_show(
         None => brief_hint(&view.canonical, view.body_lines.unwrap_or(0)),
     });
     parts.concat()
-}
-
-/// The faithful JSON `show` row — the toml-as-data plus the derived status (the
-/// one computed field surfaced; never stored) and the brief body.
-#[derive(Debug, Serialize)]
-struct ShowJson<'a> {
-    #[serde(flatten)]
-    doc: &'a ReviewDoc,
-    status: &'a str,
-    awaiting: &'a str,
-}
-
-/// Render the `Json` show under the shared `{kind, …}` envelope. A top-level
-/// `warnings` array rides beside it only when the ledger has a defect, so a clean
-/// ledger's JSON is unchanged.
-fn show_json(doc: &ReviewDoc, body: &str, warnings: &[ReviewWarning]) -> anyhow::Result<String> {
-    let (status, awaited) = doc.derived();
-    let row = ShowJson {
-        doc,
-        status: status.as_str(),
-        awaiting: awaited.as_str(),
-    };
-    let mut value = serde_json::json!({ "kind": "review", "review": row, "body": body });
-    with_warnings(&mut value, warnings)?;
-    serde_json::to_string_pretty(&value).context("failed to serialize review show JSON")
 }
 
 /// Attach a non-empty `warnings` array to a JSON object envelope (absent when

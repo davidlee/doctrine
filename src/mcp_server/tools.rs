@@ -140,7 +140,9 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "review_show".to_owned(),
-            description: "Show one review: derived status, the reviews edge, and the brief.\n\nReturns: {\"Showed\": { id: int, canonical: \"RV-NNN\", title: string, status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", facet: string, target: string, finding_count: int, findings: [{ id: \"F-N\", status: \"open\"|\"answered\"|\"contested\"|\"verified\"|\"withdrawn\", severity: \"blocker\"|\"major\"|\"minor\"|\"nit\", title: string, detail: string, disposition?: string|null, route?: string, response?: string|null }], body: string, warnings?: [{ rv: \"RV-NNN\", finding: \"F-N\", field: \"status\"|\"severity\", raw: string, effect: string }] }} — `route` (where the finding's answer routes: review|demonstrate|probe|control|dedupe|refresh) is absent when unset; `warnings` is absent unless the ledger holds an out-of-vocabulary status or severity. `view=summary` blanks `body` → `\"\"`, each finding's `detail` → `\"\"` and `response` → `null`.".to_owned(),
+            // SL-278 PHASE-02b: `id`/`body`/`view=summary` dropped — no longer
+            // true of the wire shape. PHASE-03 rewrites this properly.
+            description: "Show one review: derived status, the reviews edge, and the brief.\n\nReturns: {\"Showed\": { canonical: \"RV-NNN\", title: string, status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", facet: string, target: string, finding_count: int, findings: [{ id: \"F-N\", status: \"open\"|\"answered\"|\"contested\"|\"verified\"|\"withdrawn\", severity: \"blocker\"|\"major\"|\"minor\"|\"nit\", title: string, detail: string, disposition?: string|null, route?: string, response?: string|null }], warnings?: [{ rv: \"RV-NNN\", finding: \"F-N\", field: \"status\"|\"severity\", raw: string, effect: string }] }} — `route` (where the finding's answer routes: review|demonstrate|probe|control|dedupe|refresh) is absent when unset; `warnings` is absent unless the ledger holds an out-of-vocabulary status or severity.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -714,16 +716,10 @@ fn call_tool(
                 Some("json") => crate::listing::Format::Json,
                 _ => crate::listing::Format::Table,
             };
-            let summary = arguments.get("view").and_then(|v| v.as_str()) == Some("summary");
+            // SL-278 PHASE-02b: `view` is retired (PHASE-03 replaces the
+            // projection arguments); until then every call reads the index.
             let projection = crate::review_ledger::Projection::index();
-            let out = review::run_show(Some(root.to_path_buf()), &reference, &projection, fmt)
-                .map(|out| {
-                    if summary {
-                        project_show_summary(out)
-                    } else {
-                        out
-                    }
-                })?;
+            let out = review::run_show(Some(root.to_path_buf()), &reference, &projection, fmt)?;
             Ok(serde_json::to_string(&out)?)
         }
         "review_raise" => {
@@ -1594,53 +1590,6 @@ fn reject_stdin_sentinel(body: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Trim a `Showed` output to its summary projection (IMP-113 #2): blank the brief
-/// `body` and each finding's `detail`/`response` prose, keeping the finding
-/// skeleton (id / status / severity / title / disposition / route). Non-`Showed` outputs
-/// pass through. Applied MCP-side; the `run_show` engine is untouched.
-fn project_show_summary(out: ReviewOutput) -> ReviewOutput {
-    match out {
-        ReviewOutput::Showed {
-            id,
-            canonical,
-            title,
-            status,
-            awaiting,
-            facet,
-            target,
-            findings_count,
-            findings,
-            body: _,
-            warnings,
-            formatted,
-        } => {
-            let findings = findings
-                .into_iter()
-                .map(|f| review::Finding {
-                    detail: String::new(),
-                    response: None,
-                    ..f
-                })
-                .collect();
-            ReviewOutput::Showed {
-                id,
-                canonical,
-                title,
-                status,
-                awaiting,
-                facet,
-                target,
-                findings_count,
-                findings,
-                body: String::new(),
-                warnings,
-                formatted,
-            }
-        }
-        other => other,
-    }
-}
-
 /// The lean default row cap for `review_list` when the caller names none (IMP-114).
 const DEFAULT_REVIEW_LIST_LIMIT: usize = 50;
 
@@ -2134,42 +2083,6 @@ mod tests {
         );
     }
 
-    // IMP-113 #2: summary view drops the brief body + per-finding prose, keeps skeleton.
-
-    #[test]
-    fn project_show_summary_blanks_prose_keeps_skeleton() {
-        let out = ReviewOutput::Showed {
-            id: 1,
-            canonical: "RV-1".to_owned(),
-            title: "T".to_owned(),
-            status: "done".to_owned(),
-            awaiting: "none".to_owned(),
-            facet: "reconciliation".to_owned(),
-            target: "SL-1".to_owned(),
-            findings_count: 1,
-            findings: vec![sample_finding()],
-            body: "BIG BRIEF BODY".to_owned(),
-            warnings: vec![],
-            formatted: String::new(),
-        };
-        let ReviewOutput::Showed { body, findings, .. } = project_show_summary(out) else {
-            panic!("expected Showed");
-        };
-        assert!(body.is_empty(), "body should be blanked");
-        assert_eq!(findings.len(), 1);
-        assert!(
-            findings[0].detail.is_empty(),
-            "detail prose should be dropped"
-        );
-        assert!(
-            findings[0].response.is_none(),
-            "response prose should be dropped"
-        );
-        // skeleton retained
-        assert_eq!(findings[0].title, "t");
-        assert_eq!(findings[0].disposition.as_deref(), Some("tolerated"));
-    }
-
     // IMP-114: effective_cap resolves the lean default / explicit / 0=all escape.
 
     #[test]
@@ -2213,21 +2126,6 @@ mod tests {
         };
         assert_eq!(rows.len(), 3);
         assert_eq!(total, None);
-    }
-
-    fn sample_finding() -> crate::review::Finding {
-        crate::review::Finding {
-            id: "F-1".to_owned(),
-            status: crate::review_ledger::Vocab::Known(
-                crate::review_ledger::FindingStatus::Verified,
-            ),
-            severity: crate::review_ledger::Vocab::Known(crate::review_ledger::Severity::Minor),
-            title: "t".to_owned(),
-            detail: "long detail prose".to_owned(),
-            disposition: Some("tolerated".to_owned()),
-            route: None,
-            response: Some("long response prose".to_owned()),
-        }
     }
 
     fn row(id: &str) -> crate::review::ListRow {

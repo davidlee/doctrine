@@ -407,8 +407,8 @@ fn unknown_vocab_renders_verbatim_everywhere() {
         &run_show(p(), "RV-001", &Projection::index(), Format::Json).unwrap(),
     ))
     .unwrap();
-    assert_eq!(json["review"]["finding"][0]["severity"], "catastrophic");
-    assert_eq!(json["review"]["finding"][0]["status"], "zombie");
+    assert_eq!(json["review"]["findings"][0]["severity"], "catastrophic");
+    assert_eq!(json["review"]["findings"][0]["status"], "zombie");
 }
 
 /// EX-4 / VT-2: an out-of-vocabulary severity is disclosed on every review read
@@ -469,16 +469,17 @@ fn finding_status_terminal_set() {
 
 #[test]
 fn render_finding_escapes_hostile_free_text() {
-    let finding = Finding {
+    let finding = FindingRow {
         id: "F-1".to_owned(),
-        status: Vocab::Known(FindingStatus::Open),
-        severity: Vocab::Known(Severity::Major),
+        status: "open".to_owned(),
+        severity: "major".to_owned(),
         // A hostile title: a quote, a backslash, a newline, and a `]`.
         title: "a\"b\\c\nd]e".to_owned(),
         detail: "plain".to_owned(),
         disposition: None,
         route: None,
         response: None,
+        turn: Vec::new(),
     };
     let rendered = render_finding(&finding);
     // The rendered block must parse back as valid TOML with the value intact
@@ -493,15 +494,16 @@ fn render_finding_escapes_hostile_free_text() {
 
 #[test]
 fn render_finding_emits_responder_fields_when_present() {
-    let finding = Finding {
+    let finding = FindingRow {
         id: "F-2".to_owned(),
-        status: Vocab::Known(FindingStatus::Answered),
-        severity: Vocab::Known(Severity::Nit),
+        status: "answered".to_owned(),
+        severity: "nit".to_owned(),
         title: "t".to_owned(),
         detail: "d".to_owned(),
         disposition: Some("fixed".to_owned()),
         route: None,
         response: Some("done in r\"123".to_owned()),
+        turn: Vec::new(),
     };
     let rendered = render_finding(&finding);
     let parsed: toml::Value = toml::from_str(&rendered).unwrap();
@@ -4168,6 +4170,66 @@ fn golden_run_status() {
     };
     let rendered = print_review(&out);
     assert_eq!(rendered, formatted);
+}
+
+/// EX-5 / EX-6 / VT-1: the CLI JSON is the one shape straight off the view —
+/// `{"kind":"review","review":<ReviewView>}` (B10) — no second, hand-mirrored
+/// row. `review.findings` carries the typed findings (never the old
+/// `finding` name); the top-level `body`/`warnings` the old `ShowJson` wrote
+/// are gone (they sit inside `review`, flattened); `--full` carries
+/// `review.body`.
+#[test]
+fn show_json_is_one_shape_off_the_view() {
+    let tmp = fixture_rv();
+    let root = tmp.path();
+    run_raise(
+        Some(root.to_path_buf()),
+        &raise_args("RV-001", Severity::Minor, "t"),
+        Role::Raiser,
+    )
+    .unwrap();
+
+    let out = run_show(
+        Some(root.to_path_buf()),
+        "RV-001",
+        &Projection::index(),
+        Format::Json,
+    )
+    .unwrap();
+    let json: serde_json::Value = serde_json::from_str(&rendered(&out)).unwrap();
+    assert_eq!(
+        json.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["kind", "review"],
+        "{json}"
+    );
+    assert!(json["review"]["findings"].is_array(), "{json}");
+    assert!(json["review"].get("finding").is_none(), "{json}");
+    assert!(json.get("body").is_none(), "{json}");
+    assert!(json.get("warnings").is_none(), "{json}");
+    assert_eq!(json["review"]["depth"], "index");
+    assert!(json["review"]["body_lines"].is_u64(), "{json}");
+    assert!(
+        json["review"].get("body").is_none(),
+        "index carries no body: {json}"
+    );
+
+    let full_projection = Projection::parse(&ProjectionArgs {
+        full: true,
+        ..ProjectionArgs::default()
+    })
+    .unwrap();
+    let full = run_show(
+        Some(root.to_path_buf()),
+        "RV-001",
+        &full_projection,
+        Format::Json,
+    )
+    .unwrap();
+    let json: serde_json::Value = serde_json::from_str(&rendered(&full)).unwrap();
+    assert!(
+        json["review"]["body"].is_string(),
+        "--full carries body: {json}"
+    );
 }
 
 /// Golden: `run_show` with JSON format returns Showed with JSON-formatted string.

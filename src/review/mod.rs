@@ -21,7 +21,7 @@ use crate::kinds::{REVIEW_DIR, REVIEW_KIND};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::review_ledger::{
     Act, Await, Disposition, FINDING_STATUSES, Facet, FindingRow, FindingState, FindingStatus,
-    Projection, ProjectionArgs, REVIEW_STATUSES, ReviewDoc, ReviewMeta, ReviewStatus,
+    Projection, ProjectionArgs, REVIEW_STATUSES, ReviewDoc, ReviewMeta, ReviewStatus, ReviewView,
     ReviewWarning, Role, Route, Severity, Target, TurnFields, Vocab, admissible_from,
     append_finding, append_review_turn, apply_act, authored_path, can, canonical_id,
     clear_concluded, counters, derived_status, finding_states_of, finding_status_of,
@@ -37,7 +37,7 @@ mod verbs;
 
 pub(crate) use cli::ReviewCommand;
 pub(crate) use prime::{PrimeArgs, run_prime};
-pub(crate) use read::{Finding, ListRow, run_list, run_show, run_status};
+pub(crate) use read::{ListRow, run_list, run_show, run_status};
 pub(crate) use turn::run_unlock;
 pub(crate) use verbs::{
     AmendArgs, DisposeArgs, NewArgs, RaiseArgs, materialise_review_at, mint_review, resolve_role,
@@ -374,22 +374,13 @@ pub(crate) enum ReviewOutput {
         review_id: u32,
         already: bool,
     },
+    /// `doctrine review show` / MCP `review_show` (SL-278 PHASE-02b, design
+    /// sec-3/sec-4): the one [`ReviewView`] flattened onto the variant — no
+    /// second, hand-mirrored field list to keep in step with the engine's
+    /// view shape.
     Showed {
-        id: u32,
-        canonical: String,
-        title: String,
-        status: String,
-        awaiting: String,
-        facet: String,
-        target: String,
-        #[serde(rename = "finding_count")]
-        findings_count: usize,
-        findings: Vec<Finding>,
-        body: String,
-        /// Closed-vocabulary defects on this ledger (SL-268 D15) — absent on the
-        /// wire when there are none, so a clean ledger's output is unchanged.
-        #[serde(skip_serializing_if = "Vec::is_empty")]
-        warnings: Vec<ReviewWarning>,
+        #[serde(flatten)]
+        view: ReviewView,
         #[serde(skip)]
         formatted: String,
     },
