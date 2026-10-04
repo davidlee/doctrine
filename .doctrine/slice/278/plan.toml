@@ -1,0 +1,140 @@
+# Implementation plan for SL-278 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-278"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable. VT = test, VA = agent,
+# VH = human. Reference another phase's criterion phase-qualified (PHASE-03/EX-2).
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Engine view"
+objective = "Add the pure, engine-tier read model in src/review_ledger/view.rs — Projection, FindingFilter, ReviewView, FindingView, Outstanding — plus the tolerant scan_reviews reader, with no user-visible change (design sec-2, sec-5 § Tolerant scan)."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (run dr-01a0ffe6, revision 35); slice status plan or later." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/review_ledger/view.rs defines Depth, Selection, Projection (index, depth, parse), ProjectionArgs, FindingFilter (parse, admits), ReviewView (build), FindingView and Outstanding with the fields and serde attributes design sec-2 gives. It imports only review_ledger siblings, serde and leaf modules (ADR-001; tests/architecture_layering.rs green)." },
+  { id = "EX-2", text = "ReviewWarning and warnings_of move from src/review/read.rs into view.rs unchanged in wire shape; review imports them from review_ledger." },
+  { id = "EX-3", text = "effective_severity is extracted in gate.rs and outstanding_by_severity calls it; finding_await is extracted in derive.rs and derived_status calls it. Existing derive/gate tests stay green unchanged (behaviour-preservation gate)." },
+  { id = "EX-4", text = "ReviewStatus, Await and OutstandingCounts derive Serialize with lowercase tokens matching as_str; OutstandingCounts leaves the test-only export block." },
+  { id = "EX-5", text = "schema.rs gains UnreadableReview (Serialize, {rv, reason}) and scan_reviews, which errors only when the review directory itself cannot be listed. read_reviews is unchanged." },
+  { id = "EX-6", text = "Projection::parse and FindingFilter::parse split commas, normalise bare finding numbers to F-n, refuse unknown statuses/severities naming the vocabulary, and refuse finding ids combined with any filter." },
+  { id = "EX-7", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "view unit tests: index carries no prose; full carries detail verbatim and turns in file order; id selection order/normalisation; unknown id refused naming ids; finding+filter refused; unknown status open; unknown severity blocker; filters AND; header facts cover whole ledger; outstanding groups by awaited party; rounds read baton only when unjournalled", test_file = "src/review_ledger/view.rs", keywords = ["index_projection_carries_no_prose", "full_projection_carries_detail_verbatim", "selection_by_id_keeps_given_order_and_normalises_bare_numbers", "unknown_finding_id_is_refused_naming_valid_ids", "finding_with_filter_is_refused", "open_filter_treats_unknown_status_as_open", "severity_filter_treats_unknown_severity_as_blocker", "filters_and_together", "header_facts_cover_whole_ledger_under_a_filter", "outstanding_groups_by_awaited_party", "rounds_reads_baton_only_for_unjournalled_ledger"], waived = false },
+  { id = "VT-2", expects = "scan_reviews returns readable docs plus a named UnreadableReview for an unparseable ledger", test_file = "src/review_ledger/schema.rs", keywords = ["scan_reviews", "UnreadableReview", "scan_reviews_names_an_unparseable_ledger"], waived = false },
+  { id = "VT-3", expects = "extracted helpers are called by their former owners", test_file = "src/review_ledger/gate.rs", keywords = ["fn effective_severity", "effective_severity("], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "review show on the view"
+objective = "Render review show from ReviewView: the CLI projection flags, the index and full table renders, the unified CLI JSON, ReviewOutput::Showed { view }, and the doctrine show router on Projection::index() (design sec-3, sec-4)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete and committed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "review show takes -f/--finding, --full, --open, -s/--status, -S/--severity with the clap conflicts design sec-4 gives; dispatch builds ProjectionArgs and Projection::parse." },
+  { id = "EX-2", text = "run_show(path, reference, &Projection, format) reads the baton for legacy counters and builds the view once; table and CLI JSON both derive from it." },
+  { id = "EX-3", text = "The default table renders the status line with rounds and the concluded marker, raiser/responder, the outstanding line (or outstanding: none), findings N or N of M, the index with a route column only when a shown finding has a route, BLOCKER/MAJOR in capitals, warnings, tags/estimate/value lines, and the brief hint naming the review's id (design sec-3)." },
+  { id = "EX-4", text = "Full depth renders one block per shown finding with verbatim indented detail/response and the turn journal; the brief body appears only with --full." },
+  { id = "EX-5", text = "CLI JSON is {\"kind\":\"review\",\"review\":<ReviewView>}; review.finding, top-level body and top-level warnings are gone. ShowJson, show_json, with_warnings (show path), review::Finding and finding_of_row are deleted; render_finding retypes onto FindingRow." },
+  { id = "EX-6", text = "ReviewOutput::Showed is { #[serde(flatten)] view, #[serde(skip)] formatted }. project_show_summary and its tests are deleted here, since they rewrite review::Finding; until PHASE-03 the MCP review_show handler passes Projection::index() and ignores view." },
+  { id = "EX-7", text = "The doctrine show router passes Projection::index(); tests/e2e_show_equivalence.rs passes unchanged." },
+  { id = "EX-8", text = "src/review/tests.rs's review.finding pin moves to the view shape; tests/e2e_review_golden.rs is regenerated for the new default render and gains one full-depth golden. doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "render tests: default table lines, narrowed count, conditional route column, capital severities, brief hint; full-depth block layout; body only with --full; CLI JSON has no review.finding", test_file = "src/review/tests.rs", keywords = ["outstanding: none", "of 5", "BLOCKER", "brief:", "--full", "\"findings\""], waived = false },
+  { id = "VT-2", expects = "golden pins the new default render and a full-depth render", test_file = "tests/e2e_review_golden.rs", keywords = ["outstanding:", "--full", "\"-f\""], waived = false },
+  { id = "VA-1", text = "tests/e2e_show_equivalence.rs is green with no diff to the file in this phase (git diff on it is empty)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "MCP review_show on the projection"
+objective = "Give MCP review_show the CLI's projection arguments and index default, retire view and format, and pin one JSON shape across transports (design sec-4 § MCP, DEC-368, DEC-369)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete and committed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ExtractFields::str_list_field accepts a string or an array of strings and refuses any other JSON type or a non-string member, naming the argument." },
+  { id = "EX-2", text = "review_show's schema has reference, finding, full, open, status, severity; view and format are gone; the handler builds ProjectionArgs, calls Projection::parse, and passes Format::Json. The tool description states the index default and the full-depth fields." },
+  { id = "EX-3", text = "No trace of view=summary remains in the schema, description, or handler (project_show_summary went in PHASE-02)." },
+  { id = "EX-4", text = "One test asserts cli_json[\"review\"] == mcp_json[\"Showed\"] as serde_json::Value for index, -f, --full and a filter." },
+  { id = "EX-5", text = "tests/e2e_mcp_server.rs review_show cases move to the new shape: index default; finding as string and as array select the same findings; a non-string member is refused; full; finding with open refused. doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "one-shape equality across CLI JSON and MCP for four projections", test_file = "src/mcp_server/tools.rs", keywords = ["cli_json_and_mcp_show_carry_identical_view", "str_list_field"], waived = false },
+  { id = "VT-2", expects = "MCP e2e covers the projection arguments and refusals", test_file = "tests/e2e_mcp_server.rs", keywords = ["review_show", "\"finding\"", "\"full\"", "\"open\""], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Census and list"
+objective = "Add doctrine review findings and MCP review_findings over the shared FindingFilter and listing text axes; move review list onto scan_reviews with unreadable disclosure; add --facet to list and census (design sec-5, DEC-365, DEC-370)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete and committed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/review/census.rs defines CensusRow, CENSUS_COLUMNS (default review, id, severity, status, target, title) and run_findings; finding axes go through FindingFilter::parse/admits with open = !all && statuses.is_empty(); listing::retain sees only the text axes with an is_hidden that hides nothing." },
+  { id = "EX-2", text = "The census filter key is canonical = review id, slug = finding id, title = finding title, tags = review tags; help states the regex and substring domains." },
+  { id = "EX-3", text = "review findings flattens CommonListArgs and adds -S/--severity, --facet, --target; review list gains --facet. ReviewCommand::Findings is classified Read in src/commands/guard.rs." },
+  { id = "EX-4", text = "review list and review findings read through scan_reviews; unreadable reviews print warning: RV-NNN unreadable: <reason> on stderr and appear as unreadable [{rv, reason}] in JSON and MCP, absent when empty. Vocabulary warnings behave as review list's do today." },
+  { id = "EX-5", text = "CLI JSON is {\"kind\":\"finding\",\"rows\":[…]} with the kind token a named constant. ReviewOutput gains FindingsListed; Listed gains unreadable." },
+  { id = "EX-6", text = "MCP review_findings (substr, regexp, status, tags, all, severity, facet, target, limit) returns {\"FindingsListed\":…}; review_list gains facet; project_list_cap serves both listed variants; tests/mcp-bridge.test.ts lists review_findings. doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "census tests: default hides terminal and shows unknown status; -a/-s reveal; -S/--facet/--target narrow; anchored regex on each id; census and show agree on finding axes; unreadable review tolerated and disclosed (census and list); JSON envelope", test_file = "src/review/tests.rs", keywords = ["census_regex_matches_each_id_anchored", "census_and_show_agree_on_finding_axes", "census_survives_an_unreadable_review", "list_survives_an_unreadable_review", "\"finding\""], waived = false },
+  { id = "VT-2", expects = "worker guard classifies review findings as read", test_file = "src/commands/guard.rs", keywords = ["ReviewCommand::Findings", "review_findings_classifies_as_read"], waived = false },
+  { id = "VT-3", expects = "MCP review_findings cap and total; review_list facet", test_file = "tests/e2e_mcp_server.rs", keywords = ["review_findings", "FindingsListed", "\"facet\""], waived = false },
+  { id = "VT-4", expects = "bridge tool list carries review_findings", test_file = "tests/mcp-bridge.test.ts", keywords = ["review_findings"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Guidance sweep"
+objective = "Bring shipped guidance and memories onto the new read surface, and check the token budget of the default render (design sec-6, sec-8 § Token budget)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete and committed; the read surface is final." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/review-ledger.md has a read-surface section (depth, -f/--full, filters, census, JSON shape) and its route paragraph points at review show -f and findings[].route. It cites only client-resolvable addresses (ADR-024)." },
+  { id = "EX-2", text = ".agents/skills/plan/SKILL.md drops the restated JSON path and points at lib:reference/review-ledger.md (ADR-005); install/design-prompts/reviewing.md's read-back uses review show <RV> -f F-n; reconcile and audit skill wording checked against the index default. Mirrors regenerated by doctrine install, not hand-edited." },
+  { id = "EX-3", text = "mem.pattern.design-run.review-disposition-route-and-vocab and mem.pattern.doctrine.review-response-shell-backtick-mangling name review show -f as the read-back." },
+  { id = "EX-4", text = "No shipped file still cites review.finding, view=summary, or show --json as the way to read detail (grep with a positive control). doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "reference doc documents the new surface", test_file = "install/review-ledger.md", keywords = ["review findings", "--full", "-f F-", "findings[].route"], waived = false },
+  { id = "VT-2", expects = "reviewing prompt reads back with -f", test_file = "install/design-prompts/reviewing.md", keywords = ["-f F-n"], waived = false },
+  { id = "VA-1", text = "Measure the default review show of a five-finding ledger, table and JSON, against RFC-032 D5's ~200-token budget; record the counts in notes.md." },
+]
+specs        = []
+requirements = []
