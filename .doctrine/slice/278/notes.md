@@ -61,10 +61,22 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-10-05 · audit · 9956513ef
 
 ### Produced
+- PHASE-01..05 done — engine `ReviewView`, `review show` depth/filters, one
+  JSON shape, MCP projection args, `review findings` census, guidance
+  (593f3ca8d..26a5d7eaf, fix 76af61401)
+- RV-417 audit fixes — MCP tool-text ADR-024 guard, route-column guidance,
+  disclosure e2e (cbf93a07c)
+- minted: ISS-518 — MCP unknown finding id answers -32603; CHR-177 —
+  repo-private example ids in CLI review help; CHR-176 — bridge test under bun
+  + `just test-bridge` in gate (2026-10-05)
 
 ### Learned
+- mem.pattern.test.bridge-ts-under-bun — the TS bridge test runs under `bun test`
+- mem.fact.doctrine.agents-skill-mirror-is-published-source — reconfirmed by
+  RV-417 F-2; the plan cited mirrors as selectors despite it
 
 ### Open
+- none
