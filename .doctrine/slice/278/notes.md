@@ -16,6 +16,28 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
   `cli_json_and_mcp_show_carry_identical_view`) during execution than by
   another reading.
 
+## Execution decisions (lifted from phase sheets at audit)
+
+- PHASE-02 split 2a (table) / 2b (JSON) — the only cut that compiles between.
+  2b dropped the false `id`/`body`/`view=summary` sentences from the
+  `review_show` description early so the interim commit told the truth.
+- PHASE-03: retired MCP `view`/`format` args are ignored, not refused (design
+  sec-4; e2e pins an old caller still gets the index). Caller-input refusals
+  carry the `invalid arguments:` prefix → -32602. Unknown finding id stays
+  plain `anyhow` → -32603 (ISS-518); wrapping `run_show` would break the
+  `NotFound` downcast.
+- PHASE-04 split 04a (list on `scan_reviews`, `--facet`, vocab public) / 04b
+  (census), list first so the census only adds code onto list's target/facet
+  predicate and unreadable plumbing.
+- 04a: `Listing` is a named struct, not a tuple; `with_warnings` generalised
+  to `with_array<T>`; `cap_tail<T>` is the shared row cap (unreadable rides
+  uncapped). The MCP description splices `FINDING_STATUSES`/`SEVERITIES`
+  between plain `&str` segments rather than escaping braces in a `format!`
+  literal; a test asserts every status and severity appears.
+- 04b: census substring filter (`retain`) matches finding id + title, not the
+  review slug; help says so. Census severity cells go through the shared
+  `severity_cell` so capitals agree with `show`.
+
 ## Token budget (PHASE-05 VA-1)
 
 - 2026-10-05 · `review show RV-012` (five findings, default depth), bytes/4
@@ -28,6 +50,14 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 - **Accepted by the user** (2026-10-05: "accept it, unless there's an obvious
   way to reduce the token count without omitting important information") —
   no obvious lossless reduction found.
+
+## Close-time actions
+
+- After SL-278 is pushed: `doctrine install -s plan -s reconcile`, then
+  `grep -n 'review.finding\b\|does not render the route' .agents/skills/plan/SKILL.md`
+  must be empty (RV-417 F-2). Install sources skills from the published repo.
+- `doctrine check gate` on the landing tree; expect only the known git-guard
+  set in the jail (RV-417 Synthesis).
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
