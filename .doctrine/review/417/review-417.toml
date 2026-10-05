@@ -10,6 +10,14 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Conformance audit of SL-278 PHASE-01..05 (593f3ca8d..76af61401, 26a5d7eaf) on edge against the locked design (DEC-361..370), plan EX/VT/VA criteria, ADR-001/ADR-024/STD-001/STD-003. Evidence: slice conformance; check gate (25 known git-guard unit failures only); all integration suites run separately (4050 pass, 1 known); just test-bridge 22/22; adversarial pass by codex gpt-6-sol (F-1..F-5), fixes in cbf93a07c verified by the raiser. F-4 routes to reconcile via the brief; F-2 tolerated pending publication.
+"""
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-278"
