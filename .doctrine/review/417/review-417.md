@@ -83,3 +83,34 @@ CHR-177 (CLI help example ids) are open follow-ups outside this slice.
 
 ### Governance/spec (REV)
 - none.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- Selector registry (F-4): removed design-targets
+  `.agents/skills/{plan,reconcile,audit}/SKILL.md`; added design-targets
+  `plugins/doctrine/skills/{plan,reconcile}/SKILL.md`,
+  `tests/e2e_subcommand_help.rs`, and the two memory item dirs
+  (`mem_019fbc75…/**`, `mem_01a0d91d…/**`). `slice conformance`: undelivered
+  0; remaining undeclared are observation records and `slice-278.toml`
+  (bookkeeping).
+- design.md sec-6/sec-7 (F-4): guidance targets are the
+  `plugins/doctrine/skills/*` masters; `.agents/skills/*` and `.pi/` are
+  installed mirrors regenerated after landing (F-2); audit skill held as
+  written; code-impact row for `tests/e2e_subcommand_help.rs`.
+
+### REVs completed
+- REV-070 (`reconcile-sl-278`): done — SPEC-032 gains a Read surface section
+  (view, depth, selection, filter predicate, census, tolerant scan); overview,
+  fail-safe, disclosure table, command family and Decisions updated; the false
+  "`show --json` carries the whole ledger" removed. Not driven by a finding:
+  the brief listed no REV, but SL-278 scope and design sec-6 committed this
+  revision at reconcile; caught against the design. Rationale in
+  revision-070.md.
+
+### Withdrawn / tolerated
+- F-2: tolerated — installed `.agents/skills/*` mirrors regenerate from the
+  published repo after landing.
+- F-1, F-3, F-5: fixed at audit (cbf93a07c); no reconcile write.
+
+Reconcile pass complete — handoff to /close.

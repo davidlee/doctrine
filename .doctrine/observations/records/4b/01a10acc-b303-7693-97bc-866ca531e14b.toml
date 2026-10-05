@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a10acc-b303-7693-97bc-866ca531e14b"
+recorded_at = "2026-10-05T06:42:29.763695668Z"
+kind = "friction"
+summary = "reconcile SL-278: RV-417 brief says 'Governance/spec (REV): none' but scope + design sec-6 commit to a SPEC-032 read-surface REV at reconcile"
+detail = "Audit brief omitted a design-committed governance obligation; reconcile had to cross-check slice-278.md:102 and design.md:654 to catch it. The brief is the sole handoff, so an omission there silently drops planned REV work."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

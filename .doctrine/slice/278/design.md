@@ -635,14 +635,17 @@ The census row's `kind` token is `"finding"`, a named constant beside
   filters, the census, and the JSON shape. The route paragraph (`:246-248`)
   points at `review show RV-NNN -f F-n` and `findings[].route` in the unified
   shape.
-- `.agents/skills/plan/SKILL.md:46-48` — drop the restated JSON path; point at
-  `install/review-ledger.md` (ADR-005: skills route, docs explain). The `.pi/`
-  and `plugins/` copies are regenerated, not hand-edited.
+- `plugins/doctrine/skills/plan/SKILL.md:46-48` — drop the restated JSON path;
+  point at `install/review-ledger.md` (ADR-005: skills route, docs explain).
+  `plugins/doctrine/skills/*` are the masters; `.agents/skills/*` and `.pi/`
+  are installed mirrors, regenerated from the published repo after landing
+  (RV-417 F-2), never hand-edited.
 - `install/design-prompts/reviewing.md:165` — "read your response back with
   `review show <RV> -f F-n`", which now shows `response` directly.
-- `.agents/skills/reconcile/SKILL.md:85` and `.agents/skills/audit/SKILL.md:42`
-  — check the wording still holds against the index default; `--open` is the
-  natural "is every finding terminal" read for reconcile.
+- `plugins/doctrine/skills/reconcile/SKILL.md:85` and
+  `plugins/doctrine/skills/audit/SKILL.md:42` — check the wording against the
+  index default; reconcile adopts `--open` as the "is every finding terminal"
+  read; audit held as written.
 
 ### Memories
 
@@ -682,7 +685,8 @@ not edit the spec directly; ADR-013 routes governance change through a REV.
 | `tests/e2e_review_golden.rs` | goldens regenerated for the new default render. |
 | `tests/e2e_mcp_server.rs` | `review_show` cases move to the new arguments and shape; `review_findings` added; tool-list count. |
 | `tests/mcp-bridge.test.ts` | tool-name list gains `review_findings`. |
-| `install/review-ledger.md`, `install/design-prompts/reviewing.md`, `.agents/skills/{plan,reconcile,audit}/SKILL.md` | guidance sweep (sec-6). |
+| `install/review-ledger.md`, `install/design-prompts/reviewing.md`, `plugins/doctrine/skills/{plan,reconcile}/SKILL.md` | guidance sweep (sec-6). |
+| `tests/e2e_subcommand_help.rs` | help-text pin for `review list --facet`. |
 
 Untouched: the ledger schema types, every write verb, `listing.rs` (the census
 rides its existing seams).

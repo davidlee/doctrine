@@ -17,14 +17,15 @@ The container splits along the ADR-001 tier line into two top-level modules:
 - **`review_ledger`** (engine tier) is the ledger itself. It holds the closed
   vocabularies (`vocab`), the authored schema and its readers (`schema`), the
   derived status, counters and vocabulary defects (`derive`), the act table and
-  its edit-preserving writes (`transition`), and the predicates other kinds gate
-  on (`gate`). It reaches only leaf modules (`kinds`, `listing`, `estimate`,
+  its edit-preserving writes (`transition`), the read projection every review
+  read renders (`view`), and the predicates other kinds gate on (`gate`). It reaches only leaf modules (`kinds`, `listing`, `estimate`,
   `value`) and engine modules (`entity`, `relation`), so engine-tier consumers
   can import it. The name keeps it apart from `ledger`, the dispatch run-ledger.
 - **`review`** (command tier) is the `doctrine review` surface over it: clap
   parsing and prose resolution (`cli`), the turn guard with its baton and lock
   (`turn`), the mint and write verbs (`verbs`), `show`, `list` and `status`
-  (`read`), the reviewer-context cache (`prime`), and the structured
+  (`read`), the cross-review findings census (`census`), the reviewer-context
+  cache (`prime`), and the structured
   `ReviewOutput` and `ReviewError` types (`mod`).
 
 Both are registered in the ADR-001 layering map (`review_ledger = "engine"`,
@@ -314,8 +315,8 @@ never substitutes a known value for it, and never lets it weaken a gate.
 - **`Vocab<T>`** is `Known(T)` or `Unknown(raw)`. `Vocab::read` classifies an
   authored string, `as_str` renders the known token or the raw string verbatim,
   and serialisation writes the rendered token, so `--json` and MCP readers see
-  what the ledger says. The typed `review::Finding` projection used by `show`,
-  the finding index, `--json` and MCP carries `status` and `severity` as
+  what the ledger says. The `review_ledger::FindingView` projection used by
+  `show`, the census, `--json` and MCP carries `status` and `severity` as
   `Vocab`, with no `Open` or `Major` fallback.
 - **Unknown status** reads **non-terminal**. It keeps its review `active`
   (await responder), counts toward every blocker predicate, and admits **no
@@ -341,7 +342,7 @@ surface renders it through `VocabDefect::describe` or `warning_line` (prefix
 | surface | channel |
 |---|---|
 | `review show`, `review status` | a `warning:` line per defect in the text output; a `warnings` array (`review::ReviewWarning`) in JSON and MCP output, absent when there are none |
-| `review list` | a `warnings` array across the listed RVs, in id order and never capped. The CLI writes it to stderr so the table cells stay single-valued; `--json` and MCP `review_list` carry it as a field |
+| `review list`, `review findings` | a `warnings` array across the listed RVs, in id order and never capped. The CLI writes it to stderr so the table cells stay single-valued; `--json` and MCP `review_list` carry it as a field |
 | slice close gate | `BlockerRef.reason`, printed beside the refused finding |
 | cross-kind catalog | `derived_status_string` returns the status with its defects, and `catalog::scan` pushes one warning `CatalogDiagnostic` per defective RV. Most catalog callers do not surface warning diagnostics yet (ISS-492), so on that path the disclosure is emitted but not yet shown |
 | design run | `PassFacts.defects`, which no predicate reads; the design command prints a `warning:` line per defect wherever it reads `PassFacts` |
@@ -373,10 +374,10 @@ refuses while any `BlockerRef` is returned, naming each `RV-NNN/F-n` and its
 
 ## Write surface
 
-The command family is `review new | list | show | raise | dispose | amend |
-verify | contest | reopen | withdraw | conclude | status | prime | unlock |
-paths` (`review::ReviewCommand`). The MCP server exposes `review_new`,
-`review_list`, `review_show`, `review_raise`, `review_dispose`, `review_amend`,
+The command family is `review new | list | show | findings | raise | dispose |
+amend | verify | contest | reopen | withdraw | conclude | status | prime |
+unlock | paths` (`review::ReviewCommand`). The MCP server exposes
+`review_new`, `review_list`, `review_show`, `review_findings`, `review_raise`, `review_dispose`, `review_amend`,
 `review_verify`, `review_contest`, `review_reopen`, `review_withdraw`,
 `review_conclude`, `review_status` and `review_prime`. Both adapters call the
 same `run_*` function per act, so there is one write function per act.
@@ -403,10 +404,51 @@ same `run_*` function per act, so there is one write function per act.
   deserialises as empty and refuses with `NoteRequired`.
 - **`list --target`** takes the same `REF@PHASE-NN` spelling. A bare ref matches
   every phase scope on that subject, and the phase spelling narrows to one.
-- **`show`** renders the derived status, the `reviews` edge, a finding index and
-  the brief. `show --json` carries the whole ledger, journals included.
+- **`show`** renders one `ReviewView` (see Read surface).
   `status` reports the derived status, await, finding count, rounds, the
   concluded marker when set, and the cache verdict.
+
+## Read surface
+
+Every read of one review renders one view. `review_ledger::view` builds a
+`ReviewView` from a `ReviewDoc` and a `Projection`, purely; the `review show`
+table, `review show --json`, `doctrine show RV-N` and MCP `review_show` all
+render that one value, so there is no second read shape.
+
+- **Header.** Canonical id, title, facet, derived status and await, the
+  `reviews`-edge label, raiser and responder, rounds, the concluded marker,
+  tags, `finding_count`, and `outstanding` (non-terminal findings by effective
+  severity). Header facts cover the whole ledger, whatever the selection.
+- **Depth.** `Depth::Index` carries each selected finding's id, severity,
+  status, disposition, route and title, and no prose. `Depth::Full` adds
+  `detail`, `response` and `turns`, never truncated. A projection is full when
+  `--full` is given or findings are selected by id; only `--full` carries the
+  brief body.
+- **Selection.** `Selection::Ids` (`-f/--finding`: `F-n` or bare `n`,
+  comma-separated, deduped, order kept) or `Selection::Filtered` (a
+  `FindingFilter` of `--open`, `-s` status and `-S` severity, ANDed; an empty
+  filter admits every finding). Ids and filters are exclusive.
+  `Projection::parse` is the single validation point, so the CLI and MCP refuse
+  alike. A narrowed index says how many of the ledger's findings it shows.
+- **Filter predicate.** `FindingFilter::admits`: `--open` keeps non-terminal
+  findings, and an out-of-vocabulary status counts as non-terminal. Severity
+  matches through `gate::effective_severity`, so an unknown severity filters as
+  a blocker, exactly as the close gate classifies it.
+- **Default.** `doctrine show RV-N` and a bare `review show` render
+  `Projection::index()`: every finding at index depth, no body.
+
+**Findings census.** `review findings` (MCP `review_findings`) lists findings
+across every review, one `CensusRow` per finding, through the shared `listing`
+table and JSON envelope. It applies the same `FindingFilter` as `show`. Bare,
+it hides verified and withdrawn findings; `-a` or any `-s` reveals them. It
+narrows by review facet, `--target` (the `list --target` spelling), tag, regex
+and substring. `review list` takes the same `--facet`.
+
+**Tolerant scan (STD-003).** `schema::scan_reviews` reads every ledger and
+returns the unparseable ones as `UnreadableReview { rv, reason }` instead of
+failing the walk. `review list` and `review findings` write a `warning:` line
+per unreadable RV to stderr and, in JSON and MCP output, carry an `unreadable`
+array. The slice close gate keeps the fail-closed `read_reviews`.
 
 ## Prime
 
@@ -479,3 +521,7 @@ no `domain_map`: the cache is the selector model alone.
   directly.
 - **DEC-319**: an unknown RV vocabulary value warns at the read site, on each
   surface's own channel.
+- **SL-278** (DEC-361..DEC-370): one engine-owned view for every review read;
+  the depth, selection and filter semantics above; the census shares the
+  `show` filter; an unreadable ledger is disclosed, not skipped, while the
+  close gate stays fail-closed.

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a10acc-b307-7e52-aaa4-487de8396ab0"
+recorded_at = "2026-10-05T06:42:29.767491101Z"
+kind = "friction"
+summary = "reconcile SL-278: skill step 1 uses 'review show --open', which the PATH doctrine (~/.cargo/bin) rejects"
+detail = "The flag ships in SL-278 itself; the installed binary predates it. Fell back to ./target/debug/doctrine. Skill text runs ahead of the installed binary until release."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
