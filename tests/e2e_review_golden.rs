@@ -3226,3 +3226,43 @@ fn raise_literal_empty_detail_refused_ledger_unchanged() {
     assert_eq!(stderr(&out), "Error: --detail must not be empty\n");
     assert_eq!(ledger(dir.path(), 1), before);
 }
+
+/// STD-003 at the process boundary: a malformed sibling ledger never hides
+/// the readable rows and is disclosed on both CLI channels — the
+/// `warning: RV-NNN unreadable: <reason>` stderr line on the table and the
+/// `unreadable` array under `--json` — for `review list` and the census.
+#[test]
+fn list_and_findings_disclose_an_unreadable_review_on_stderr_and_json() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_one_finding(root, "open");
+    seed_review(root, 2, "not = [valid", "# brief\n");
+
+    for verb in ["list", "findings"] {
+        let out = run(root, &[verb]);
+        assert!(out.status.success(), "{verb}: {}", stderr(&out));
+        assert!(
+            stdout(&out).contains("RV-001"),
+            "{verb} keeps the readable row"
+        );
+        assert!(
+            stderr(&out).contains("warning: RV-002 unreadable: "),
+            "{verb} discloses on stderr: {}",
+            stderr(&out)
+        );
+
+        let out = run(root, &[verb, "--json"]);
+        assert!(out.status.success(), "{verb} --json: {}", stderr(&out));
+        let json: serde_json::Value = serde_json::from_str(&stdout(&out)).unwrap();
+        assert_eq!(
+            json["rows"].as_array().map(Vec::len),
+            Some(1),
+            "{verb}: {json}"
+        );
+        let unreadable = json["unreadable"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{verb} --json carries unreadable: {json}"));
+        assert_eq!(unreadable.len(), 1, "{verb}: {json}");
+        assert_eq!(unreadable[0]["rv"], "RV-002");
+    }
+}

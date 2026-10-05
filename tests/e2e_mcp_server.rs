@@ -2783,3 +2783,61 @@ fn review_findings_caps_and_narrows() {
 
     kill(child);
 }
+
+/// STD-003 over MCP: `review_findings` keeps the readable RV's rows and names
+/// a malformed sibling ledger in `FindingsListed.unreadable`.
+#[test]
+fn review_findings_carries_unreadable() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    seed_slice(root, 1, "Test Slice", "test-slice");
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+    let _ = call(
+        &mut stdin,
+        &mut reader,
+        "initialize",
+        Some(&serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": { "name": "test", "version": "1.0" }
+        })),
+    );
+    let mut tool = |name: &str, args: Value| -> Value {
+        let params = tools_call_params(name, args);
+        call(&mut stdin, &mut reader, "tools/call", Some(&params))
+    };
+
+    let resp = tool(
+        "review_new",
+        serde_json::json!({ "facet": "design", "target": "SL-001" }),
+    );
+    assert!(resp.get("error").is_none(), "review_new: {resp:?}");
+    let resp = tool(
+        "review_raise",
+        serde_json::json!({ "reference": "RV-001", "severity": "major", "title": "t", "detail": "d" }),
+    );
+    assert!(resp.get("error").is_none(), "review_raise: {resp:?}");
+
+    fs::create_dir_all(root.join(".doctrine/review/002")).unwrap();
+    fs::write(
+        root.join(".doctrine/review/002/review-002.toml"),
+        "not = [valid",
+    )
+    .unwrap();
+
+    let resp = tool("review_findings", serde_json::json!({}));
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).unwrap();
+    let listed = &out["FindingsListed"];
+    assert_eq!(listed["rows"].as_array().expect("rows").len(), 1, "{out}");
+    let unreadable = listed["unreadable"].as_array().expect("unreadable");
+    assert_eq!(unreadable.len(), 1, "{out}");
+    assert_eq!(unreadable[0]["rv"], "RV-002");
+
+    kill(child);
+}

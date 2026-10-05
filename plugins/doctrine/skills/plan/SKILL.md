@@ -43,8 +43,8 @@ Inputs:
     **Routed findings from the design review (provisional).**
     Before authoring phases, open the slice's design-review RV and read every
     finding whose `route` is `demonstrate`, `probe` or `control`. The index
-    view of `review show` does not render the route — see
-    `lib:reference/review-ledger.md` § Route axis for how to read it. Each is an
+    view of `review show` shows a `route` column; read each routed finding's
+    response with `-f` — see `lib:reference/review-ledger.md` § Route axis. Each is an
     obligation deliberately not repaired in prose. Its response carries a
     criterion sketch and a placement constraint: transcribe the sketch into an
     entry or exit criterion citing `RV-NNN F-n` inline in the criterion text, on

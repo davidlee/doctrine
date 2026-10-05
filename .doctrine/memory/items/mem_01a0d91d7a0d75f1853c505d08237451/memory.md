@@ -15,7 +15,7 @@ X
 
 **`owner-fix` is retired** (SL-270, DEC-330): split into `dedupe` (two live accounts of one fact) and `refresh` (a record lags the thing it describes). Writing it is refused; a ledger that already holds it still reads verbatim.
 
-**Reading it back:** the index view of `review show` does not render the route. Use `doctrine review show RV-NNN -f F-n` (full depth renders the route), or JSON `findings[].route` — CLI `--json` and MCP `review_show` alike, absent while unset. An older ledger still shows the legacy `route:` prefix inside its disposition string, which reads verbatim.
+**Reading it back:** the index view of `review show` adds a `route` column when any shown finding has one. Read a routed finding's obligation with `doctrine review show RV-NNN -f F-n`; JSON carries `findings[].route` — CLI `--json` and MCP `review_show` alike, absent while unset. An older ledger still shows the legacy `route:` prefix inside its disposition string, which reads verbatim.
 
 Minor/nit findings take the disposition alone.
 

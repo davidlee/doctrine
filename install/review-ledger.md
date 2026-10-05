@@ -243,10 +243,11 @@ did; the route records what instrument can settle the finding. The CLI refuses a
 `route:` prefix inside `--disposition`, and omitting `--route` keeps the
 finding's current route.
 
-The index view of `review show` renders the disposition, not the route: read it
-with `doctrine review show RV-NNN -f F-n` (full depth renders the route), or
-from JSON `findings[].route` — CLI `--json` and MCP `review_show` alike, absent
-while unset (see Reading the ledger). An older
+The index view of `review show` adds a `route` column whenever any shown
+finding carries one; JSON carries it as `findings[].route` — CLI `--json` and
+MCP `review_show` alike, absent while unset. The obligation a route names lives
+in the response, so read a routed finding with `doctrine review show RV-NNN -f
+F-n` (see Reading the ledger). An older
 ledger carries the route as a `route:` prefix inside its disposition string,
 which still reads verbatim.
 

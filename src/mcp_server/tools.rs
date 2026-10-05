@@ -89,7 +89,7 @@ fn quoted_union(values: &[&str]) -> String {
 fn review_show_description() -> String {
     let severity_union = quoted_union(crate::review_ledger::SEVERITIES);
     let status_union = quoted_union(crate::review_ledger::FINDING_STATUSES);
-    let head = "Show one review projected to a chosen depth (design SL-278 sec-2): by default every finding at index depth (identity + status, no prose); `finding` selects exact findings in full; `full` additionally carries the brief body; `open`/`status`/`severity` narrow the index by filter. `finding` cannot combine with `open`/`status`/`severity` (refused: \"--finding selects exact findings; drop --open/-s/-S\").\n\nReturns: {\"Showed\": { canonical: \"RV-NNN\", title: string, facet: string, status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", target: string, raiser: string, responder: string, rounds: int, concluded: bool, tags?: [string], depth: \"index\"|\"full\", finding_count: int, outstanding: { responder: {blocker,major,minor,nit: int}, raiser: {blocker,major,minor,nit: int} }, findings: [{ id: \"F-N\", severity: ";
+    let head = "Show one review projected to a chosen depth: by default every finding at index depth (identity + status, no prose); `finding` selects exact findings in full; `full` additionally carries the brief body; `open`/`status`/`severity` narrow the index by filter. `finding` cannot combine with `open`/`status`/`severity` (refused: \"--finding selects exact findings; drop --open/-s/-S\").\n\nReturns: {\"Showed\": { canonical: \"RV-NNN\", title: string, facet: string, status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", target: string, raiser: string, responder: string, rounds: int, concluded: bool, tags?: [string], depth: \"index\"|\"full\", finding_count: int, outstanding: { responder: {blocker,major,minor,nit: int}, raiser: {blocker,major,minor,nit: int} }, findings: [{ id: \"F-N\", severity: ";
     let mid = ", status: ";
     let tail = ", disposition?: string, route?: string, title: string, detail?: string, response?: string, turns?: [{act, role, note?, disposition?, route?, response?}] }], body?: string, body_lines?: int, warnings?: [{ rv: \"RV-NNN\", finding: \"F-N\", field: \"status\"|\"severity\", raw: string, effect: string }] }} — `detail`/`response`/`turns` on a finding, and the top-level `body`, appear only at full depth (`finding` selection or `full: true`); `body` itself needs `full: true`. `route` is absent while unset. `tags`/`warnings` are absent when empty; `warnings` carries any out-of-vocabulary status or severity found on the ledger.";
     format!("{head}{severity_union}{mid}{status_union}{tail}")
@@ -113,7 +113,7 @@ fn review_findings_description() -> String {
     let severity_union = quoted_union(crate::review_ledger::SEVERITIES);
     let status_union = quoted_union(crate::review_ledger::FINDING_STATUSES);
     format!(
-        "List findings across every review, one row per finding (the findings census, SL-278 DEC-370). Bare, it lists every finding still open anywhere: verified/withdrawn findings are hidden unless `all` or any `status` is given; an out-of-vocabulary status counts as open. `regexp` matches the review id, the finding id and the finding title, each whole; `substr` matches the finding id + finding title.\n\nReturns: {{\"FindingsListed\": {{ rows: [{{ review: \"RV-NNN\", facet: string, target: string, id: \"F-N\", severity: {severity_union}, status: {status_union}, disposition?: string, route?: string, title: string }}], total?: int, warnings?: [{{ rv: \"RV-NNN\", finding: \"F-N\", field: \"status\"|\"severity\", raw: string, effect: string }}], unreadable?: [{{ rv: \"RV-NNN\", reason: string }}] }}}} — rows sort by review id, then ledger order. `total` absent (not null) when uncapped; present (pre-truncation count) when rows were dropped by `limit`. `warnings` carries the vocabulary defects of the reviews that contributed a row; `unreadable` names any RV that exists on disk but did not read. Neither is capped; both are absent when empty."
+        "List findings across every review, one row per finding (the findings census). Bare, it lists every finding still open anywhere: verified/withdrawn findings are hidden unless `all` or any `status` is given; an out-of-vocabulary status counts as open. `regexp` matches the review id, the finding id and the finding title, each whole; `substr` matches the finding id + finding title.\n\nReturns: {{\"FindingsListed\": {{ rows: [{{ review: \"RV-NNN\", facet: string, target: string, id: \"F-N\", severity: {severity_union}, status: {status_union}, disposition?: string, route?: string, title: string }}], total?: int, warnings?: [{{ rv: \"RV-NNN\", finding: \"F-N\", field: \"status\"|\"severity\", raw: string, effect: string }}], unreadable?: [{{ rv: \"RV-NNN\", reason: string }}] }}}} — rows sort by review id, then ledger order. `total` absent (not null) when uncapped; present (pre-truncation count) when rows were dropped by `limit`. `warnings` carries the vocabulary defects of the reviews that contributed a row; `unreadable` names any RV that exists on disk but did not read. Neither is capped; both are absent when empty."
     )
 }
 
@@ -133,7 +133,7 @@ fn tools() -> Vec<McpTool> {
                     },
                     "target": {
                         "type": "string",
-                        "description": "The subject canonical ref the review targets, e.g. SL-024. SL-NNN@PHASE-NN is accepted as target SL-NNN + phase PHASE-NN; the @ here is a phase scope, not an @path file read"
+                        "description": "The subject canonical ref the review targets (SL-NNN, ISS-NNN, …). SL-NNN@PHASE-NN is accepted as target SL-NNN + phase PHASE-NN; the @ here is a phase scope, not an @path file read"
                     },
                     "phase": {
                         "type": "string",
@@ -175,12 +175,12 @@ fn tools() -> Vec<McpTool> {
                     },
                     "target": {
                         "type": "string",
-                        "description": "Restrict to reviews whose reviews edge targets this ref (the subject canonical ref, e.g. SL-024); a bare ref admits any phase. SL-NNN@PHASE-NN narrows to that phase; the @ here is a phase scope, not an @path file read"
+                        "description": "Restrict to reviews whose reviews edge targets this ref (the subject canonical ref, e.g. SL-NNN); a bare ref admits any phase. SL-NNN@PHASE-NN narrows to that phase; the @ here is a phase scope, not an @path file read"
                     },
                     "facet": {
                         "type": "string",
                         "enum": json!(crate::review_ledger::FACETS),
-                        "description": "Restrict to reviews of this facet (DEC-365)"
+                        "description": "Restrict to reviews of this facet"
                     },
                     "limit": {
                         "type": "integer",
@@ -218,11 +218,11 @@ fn tools() -> Vec<McpTool> {
                     "facet": {
                         "type": "string",
                         "enum": json!(crate::review_ledger::FACETS),
-                        "description": "Restrict to reviews of this facet (DEC-365)"
+                        "description": "Restrict to reviews of this facet"
                     },
                     "target": {
                         "type": "string",
-                        "description": "Restrict to reviews whose reviews edge targets this ref (e.g. SL-024); a bare ref admits any phase, SL-NNN@PHASE-NN narrows to that phase"
+                        "description": "Restrict to reviews whose reviews edge targets this ref (e.g. SL-NNN); a bare ref admits any phase, SL-NNN@PHASE-NN narrows to that phase"
                     },
                     "limit": {
                         "type": "integer",
@@ -548,7 +548,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: TOOL_OBSERVATION_RECORD.to_owned(),
-            description: "Capture ONE friction observation into the observation ledger (SL-231). Same shared service, validation, enrichment, idempotency and receipt contract as `doctrine observation record friction` — this is an adapter, not a second implementation.\n\nDeliberately NARROWER than the trusted CLI, because it is reachable from a confined worker: it creates `friction` ONLY; the SERVER resolves the registered primary repository root (there is no path/root argument — its absence is the mechanism); and measurement authority (`kind`/`source`/`counters`/`gauges`) plus the supersession/retraction controls (`old_uid`/`replacement_uid`/`target_uid`) are REFUSED. It bypasses the worktree filesystem wall for bounded friction capture only — it is NOT a general write primitive.\n\nIdempotent by `uid`: re-sending the SAME `uid` with the SAME caller intent replays the existing record (`outcome: \"replayed\"`) instead of colliding. Automatic enrichment writes only `execution.{interface, product_surface, command, repository_context}`, each marked `automatic`; explicit `facets` values WIN over them, and no agent id is invented — one reaches the record only if you supply it.\n\nReturns: { uid: string, kind: \"friction\", recorded_at: string, rel_path: string, outcome: \"created\"|\"replayed\" }".to_owned(),
+            description: "Capture ONE friction observation into the observation ledger. Same shared service, validation, enrichment, idempotency and receipt contract as `doctrine observation record friction` — this is an adapter, not a second implementation.\n\nDeliberately NARROWER than the trusted CLI, because it is reachable from a confined worker: it creates `friction` ONLY; the SERVER resolves the registered primary repository root (there is no path/root argument — its absence is the mechanism); and measurement authority (`kind`/`source`/`counters`/`gauges`) plus the supersession/retraction controls (`old_uid`/`replacement_uid`/`target_uid`) are REFUSED. It bypasses the worktree filesystem wall for bounded friction capture only — it is NOT a general write primitive.\n\nIdempotent by `uid`: re-sending the SAME `uid` with the SAME caller intent replays the existing record (`outcome: \"replayed\"`) instead of colliding. Automatic enrichment writes only `execution.{interface, product_surface, command, repository_context}`, each marked `automatic`; explicit `facets` values WIN over them, and no agent id is invented — one reaches the record only if you supply it.\n\nReturns: { uid: string, kind: \"friction\", recorded_at: string, rel_path: string, outcome: \"created\"|\"replayed\" }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -585,7 +585,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: super::dispatch::TOOL_DISPATCH_IMPORT.to_owned(),
-            description: "Dispatch funnel WRITE SURFACE (SL-199): import a worker's committed fork branch onto the live coordination tip, working-tree-free. Resolves the coord tree SERVER-SIDE by `slice` (never a caller path), runs the shared `classify_import` scope belt as a HARD pre-compose gate (an undeclared-scope path lands NOTHING — the coord tip is unchanged), composes coord-tip ⊕ worker-tip via `merge-tree` (object-db only — the live coord index/worktree are never touched), and lands ONE non-merge commit preserving the worker AUTHOR + the dispatch COMMITTER.\n\nReturns: {\"Imported\": { coord_tip: string }} or {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | head-moved | tree-unclean | multi-commit | doctrine-touch | claude-touch | undeclared-scope | merge-conflict | empty-delta | lost-ref-race.".to_owned(),
+            description: "Dispatch funnel WRITE SURFACE: import a worker's committed fork branch onto the live coordination tip, working-tree-free. Resolves the coord tree SERVER-SIDE by `slice` (never a caller path), runs the shared `classify_import` scope belt as a HARD pre-compose gate (an undeclared-scope path lands NOTHING — the coord tip is unchanged), composes coord-tip ⊕ worker-tip via `merge-tree` (object-db only — the live coord index/worktree are never touched), and lands ONE non-merge commit preserving the worker AUTHOR + the dispatch COMMITTER.\n\nReturns: {\"Imported\": { coord_tip: string }} or {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | head-moved | tree-unclean | multi-commit | doctrine-touch | claude-touch | undeclared-scope | merge-conflict | empty-delta | lost-ref-race.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -597,7 +597,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: super::dispatch::TOOL_DISPATCH_CONCLUDE_PHASE.to_owned(),
-            description: "Dispatch funnel WRITE SURFACE (SL-199): conclude a phase in two kept-separate tiers. (a) Flip the GITIGNORED phase sheet to `completed` (disposable runtime, idempotent on retry, never in committed history); (b) land ONE working-tree-free commit of the `(code_start, code_end)` boundary row (UPSERT-by-phase) on the coordination branch. Atomic by construction: the only fault outcome is a completed sheet with no committed boundary — self-healing on retry.\n\nReturns: {\"Concluded\": { coord_tip: string }} or {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | empty-delta | lost-ref-race.".to_owned(),
+            description: "Dispatch funnel WRITE SURFACE: conclude a phase in two kept-separate tiers. (a) Flip the GITIGNORED phase sheet to `completed` (disposable runtime, idempotent on retry, never in committed history); (b) land ONE working-tree-free commit of the `(code_start, code_end)` boundary row (UPSERT-by-phase) on the coordination branch. Atomic by construction: the only fault outcome is a completed sheet with no committed boundary — self-healing on retry.\n\nReturns: {\"Concluded\": { coord_tip: string }} or {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | empty-delta | lost-ref-race.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -612,7 +612,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: super::dispatch::TOOL_DISPATCH_REAP.to_owned(),
-            description: "Dispatch funnel WRITE SURFACE (SL-199/SL-228): reap a spent worker fork's worktree + branch and record the `reap` milestone. Resolves the coord tree SERVER-SIDE by `slice`.\n\nThe LANDING PROOF for a funnel-managed fork is the COMMITTED funnel record, not git archaeology: a conjunction of three checks — (1) EXACTLY one funnel row's `spawn.fork` names the branch, (2) that row stands at `concluded` or `reaped`, (3) the LIVE branch oid still equals that row's `import.fork_tip`. All three ⇒ the reap is authorised with no `--force`. This is needed because the import lands the worker delta ⊕ the funnel row in ONE commit, so the landing commit's patch is a strict superset of the fork's and `git cherry` matches no patch-id — it reports every funnel-managed fork unlanded. Any check failing injects NO fact and the patch-id oracle (`git cherry`) decides, unchanged; that oracle is the ONLY authority for a fork with no funnel row (solo / pre-funnel / legacy). A branch advanced past `import.fork_tip` carries work nothing certified and is never deleted.\n\nEvery actionable verdict is a structured refusal, never a JSON-RPC error: `Err` is reserved for internal faults (an unreadable record, a git plumbing failure).\n\nReturns: {\"Reaped\": { fork: string }} | {\"ReapedRowPending\": { fork: string, detail: string }} (the fork IS gone but the Class-2 reap row did not land — re-drive to complete it) | {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | not-landed | gc-incomplete | claim-busy | ambiguous-fork-row | the machine's refusal family (not-spawned | not-imported | worker-not-committed | already-<position> | terminal). `detail` carries the operator remedy.".to_owned(),
+            description: "Dispatch funnel WRITE SURFACE: reap a spent worker fork's worktree + branch and record the `reap` milestone. Resolves the coord tree SERVER-SIDE by `slice`.\n\nThe LANDING PROOF for a funnel-managed fork is the COMMITTED funnel record, not git archaeology: a conjunction of three checks — (1) EXACTLY one funnel row's `spawn.fork` names the branch, (2) that row stands at `concluded` or `reaped`, (3) the LIVE branch oid still equals that row's `import.fork_tip`. All three ⇒ the reap is authorised with no `--force`. This is needed because the import lands the worker delta ⊕ the funnel row in ONE commit, so the landing commit's patch is a strict superset of the fork's and `git cherry` matches no patch-id — it reports every funnel-managed fork unlanded. Any check failing injects NO fact and the patch-id oracle (`git cherry`) decides, unchanged; that oracle is the ONLY authority for a fork with no funnel row (solo / pre-funnel / legacy). A branch advanced past `import.fork_tip` carries work nothing certified and is never deleted.\n\nEvery actionable verdict is a structured refusal, never a JSON-RPC error: `Err` is reserved for internal faults (an unreadable record, a git plumbing failure).\n\nReturns: {\"Reaped\": { fork: string }} | {\"ReapedRowPending\": { fork: string, detail: string }} (the fork IS gone but the Class-2 reap row did not land — re-drive to complete it) | {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | not-landed | gc-incomplete | claim-busy | ambiguous-fork-row | the machine's refusal family (not-spawned | not-imported | worker-not-committed | already-<position> | terminal). `detail` carries the operator remedy.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -624,7 +624,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: super::dispatch::TOOL_DISPATCH_VERIFY.to_owned(),
-            description: "Dispatch funnel WRITE SURFACE (SL-228): run a phase's verify suite in the coordination worktree and land the verdict as funnel evidence, in ONE compare-and-swap commit. Resolves the coord SERVER-SIDE by `slice`. Gates FIRST (an illegal verify refuses before anything runs), then CONDITIONALLY fast-forwards the coord checkout over paths it has PROVEN byte-identical to the stale baseline — an operator edit, an unignored untracked file, or an unprovable baseline refuses `verify-tree-dirty` and touches NOTHING (never a reset, never a stash, never a discard). Runs the `[dispatch] verify-suite` cadence (default `gate`), then RE-PROVES the tree: a green-but-mutating suite is recorded as a FAIL, because pass evidence may never describe bytes `verified_oid` does not. A suite that could not run at all is a refusal, not red evidence.\n\nReturns: {\"Verified\": { coord_tip: string, suite: string }} | {\"VerifyFailed\": { suite: string, detail: string }} (fail evidence IS landed) | {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | verify-tree-dirty | verify-suite-unresolved | lost-ref-race | the machine's refusal family (not-spawned | not-imported | already-<position> | terminal).".to_owned(),
+            description: "Dispatch funnel WRITE SURFACE: run a phase's verify suite in the coordination worktree and land the verdict as funnel evidence, in ONE compare-and-swap commit. Resolves the coord SERVER-SIDE by `slice`. Gates FIRST (an illegal verify refuses before anything runs), then CONDITIONALLY fast-forwards the coord checkout over paths it has PROVEN byte-identical to the stale baseline — an operator edit, an unignored untracked file, or an unprovable baseline refuses `verify-tree-dirty` and touches NOTHING (never a reset, never a stash, never a discard). Runs the `[dispatch] verify-suite` cadence (default `gate`), then RE-PROVES the tree: a green-but-mutating suite is recorded as a FAIL, because pass evidence may never describe bytes `verified_oid` does not. A suite that could not run at all is a refusal, not red evidence.\n\nReturns: {\"Verified\": { coord_tip: string, suite: string }} | {\"VerifyFailed\": { suite: string, detail: string }} (fail evidence IS landed) | {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | verify-tree-dirty | verify-suite-unresolved | lost-ref-race | the machine's refusal family (not-spawned | not-imported | already-<position> | terminal).".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -636,7 +636,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: super::dispatch::TOOL_DISPATCH_PHASE_RECEIPT.to_owned(),
-            description: "Dispatch funnel READ SURFACE (SL-206): project a single phase's receipt over three tiers — the plan, the disposable runtime sheet, and the COMMITTED boundaries ledger. Resolves the coord SERVER-SIDE by `slice` (never a caller path); read-only (no coord mutation). Every coord refusal (unknown-slice | ambiguous | stale) surfaces as `CoordRefused` with NO fabricated tip. On resolution the core carries the LIVE `dispatch_tip` (the coord branch tip — distinct from the boundary `code_end`) and, when a committed boundary backs the phase, the `(code_start, code_end)` oids.\n\nReturns: {\"Resolved\": { slice: int, phase: string, status: string, dispatch_tip: string, code_start?: string, code_end?: string }} or {\"CoordRefused\": { reason: string }} — status ∈ not-started | in-progress | blocked | completed | conclude-incomplete | unknown; reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
+            description: "Dispatch funnel READ SURFACE: project a single phase's receipt over three tiers — the plan, the disposable runtime sheet, and the COMMITTED boundaries ledger. Resolves the coord SERVER-SIDE by `slice` (never a caller path); read-only (no coord mutation). Every coord refusal (unknown-slice | ambiguous | stale) surfaces as `CoordRefused` with NO fabricated tip. On resolution the core carries the LIVE `dispatch_tip` (the coord branch tip — distinct from the boundary `code_end`) and, when a committed boundary backs the phase, the `(code_start, code_end)` oids.\n\nReturns: {\"Resolved\": { slice: int, phase: string, status: string, dispatch_tip: string, code_start?: string, code_end?: string }} or {\"CoordRefused\": { reason: string }} — status ∈ not-started | in-progress | blocked | completed | conclude-incomplete | unknown; reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -648,7 +648,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: super::dispatch::TOOL_DISPATCH_NEXT_READY.to_owned(),
-            description: "Dispatch funnel READ SURFACE (SL-206): report the next actionable phase(s) for a slice — the EXISTING readiness authority (`compute_next_phases`) verbatim, the SAME value `dispatch plan-next` renders (no parallel readiness logic). Resolves the coord SERVER-SIDE by `slice`; read-only. A coord refusal surfaces as `CoordRefused`.\n\nReturns: {\"Resolved\": { next: [string], phases: [{ id: string, status: string, name: string }] }} or {\"CoordRefused\": { reason: string }} — reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
+            description: "Dispatch funnel READ SURFACE: report the next actionable phase(s) for a slice — the EXISTING readiness authority (`compute_next_phases`) verbatim, the SAME value `dispatch plan-next` renders (no parallel readiness logic). Resolves the coord SERVER-SIDE by `slice`; read-only. A coord refusal surfaces as `CoordRefused`.\n\nReturns: {\"Resolved\": { next: [string], phases: [{ id: string, status: string, name: string }] }} or {\"CoordRefused\": { reason: string }} — reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -659,7 +659,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: super::dispatch::TOOL_DISPATCH_AUTHORED_DIVERGENCE.to_owned(),
-            description: "Dispatch funnel READ SURFACE (SL-206): report whether the coordination worktree's `.doctrine/**` authored tree has diverged from the trunk over `trunk_ref..dispatch_tip`. Resolves the coord SERVER-SIDE by `slice`; read-only (a name-only diff, no mutation). The trunk `compared_ref` is resolved from the REAL trunk authority (`git::trunk_commit` — the peeled ladder DOCTRINE_TRUNK_REF / origin/HEAD / main / master), never a hardcoded branch. A coord refusal surfaces as `CoordRefused`.\n\nReturns: {\"Resolved\": { diverged: bool, compared_ref: string, drifted_paths?: [string] }} or {\"CoordRefused\": { reason: string }} — `drifted_paths` present only when non-empty; reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
+            description: "Dispatch funnel READ SURFACE: report whether the coordination worktree's `.doctrine/**` authored tree has diverged from the trunk over `trunk_ref..dispatch_tip`. Resolves the coord SERVER-SIDE by `slice`; read-only (a name-only diff, no mutation). The trunk `compared_ref` is resolved from the REAL trunk authority (`git::trunk_commit` — the peeled ladder DOCTRINE_TRUNK_REF / origin/HEAD / main / master), never a hardcoded branch. A coord refusal surfaces as `CoordRefused`.\n\nReturns: {\"Resolved\": { diverged: bool, compared_ref: string, drifted_paths?: [string] }} or {\"CoordRefused\": { reason: string }} — `drifted_paths` present only when non-empty; reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -670,7 +670,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: super::dispatch::TOOL_DISPATCH_TREE_STATE.to_owned(),
-            description: "Dispatch funnel READ SURFACE (SL-228): report the coordination worktree's UNTRACKED-AWARE tree state — staged (index-vs-tip / reverse-diff) anomalies, tracked worktree modifications, and unignored untracked paths. Resolves the coord SERVER-SIDE by `slice`; read-only (a `git status` read, no mutation). Replaces a raw post-write `git status` in the funnel. A coord refusal surfaces as `CoordRefused`.\n\nReturns: {\"Resolved\": { slice: int, clean: bool, staged?: [string], tracked_dirty?: [string], untracked?: [string] }} or {\"CoordRefused\": { reason: string }} — each path array present only when non-empty (a clean tree is just {slice, clean: true}); reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
+            description: "Dispatch funnel READ SURFACE: report the coordination worktree's UNTRACKED-AWARE tree state — staged (index-vs-tip / reverse-diff) anomalies, tracked worktree modifications, and unignored untracked paths. Resolves the coord SERVER-SIDE by `slice`; read-only (a `git status` read, no mutation). Replaces a raw post-write `git status` in the funnel. A coord refusal surfaces as `CoordRefused`.\n\nReturns: {\"Resolved\": { slice: int, clean: bool, staged?: [string], tracked_dirty?: [string], untracked?: [string] }} or {\"CoordRefused\": { reason: string }} — each path array present only when non-empty (a clean tree is just {slice, clean: true}); reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -681,7 +681,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: super::dispatch::TOOL_DISPATCH_NEXT.to_owned(),
-            description: "Dispatch funnel READ SURFACE (SL-228): the single-prescription funnel ORACLE — read the committed funnel record and return the ONE thing to do next for this slice's phases. Resolves the coord SERVER-SIDE by `slice`; STRICTLY read-only (it never heals, lands no transition, touches neither index nor worktree). `kind` is a projection of the state machine's own `expected_next` — the same function the refusals use — ranked by the actionability ladder: red verify evidence anywhere triages GLOBALLY (the suite is coord-tree-wide) and outranks every runnable phase; else the lowest-id runnable verb (an awaiting phase never starves a runnable one); else await-worker naming every awaited phase; else the readiness authority names a phase to spawn; else all-reaped. The other in-flight phases are surfaced in `detail` at every rung. `command` is the runnable literal in the surface that OWNS the verb (import/conclude/reap are MCP tool calls; verify is a CLI line) — absent for spawn (arm-specific, so the oracle stays arm-agnostic), await-worker, triage-verify-failure and all-reaped. DISTINCT from `dispatch_next_ready`, which answers which phase may START; this answers what to DO now. The terminal beat hands off to `dispatch status` (the slice-lifecycle altitude).\n\nReturns: {\"Resolved\": { kind: string, phase?: string, command?: string, detail: string }} or {\"CoordRefused\": { reason: string }} — kind ∈ spawn | await-worker | import | verify | triage-verify-failure | reverify-stale | conclude | reap | all-reaped; reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
+            description: "Dispatch funnel READ SURFACE: the single-prescription funnel ORACLE — read the committed funnel record and return the ONE thing to do next for this slice's phases. Resolves the coord SERVER-SIDE by `slice`; STRICTLY read-only (it never heals, lands no transition, touches neither index nor worktree). `kind` is a projection of the state machine's own `expected_next` — the same function the refusals use — ranked by the actionability ladder: red verify evidence anywhere triages GLOBALLY (the suite is coord-tree-wide) and outranks every runnable phase; else the lowest-id runnable verb (an awaiting phase never starves a runnable one); else await-worker naming every awaited phase; else the readiness authority names a phase to spawn; else all-reaped. The other in-flight phases are surfaced in `detail` at every rung. `command` is the runnable literal in the surface that OWNS the verb (import/conclude/reap are MCP tool calls; verify is a CLI line) — absent for spawn (arm-specific, so the oracle stays arm-agnostic), await-worker, triage-verify-failure and all-reaped. DISTINCT from `dispatch_next_ready`, which answers which phase may START; this answers what to DO now. The terminal beat hands off to `dispatch status` (the slice-lifecycle altitude).\n\nReturns: {\"Resolved\": { kind: string, phase?: string, command?: string, detail: string }} or {\"CoordRefused\": { reason: string }} — kind ∈ spawn | await-worker | import | verify | triage-verify-failure | reverify-stale | conclude | reap | all-reaped; reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -2369,6 +2369,33 @@ mod tests {
             tags: Vec::new(),
             title: "x".to_owned(),
         }
+    }
+
+    // ADR-024: tool text ships to client repos over `tools/list`, where a
+    // repo-private citation (`SL-278`, `DEC-365`) resolves to an unrelated
+    // local record or to nothing. The guard covers the kinds that carry
+    // authority or provenance; an input-format illustration (`RV-007 or the
+    // bare id 7`, `PHASE-03`) cites nothing and stays legal.
+
+    #[test]
+    fn tool_text_cites_no_repo_private_id() {
+        let id = regex_lite::Regex::new(
+            r"\b(SL|DEC|RFC|ADR|REQ|PRD|SPEC|POL|STD|IMP|ISS|CHR|RSK|IDE|ASM|REV)-[0-9]+\b",
+        )
+        .expect("valid regex");
+        let cited: Vec<String> = tools()
+            .iter()
+            .flat_map(|tool| {
+                let text = format!("{}{}", tool.description, tool.input_schema);
+                id.find_iter(&text)
+                    .map(|m| format!("{}: {}", tool.name, m.as_str()))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert!(
+            cited.is_empty(),
+            "tool text cites repo-private ids: {cited:?}"
+        );
     }
 
     // STD-001 (SL-278 PHASE-04a T7): the `review_show` tool text is built from
