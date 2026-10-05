@@ -5,10 +5,10 @@ id = 475
 slug = "review-render-finding-tier"
 title = "review: render the finding tier (show --findings, list --target)"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-09-25"
-updated = "2026-10-01"
+updated = "2026-10-05"
 tags = ["observed"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

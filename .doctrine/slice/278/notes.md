@@ -61,7 +61,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-05 · audit · 9956513ef
+fresh-as-of: 2026-10-06 · close · acf34b37c
 
 ### Produced
 - PHASE-01..05 done — engine `ReviewView`, `review show` depth/filters, one
@@ -72,11 +72,16 @@ fresh-as-of: 2026-10-05 · audit · 9956513ef
 - minted: ISS-518 — MCP unknown finding id answers -32603; CHR-177 —
   repo-private example ids in CLI review help; CHR-176 — bridge test under bun
   + `just test-bridge` in gate (2026-10-05)
+- reconcile: REV-070 done (SPEC-032 Read surface); selector registry and
+  design sec-6/7 corrected per RV-417 F-4 (acf34b37c)
 
 ### Learned
 - mem.pattern.test.bridge-ts-under-bun — the TS bridge test runs under `bun test`
 - mem.fact.doctrine.agents-skill-mirror-is-published-source — reconfirmed by
   RV-417 F-2; the plan cited mirrors as selectors despite it
+- audit brief omitted the design-committed SPEC-032 REV — captured as friction
+  observations (01a10acc-b303…, 01a10acc-b307…); no memory: a one-off brief
+  slip, and reconcile's cross-check against design caught it
 
 ### Open
 - none
