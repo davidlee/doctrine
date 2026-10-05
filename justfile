@@ -19,7 +19,7 @@ quick: fmt lint validate
 check: fmt lint lint-js build validate test
 
 # Full gate for end-of-phase / CI — includes the cordage workspace crate.
-gate: fmt lint lint-js build validate test-all
+gate: fmt lint lint-js build validate test-all test-bridge
 
 # non-mutating prove-clean cadence — asserts fmt+lint clean, never fixes
 prove: fmt-check lint
@@ -99,6 +99,11 @@ test:
 # Gate test set: every package whose claims hold on any developer host.
 test-all:
   cargo test -p doctrine -p cordage
+
+# MCP bridge integration test (TypeScript) against the freshly built binary.
+# `bun test` runs it directly — bun maps the `vitest` import onto its own runner.
+test-bridge:
+  DOCTRINE_BIN="${DOCTRINE_BIN:-./target/debug/doctrine}" bun test tests/mcp-bridge.test.ts
 
 ## Capsule conformance — Linux + bubblewrap only, explicitly invoked (SL-248)
 ##

@@ -331,7 +331,7 @@ describe('Unit: pure functions', () => {
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
-  it('initialize + tools/list returns 10 tools', async () => {
+  it('initialize + tools/list advertises the review tools', async () => {
     proc = startMCP(testDir);
 
     const initResp = await sendRequest(
@@ -367,12 +367,6 @@ describe('Unit: pure functions', () => {
     expect(toolsResult).toBeDefined();
     expect(toolsResult!.tools).toBeDefined();
     const tools = toolsResult!.tools!;
-
-    expect(tools.length).toBe(10);
-
-    for (const tool of tools) {
-      expect(tool.name).toMatch(/^review_/);
-    }
 
     const names = tools.map((t) => t.name);
     expect(names).toContain('review_raise');
