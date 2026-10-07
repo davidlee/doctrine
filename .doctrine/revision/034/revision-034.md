@@ -31,6 +31,12 @@ designed to avoid.
 
 Recorded as **DEC-076**; discharges **RV-314 F-3**.
 
+**Re-drafted 2026-10-07 under DEC-371** (`RFC-035`). The four rows are unchanged;
+their *after* text is rewritten. The parked SL-232 design measured
+*claim-relevant cleanliness* through git's view of the tree; DEC-371 replaces that
+with a claim-shaped stamp — the claim set's bytes, mode and set compared directly
+against a commit — drops the rest-of-tree anchor, and deletes `--allow-dirty`.
+
 *Note: the slug still reads `verify-attests-against-a-claim-relevant-clean-tree…`.
 The id is identity and the slug is never authoritative (STD-002), so it is left
 rather than renamed.*
@@ -39,21 +45,27 @@ rather than renamed.*
 
 SPEC-007 asserts that `verify` attests **against a clean working tree, refusing a
 dirty one**. That contract has been partly false since `--allow-dirty` shipped
-(2026-06-18/21), and SL-232 makes it fully false: the gate becomes *claim-relevant*
-cleanliness rather than global cleanliness.
+(2026-06-18/21) — today 62 of 110 attested memories carry a `checkout_state_id`
+in `verified_sha`, not a commit — and SL-232 makes it fully false.
 
 The substantive change is not a loosening. SL-232 refuses on *more* of what
 matters and *less* of what does not:
 
-- dirt anywhere in doctrine's own authored corpus that the memory does not claim
-  against no longer blocks — it was never evidence about the claim;
-- the memory's **own item directory** and its **declared scopes** must now be
-  committed, which today they need not be. A memory can currently be stamped
-  `verified_sha = HEAD` while its body is untracked and HEAD demonstrably does not
-  contain it (RV-307 F-1, proven empirically).
+- dirt the memory does not claim no longer blocks — it was never evidence about
+  the claim;
+- the **claim set** must now match the stamped commit, which today it need not.
+  A memory can currently be stamped `verified_sha = HEAD` while its body is
+  untracked and HEAD demonstrably does not contain it (RV-307 F-1, proven
+  empirically).
 
-So the honest contract is: *verify attests against a tree that is clean in the
-claim's own evidence surface, refusing when that surface is dirty.*
+The claim set is the memory's declared scope (`scope.paths` plus the files its
+`scope.globs` expand to) plus its own `memory.md` — exactly the path set the
+staleness seam later counts commits on (REQ-146), so the stamp never claims more
+than verify measured. `memory.toml` is excluded: verify writes the stamp into it.
+
+So the honest contract is: *verify stamps commit X only when the claim set's
+bytes, mode and membership match X, refusing otherwise; `verified_sha` is always
+a commit.*
 
 Raised as RV-307 F-4 (ADR-013 dependency uninstantiated) and F-5 (the amendment
 inventory omitted REQ-147). This revision is the discharge of both — and of
@@ -74,10 +86,10 @@ implementation.
 
 > **after**
 >
-> Attest a memory with `verify` by stamping its verification axis against a tree
-> whose claim-relevant surface — the memory's own item directory and its declared
-> scopes — is committed, refusing when that surface is dirty so no false
-> attestation is recorded
+> Attest a memory with `verify` by stamping its verification axis with a commit
+> whose blobs match the memory's claim set — its declared scope paths and globs
+> plus its own body — in bytes, mode and membership, refusing when they diverge so
+> no false attestation is recorded
 
 REQ-147's `.md` body is currently an unfilled template (statement and rationale
 both empty). The revision fills both, since the title alone has been carrying the
@@ -87,29 +99,31 @@ whole contract.
 
 Two sites, both stating the retired contract:
 
-> **before** (`spec-007.toml:22`, capability line)
+> **before** (`spec-007.toml:23`, capability line)
 >
 > Carry the `verify` attestation verb (stamp the verification axis against a clean
 > working tree, refusing a dirty one) …
 
 > **after**
 >
-> Carry the `verify` attestation verb (stamp the verification axis against a tree
-> whose claim-relevant surface is committed, refusing when it is dirty) …
+> Carry the `verify` attestation verb (stamp the verification axis with a commit
+> whose blobs match the memory's claim set, refusing when they diverge) …
 
-> **before** (`spec-007.md:132-133`, § `verify` and the global/derived orientation class)
+> **before** (`spec-007.md:178-179`, § `verify` and the global/derived orientation class)
 >
 > `verify` attests a memory against the current working tree, stamping the
 > verification axis; it refuses a dirty tree so no false attestation is recorded.
 
 > **after**
 >
-> `verify` attests a memory against the commit its claim-relevant surface resolves
-> to — the memory's own item directory plus its declared scopes — stamping the
-> verification axis; it refuses when that surface is dirty, so no false attestation
-> is recorded. Dirt outside the claim's evidence surface is not evidence about the
-> claim and does not block. `--allow-dirty` remains the explicit escape hatch,
-> stamping `checkout_state_id` instead of a commit.
+> `verify` attests a memory by comparing its **claim set** — the declared scope
+> (`scope.paths` plus the files `scope.globs` expand to) and its own `memory.md` —
+> against a commit: bytes, mode bit and membership. It stamps that commit's sha as
+> `verified_sha` only when all three match, and refuses otherwise, so no false
+> attestation is recorded. `verified_sha` is always a commit. The claim set is the
+> same path set the staleness seam counts commits on, so the stamp never claims
+> more than was measured. Dirt outside the claim set is not evidence about the
+> claim and does not block; there is no escape hatch.
 
 ### REQ-146 — `modify`
 
@@ -123,6 +137,10 @@ calendar instead of by commits touching their evidence (QUE-175, answered `yes` 
 measurement).
 
 Both tiers carry "scoped paths"; the title is the queried surface.
+
+Under DEC-371 this widening is also what the claim set must match: the seam and
+the claim cover one path set, or a glob-scoped memory's staleness would count from
+a commit whose glob-matched bytes verify never compared.
 
 > **before** (`requirement-146.toml:6`)
 >
@@ -168,6 +186,6 @@ recognised in the body.
 
 Applied at **SL-232** close, after the implementation lands — the spec and the code
 must agree at the same moment, not before. All four rows apply together; see
-§ Scope for why they are not split. Verified by SL-232's closure criteria
-(§ 9 of `design.md`), which require REV-034 applied so SPEC-007, REQ-146, REQ-147,
-REQ-155 and the implementation agree.
+§ Scope for why they are not split. Verified by SL-232's closure criteria, which
+must require REV-034 applied so SPEC-007, REQ-146, REQ-147, REQ-155 and the
+implementation agree (the redesign under DEC-371 re-authors those criteria).

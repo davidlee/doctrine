@@ -28,3 +28,11 @@ under `--allow-dirty`. Corpus at decision time: 1232 empty, 48 commit shas,
 guard and returns `None`: `retrieve` renders Unknown (correct), `validate`
 skips silently (`ISS-257`, contrary to `STD-003`), `show` and ranking treat
 them as verified. Hence the one-shot reset.
+
+## Amendment (2026-10-07, user): globs are in the claim
+
+`REQ-146` (via `REV-034`) widens the staleness seam from `scope.paths` to
+paths ∪ globs. A claim set narrower than the seam would let staleness count
+from a commit whose glob-matched bytes verify never compared — an overclaim.
+So the claim set and the seam are one path set, and the general rule is
+recorded: a stamp claims no more than verify measured.
