@@ -345,6 +345,7 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [SPEC-029 — Design run engine](.doctrine/spec/tech/029/spec-029.md) — `active`
 - [SPEC-030 — Dispatch execution capsules](.doctrine/spec/tech/030/spec-030.md) — `active`
 - [SPEC-031 — Phase plan surface](.doctrine/spec/tech/031/spec-031.md) — `active`
+- [SPEC-032 — Review ledger](.doctrine/spec/tech/032/spec-032.md) — `active`
 
 ### Request for Comments
 
@@ -380,7 +381,9 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [RFC-030 — Inquiry map as a general interview substrate](.doctrine/rfc/030/rfc-030.md) — `open`
 - [RFC-031 — Design run fitness](.doctrine/rfc/031/rfc-031.md) — `open`
 - [RFC-032 — Review ledger effectiveness](.doctrine/rfc/032/rfc-032.md) — `open`
-- [RFC-033 — Learning surface: corpus unification, format, and publication](.doctrine/rfc/033/rfc-033.md) — `open`
+- [RFC-033 — Learning surface: corpus unification and format](.doctrine/rfc/033/rfc-033.md) — `open`
+- [RFC-034 — Steward Human Understanding and Agency](.doctrine/rfc/034/rfc-034.md) — `open`
+- [RFC-035 — Claim-shaped attestation: retire the anchor, compare the claim's bytes](.doctrine/rfc/035/rfc-035.md) — `open`
 
 ### Architecture Decision Records
 
