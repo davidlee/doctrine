@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a11a93-2048-7952-97d0-a30bb7c2a653"
+recorded_at = "2026-10-08T08:13:32.104756446Z"
+kind = "friction"
+summary = "slice skill: example 'doctrine link SL-NNN specs SPEC-NNN' refused"
+detail = "/slice step 4 and the slice TOML scaffold comment suggest 'specs' as a slice link label; link refuses it (legal: references, supersedes, governed_by, related, fulfils). Cost a retry while slicing SL-280."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
