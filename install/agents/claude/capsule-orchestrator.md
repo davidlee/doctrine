@@ -43,7 +43,8 @@ runs. Backgrounding buys you nothing and costs you a wake.
 
 The harness backgrounds by default and runs a child in the foreground only when
 the spawner needs its result before continuing. **You always do.** Say so when
-you spawn; never ask for a background child.
+you spawn; never ask for a background child. Never pass `name` either: a named
+child becomes a teammate, outside the plain parent–child hand-back.
 
 Each completion re-invokes you, and by your third phase your context is large —
 an unneeded wake is the most expensive thing you can buy. One orchestrator

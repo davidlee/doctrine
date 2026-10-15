@@ -59,7 +59,10 @@ hand-backs.
 
 1. Charter an orchestrator: a named slice and a contiguous run of phases,
    typically 3. Spawn `capsule-orchestrator` with that charter, the slice id,
-   and any standing constraint the human has set.
+   and any standing constraint the human has set. **Spawn it unnamed — never
+   pass `name`.** A named spawn makes the orchestrator a teammate, and a
+   teammate's children cannot hand back to it: their reports land at your seat
+   ("the agent that spawned you is no longer running") instead.
 2. Read its hand-back. Check the per-worker model choices carry real arguments —
    "the default" is not one. Check what it adapted in the plan.
 3. **Reap it.** `TaskStop` the orchestrator the moment you hold its hand-back.
