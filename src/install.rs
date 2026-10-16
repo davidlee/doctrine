@@ -216,6 +216,7 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     // ── Stage 1: base install ──
     if args.dry_run {
         print_forward_summary(&project_root, args, &manifest.harness)?;
+        print_ownership_plan(&project_root, args, &manifest)?;
         return Ok(());
     }
 
@@ -449,6 +450,74 @@ fn print_forward_summary(
     Ok(())
 }
 
+/// Build the convergence context and desired set for `harnesses`, then hand
+/// both to `f` — the one wiring shared by the live run and `--dry-run`.
+/// (`Wanted` borrows the embedded defs, so it cannot be returned.)
+fn with_wanted<R>(
+    root: &Path,
+    args: &InstallArgs<'_>,
+    manifest: &Manifest,
+    harnesses: &[String],
+    catalog: &[Entry],
+    selected: &[&Entry],
+    f: impl FnOnce(&Converge<'_>, &Wanted<'_>) -> anyhow::Result<R>,
+) -> anyhow::Result<R> {
+    let base = install_base(root, args.global)?;
+    let cx = Converge {
+        root,
+        base: &base,
+        scope: if args.global {
+            Scope::Global
+        } else {
+            Scope::Project
+        },
+    };
+    let defs = embedded_agent_defs();
+    let workflows = embedded_workflow_defs();
+    let wanted = desired_set(
+        &base,
+        &manifest.harness,
+        harnesses,
+        &defs,
+        catalog,
+        selected,
+        &workflows,
+    );
+    f(&cx, &wanted)
+}
+
+/// `--dry-run`: survey the disk and print the ownership plan. Mutates nothing.
+fn print_ownership_plan(
+    root: &Path,
+    args: &InstallArgs<'_>,
+    manifest: &Manifest,
+) -> anyhow::Result<()> {
+    let agents = detect_agents(args.agents, root, &manifest.harness);
+    if agents.is_empty() {
+        return Ok(());
+    }
+    let catalog = discover()?;
+    let selected = select_for_install(&catalog, args.skills, args.domains)?;
+    with_wanted(
+        root,
+        args,
+        manifest,
+        &agents,
+        &catalog,
+        &selected,
+        |cx, wanted| {
+            let (scanned, actions) =
+                survey(cx, &manifest.framework.roots, &manifest.harness, wanted)?;
+            let mut out = io::stdout();
+            writeln!(out, "\n{}", report_header(cx.scope, true))?;
+            for a in &actions {
+                writeln!(out, "{}", action_line(a, &scanned, wanted, true))?;
+            }
+            Ok(())
+        },
+    )
+}
+
 /// Run the forward steps: memory sync → boot wire → skills per agent.
 /// Each step is individually prompted (unless `--yes`). Partial failure
 /// is non-fatal — errors are printed and the next step proceeds.
@@ -558,23 +627,17 @@ fn run_forward_steps(
         }
     }
     if !confirmed.is_empty() {
-        let base = install_base(root, args.global)?;
-        let cx = Converge {
-            root,
-            base: &base,
-            scope: if args.global {
-                Scope::Global
-            } else {
-                Scope::Project
-            },
-        };
-        let defs = embedded_agent_defs();
-        let workflows = embedded_workflow_defs();
-        let wanted = desired_set(
-            &base, registry, &confirmed, &defs, &catalog, &selected, &workflows,
-        );
         let mut out = io::stdout();
-        if let Err(e) = converge(&cx, &manifest.framework.roots, registry, &wanted, &mut out) {
+        let result = with_wanted(
+            root,
+            args,
+            manifest,
+            &confirmed,
+            &catalog,
+            &selected,
+            |cx, wanted| converge(cx, &manifest.framework.roots, registry, wanted, &mut out),
+        );
+        if let Err(e) = result {
             writeln!(out, "  framework install failed: {e:#}")?;
         }
     }
