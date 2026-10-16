@@ -8,9 +8,9 @@
 Skills distribution is the container that gets Doctrine's *working conventions*
 into the agent in front of the code: how the curated `SKILL.md` set is carried,
 catalogued, and laid into an agent's own layout. It sits beneath the whole-system
-root (SPEC-003) and is the sibling of install & distribution (SPEC-009) — install
-*uses* this container (it ensures the skills gitignore negation and shares the
-confirm prompt) but does not own the skill tree.
+root (SPEC-003) and is the sibling of install & distribution (SPEC-009): install
+owns the skill canon tree and its links for harnesses with a `skills` route, and
+this container specifies that mechanism.
 
 One canonical source feeds two independent channels. The `plugins/` tree is the
 single source-of-truth, embedded into the binary at compile time by a *second*
@@ -64,9 +64,10 @@ only to publish a standalone subset on the marketplace channel.
 
 ### Dual-path routing
 
-Each target agent takes one of two paths. **Claude is installed directly** — the
-binary owns Claude's layout and needs no Node — while **every other agent is
-delegated** to `npx skills add davidlee/doctrine`, the universal external
+Each target harness takes one of two paths. A harness with a doctrine `skills`
+route — today only **Claude** — **is installed directly**: the binary owns its
+layout and needs no Node. **Every harness routed `skills_via` is delegated** (pi
+and codex via the `universal` target) to `npx skills add davidlee/doctrine`, the universal external
 installer (vercel-labs/skills) that already understands ~71 agent layouts and
 Claude plugin marketplaces. Doctrine does not reimplement per-agent install
 logic; it special-cases only the agent it owns and defers the rest. The
@@ -140,27 +141,30 @@ inspectable plan; the thin shell prints it, prompts, and executes.
 ## Hypotheses
 
 - **Delegate the long tail, special-case only what we own.** Reimplementing ~71
-  agent layouts is not worth it; delegating every non-Claude agent to the
-  universal installer and direct-installing only Claude (whose layout and embed
-  Doctrine already owns) is preferred, keeping the default agent working offline
+  agent layouts is not worth it; delegating every harness routed `skills_via` to
+  the universal installer and direct-installing only `skills`-routed harnesses
+  (today only Claude, whose layout and embed Doctrine already owns) is preferred, keeping the default agent working offline
   with no Node.
 - **A canonical tree with symlinks beats copies.** Materialising one derived
   `.doctrine/skills/<id>` tree and pointing relative agent links at it is
   preferred over copying skill dirs per agent, so a refresh updates one tree and
-  ownership is provable by link value — at the cost of a Unix symlink-swap dance.
-- **Idempotent, additive, never-overwrite.** Treating an existing managed link as
-  a heal and a foreign path as keep is preferred so re-running changes nothing
-  already in place and a user's local override is never lost — install is
-  additive in this capability (remove/update are out of scope).
+  ownership is provable by link target (inside a framework canon root) — at the
+  cost of a Unix symlink-swap dance.
+- **Idempotent, convergent, never-clobber.** Treating an existing doctrine link as
+  a relink and a foreign path as keep is preferred so re-running changes nothing
+  already in place and a user's local override is never lost; on a project install
+  a doctrine link no longer mapped to a shipped member is removed and reported
+  (REQ-176).
 
 ## Decisions
 
 - **D1 — one embedded source, two channels.** `plugins/` is the single
   source-of-truth, embedded by a second rust-embed folder parallel to `install/`;
   the marketplace and the binary both read it, and no skill is duplicated.
-- **D2 — Claude direct, all others delegated.** The net routing rule is target ==
-  Claude ⇒ direct lay-down; any other agent ⇒ `npx skills add davidlee/doctrine`.
-  Doctrine owns only Claude's layout and defers the rest to the universal
+- **D2 — `skills` route direct, `skills_via` delegated.** The net routing rule is
+  a harness with a doctrine `skills` route (today only Claude) ⇒ direct lay-down;
+  a harness routed `skills_via` ⇒ `npx skills add davidlee/doctrine`. Doctrine
+  owns only the `skills`-routed layouts and defers the rest to the universal
   installer.
 - **D3 — direct install is a canonical tree plus relative symlinks, reconciled by
   proven ownership.** Claude gets a derived `.doctrine/skills/<id>` tree and a
@@ -169,7 +173,8 @@ inspectable plan; the thin shell prints it, prompts, and executes.
   to the current layout, ours and unmapped is unlinked on a project install and
   reported on a global one, anything else is kept foreign — re-proven at mutation
   time.
-- **D4 — the canonical tree is derived and self-ignored.** It owns no authored
+- **D4 — the canonical tree is derived and covered by the managed gitignore
+  block.** It owns no authored
   data, so materialise always overwrites via a staged atomic swap, and it is
   covered by the managed gitignore block.
 - **D5 — marketplace-only subset domains are excluded from the CLI catalog.**

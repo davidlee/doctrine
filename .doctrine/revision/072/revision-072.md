@@ -112,6 +112,13 @@ gitignore block.**" (Body already says this since REV-071.)
 
 ### Hypotheses
 
+- **"Delegate the long tail, special-case only what we own."**
+  **Before.** "…delegating every non-Claude agent to the universal installer and
+  direct-installing only Claude (whose layout and embed Doctrine already owns) is
+  preferred…"
+  **After.** "…delegating every harness routed `skills_via` to the universal
+  installer and direct-installing only `skills`-routed harnesses (today only
+  Claude, whose layout and embed Doctrine already owns) is preferred…"
 - **"A canonical tree with symlinks beats copies."**
   **Before.** "…so a refresh updates one tree and ownership is provable by link
   value — at the cost of a Unix symlink-swap dance."

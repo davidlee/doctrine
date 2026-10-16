@@ -191,8 +191,8 @@ declared.
   link dir and one skills route (`skills` link dir or `skills_via` npx target).
   The harness vocabulary is the registry; an unregistered name gets no defs or
   links and is disclosed.
-- **D5 — skills distribution and memory sync are not absorbed.** Install owns the
-  skill canon tree and its links for harnesses with a `skills` route (true since
+- **D5 — memory sync is not absorbed; skills are delegated only for `skills_via`
+  harnesses.** Install owns the skill canon tree and its links for harnesses with a `skills` route (true since
   SL-250); SPEC-010 specifies that mechanism. For harnesses routed `skills_via`,
   install delegates to `npx skills add`, a peer it uses but does not own.
   Global-memory materialisation is a standalone `memory sync` verb install only
