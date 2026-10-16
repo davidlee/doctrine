@@ -165,10 +165,29 @@ fn assert_installed(dir: &Path) {
         body.contains("dispatch worker"),
         "agent link resolves to the dispatch-worker def: {body:.80}"
     );
+    // SL-281 VT-1: every shipped claude def is linked at its harness-subdir
+    // canon — the walk is over the repo's def dir, so a new def is covered.
+    let defs: Vec<String> = fs::read_dir(common::repo_root().join("install/agents/claude"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .filter(|f| f.ends_with(".md"))
+        .collect();
     assert!(
-        dir.join(".doctrine/agents/dispatch-worker.md").is_file(),
-        "canonical agent def materialised"
+        defs.iter().any(|f| f == "capsule-worker.md"),
+        "control: the def walk is not empty: {defs:?}"
     );
+    for f in &defs {
+        let link = dir.join(".claude/agents").join(f);
+        assert_eq!(
+            fs::read_link(&link).unwrap_or_else(|e| panic!("{}: {e}", link.display())),
+            Path::new("../../.doctrine/agents/claude").join(f),
+            "{f} links at its claude canon"
+        );
+        assert!(
+            dir.join(".doctrine/agents/claude").join(f).is_file(),
+            "{f}: canonical agent def materialised"
+        );
+    }
 
     // SL-250 PHASE-04: the hooks are settings-wired, where nothing was between
     // SL-152 PHASE-06 and here.

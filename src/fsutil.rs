@@ -90,7 +90,6 @@ pub(crate) fn is_real_dir(path: &Path) -> bool {
 /// `base` itself is never examined — it is the caller's chosen anchor (a
 /// symlinked `$HOME` is not a reason to withhold anything). Errs when `dir`
 /// is not under `base`.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 pub(crate) fn symlinked_component(base: &Path, dir: &Path) -> std::io::Result<Option<PathBuf>> {
     let below = dir.strip_prefix(base).map_err(|e| {
         std::io::Error::new(

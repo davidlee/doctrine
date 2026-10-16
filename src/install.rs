@@ -30,23 +30,14 @@ const PARTNER_SUBSET_DOMAIN: &str = "doctrine-partner";
 const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN, PARTNER_SUBSET_DOMAIN];
 const RUNNER_BUNX: &str = "bunx";
 const RUNNER_NPX: &str = "npx";
-const DISPATCH_WORKER_AGENT_ASSET: &str = "agents/claude/dispatch-worker.md";
-const DISPATCH_WORKER_AGENT_ASSET_PI: &str = "agents/pi/dispatch-worker.md";
 /// Marker token injected into the dispatch-worker agent defs (SL-186 PHASE-04).
-/// When `install_agent_def` sees this literal in a def, it resolves the role
+/// When the convergence executor writes a def carrying this literal, it resolves the role
 /// band (`Role::Worker`) through the prompt engine and replaces the marker with
 /// the assembled text.
 // full worker context (role+traits); the bake reads the def's frontmatter, not the
 // marker args (kept literal, F4/C6). The sentinel stays this exact string — it is
 // matched by `.contains`, never parsed for its `--role` argument.
 pub(crate) const WORKER_RESOLVE_MARKER: &str = "{{ prompt resolve --role worker }}";
-
-/// Read one embedded `install/`-relative asset's bytes (`None` if absent). The
-/// single accessor over the embed for callers outside this module (the agents
-/// leg of `claude install`, src/skills.rs) — no parallel embed.
-pub(crate) fn embedded_asset(rel: &str) -> Option<std::borrow::Cow<'static, [u8]>> {
-    crate::asset_source::read_bytes(rel)
-}
 
 /// The `install/manifest.toml` schema.
 #[derive(Debug, Deserialize)]
@@ -74,13 +65,6 @@ struct Manifest {
     hymns: HymnsSection,
 
     #[serde(default)]
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "read by the convergence executor, SL-281 PHASE-04"
-        )
-    )]
     framework: FrameworkSection,
 
     /// The harness registry (SL-281, DEC-373): install's harness vocabulary.
@@ -106,23 +90,9 @@ struct HarnessSection {
     /// The boot adapter name; absent means no boot leg.
     boot: Option<String>,
     /// The link dir for the def set under `install/agents/<harness>/`.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "read by the convergence executor, SL-281 PHASE-04"
-        )
-    )]
     agents: Option<String>,
     skills: Option<String>,
     skills_via: Option<String>,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "read by the convergence executor, SL-281 PHASE-04"
-        )
-    )]
     workflows: Option<String>,
 }
 
@@ -260,7 +230,7 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
 
     // ── Stage 2: forward steps ──
     let exec = crate::boot::resolve_exec()?;
-    run_forward_steps(&project_root, &exec, args, &manifest.harness)?;
+    run_forward_steps(&project_root, &exec, args, &manifest)?;
     Ok(())
 }
 
@@ -341,7 +311,7 @@ fn boot_names(agents: &[String], registry: &Registry) -> Vec<String> {
 ///
 /// SL-250 PHASE-04: this used to be `resolve_harnesses(&[], root)`, which
 /// discarded the `--agent` the operator had just typed. In a fresh project
-/// `.claude/` does not exist when the leg is resolved (the agent-def leg creates
+/// `.claude/` does not exist when the leg is resolved (framework convergence creates
 /// it later), so `doctrine install --agent claude` wired no @-import and no
 /// hooks and reported only "no harness directories detected — skipped". That is
 /// the silent-inertness failure class this slice exists to end, one layer above
@@ -486,8 +456,9 @@ fn run_forward_steps(
     root: &Path,
     exec: &Path,
     args: &InstallArgs<'_>,
-    registry: &Registry,
+    manifest: &Manifest,
 ) -> anyhow::Result<()> {
+    let registry = &manifest.harness;
     let agents = detect_agents(args.agents, root, registry);
     let harnesses = install_harnesses(args.agents, root, registry);
 
@@ -538,7 +509,7 @@ fn run_forward_steps(
 
     // Forward-step 4 (nominal label): project the exposed-slot starter twins +
     // self-`replaces` sidecars onto disk. Placement is EARLY, not last (design F5):
-    // it MUST run before the agent-render loop below, because `install_agents_for`
+    // it MUST run before the convergence below, because its worker-def bake
     // resolves the worker role body from the *disk* hymn corpus — the sidecars must
     // already be on disk when it renders, or install is non-idempotent (the ISS-206
     // double-emit). Establish the disk corpus (incl. user-override sidecars) here,
@@ -567,69 +538,51 @@ fn run_forward_steps(
         }
     }
 
-    // 3. Skills per agent
+    // 3. Framework artefacts per confirmed harness, then npx delegation. The
+    // answers form this run's selection; one convergence covers every
+    // confirmed harness (SL-281 D3) — none confirmed, nothing converges.
     let catalog = discover()?;
     let selected = select_for_install(&catalog, args.skills, args.domains)?;
     let (runner_name, runner) = resolve_runner();
     let repo = &crate::dtoml::load_doctrine_toml(root)?.install.repo;
 
-    let mut non_claude_agents: Vec<String> = Vec::new();
-
+    let mut confirmed: Vec<String> = Vec::new();
     for agent in &agents {
         let question: String = if agent == "claude" {
             "Install skills + agent def for claude? [y/N/a]".to_string()
         } else {
             format!("Install skills for {agent} (delegates to npx)? [y/N/a]")
         };
-        if !prompt_step(&question, args.yes, &mut all_yes)? {
-            continue;
+        if prompt_step(&question, args.yes, &mut all_yes)? {
+            confirmed.push(agent.clone());
         }
-        if agent == "claude" {
-            let mut out = io::stdout();
-
-            // 3. Agent-def install (kept as-is).
-            if let Err(e) = install_agents_for(root, "claude", None, args.global, false, &mut out) {
-                writeln!(io::stdout(), "  claude agent-def install failed: {e:#}")?;
-            }
-            // 3b. RETIRED (SL-254 PHASE-10) — the claude-arm probe def
-            // (`agents/claude/dispatch-probe.md`) was orphaned when
-            // `workflows/drive-slice.js`, its only caller, was deleted with Mode B.
-            // 3c. Workflows leg (SL-206 PHASE-13) — payload lands PHASE-14; a
-            // no-op today (empty embed enumeration), mechanism only.
-            if let Err(e) = install_workflows_for(root, args.global, false, &mut out) {
-                writeln!(io::stdout(), "  claude workflows install failed: {e:#}")?;
-            }
-            // 3d. Skills leg (SL-250 PHASE-05) — canonical tree + proven-ownership
-            // symlinks, direct-written rather than shipped via the plugin.
-            if let Err(e) = install_skills_direct(
-                root,
-                &selected,
-                &[claude_skills_dir(root, args.global)?],
-                args.global,
-                false,
-                &mut out,
-            ) {
-                writeln!(io::stdout(), "  claude skills install failed: {e:#}")?;
-            }
-        } else {
-            non_claude_agents.push(agent.clone());
-            // Agent-def install per non-Claude agent.
-            if let Err(e) = install_agents_for(
-                root,
-                agent,
-                Some(agent),
-                args.global,
-                false,
-                &mut io::stdout(),
-            ) {
-                writeln!(io::stdout(), "  {agent} agent-def install failed: {e:#}")?;
-            }
+    }
+    if !confirmed.is_empty() {
+        let base = install_base(root, args.global)?;
+        let cx = Converge {
+            root,
+            base: &base,
+            scope: if args.global {
+                Scope::Global
+            } else {
+                Scope::Project
+            },
+        };
+        let defs = embedded_agent_defs();
+        let workflows = embedded_workflow_defs();
+        let wanted = desired_set(
+            &base, registry, &confirmed, &defs, &catalog, &selected, &workflows,
+        );
+        let mut out = io::stdout();
+        if let Err(e) = converge(&cx, &manifest.framework.roots, registry, &wanted, &mut out) {
+            writeln!(out, "  framework install failed: {e:#}")?;
         }
     }
 
-    // Batch-delegate all confirmed non-Claude agents to a single npx invocation,
-    // one de-duplicated target per skills route (pi + codex → `universal` once).
-    let delegate = delegate_targets(&non_claude_agents, registry);
+    // Batch-delegate every confirmed harness without a doctrine `skills` route
+    // to a single npx invocation, one de-duplicated target per skills route
+    // (pi + codex → `universal` once).
+    let delegate = delegate_targets(&confirmed, registry);
     report_unregistered(&delegate.unregistered, &mut io::stdout())?;
     if !delegate.targets.is_empty() {
         let mut out = io::stdout();
@@ -1051,7 +1004,7 @@ pub(crate) fn expand_worker_marker(def: &str, body: &str) -> String {
 /// traits from its frontmatter, enforce trait coverage (a hard error on any uncovered
 /// key — a contractless worker must never ship, T4), resolve role + trait bands, and
 /// inline the assembled body at the marker. The single seam both the real bake
-/// (`install_agent_def`) and VT-3 drive; corpus-pure (disk/embed I/O stays in the
+/// (`Baker::bake`) and VT-3 drive; corpus-pure (disk/embed I/O stays in the
 /// caller). Module home `install` — the bake engine leg (ADR-001).
 fn bake_worker_def(
     def_str: &str,
@@ -1171,13 +1124,7 @@ fn load_manifest() -> anyhow::Result<Manifest> {
 }
 
 /// The `[framework] roots` the embedded manifest declares (SL-281).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "read by the convergence executor, SL-281 PHASE-04"
-    )
-)]
+#[cfg(test)]
 pub(crate) fn framework_roots() -> anyhow::Result<Vec<String>> {
     Ok(load_manifest()?.framework.roots)
 }
@@ -1295,7 +1242,7 @@ fn read_gitignore_lines(path: &Path) -> BTreeSet<String> {
 /// Append `entry` to the project `.gitignore` when absent (idempotent, additive;
 /// creates the file if missing). Shared seam so each command can self-enforce its
 /// own derived-tree ignore invariant rather than depend on a prior `doctrine
-/// install` (SL-010 F4). The skills leg does NOT call this — `.doctrine/skills/*`
+/// install` (SL-010 F4). Framework convergence does NOT call this — `.doctrine/skills/*`
 /// is already listed in `install/manifest.toml`, which lands the entry.
 pub(crate) fn ensure_gitignored(root: &Path, entry: &str) -> anyhow::Result<()> {
     let path = root.join(".gitignore");
@@ -1632,116 +1579,9 @@ fn install_base(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
 }
 
 // ---------------------------------------------------------------------------
-// Pure: canonical tree + ownership-by-target-equality (SL-010 D3)
-//
-// A managed agent link is doctrine's *iff its value equals the relative target
-// we would write* — type (is_symlink) is necessary but not sufficient. Anything
-// else (a foreign symlink, or a real dir/file) is kept untouched. This is both
-// the never-clobber guarantee and the override hatch.
+// Staging (SL-281 PHASE-03) — exclusive-create staging names plus an atomic
+// swap, shared by canon materialisation and link writes.
 // ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Agents leg (SL-056 PHASE-11) — install the Claude dispatch-worker agent def
-// the same way skills install: materialize a canonical copy from the embed,
-// then symlink the agent dir at it (reusing classify_link/write_link/
-// relative_target — no parallel symlink impl).
-// ---------------------------------------------------------------------------
-
-/// The Claude agents directory (project-local or, with `global`, user home).
-fn claude_agents_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
-    Ok(install_base(root, global)?.join(".claude/agents"))
-}
-
-/// The pi agents directory (project-local or, with `global`, user home).
-fn pi_agents_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
-    Ok(install_base(root, global)?.join(".pi/agents"))
-}
-
-/// The canonical agents tree, mirroring `canonical_dir` so the relative link
-/// target is stable.
-fn agent_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
-    Ok(install_base(root, global)?.join(".doctrine/agents"))
-}
-
-/// The relative symlink value for `<id>`: from the agent skills dir (where the
-/// link lives) to `canonical_dir/<id>`. Derived from the two dirs, never
-/// hard-coded — `../../.doctrine/skills/<id>` in the common project-local case,
-/// and correct under a shared `--global` base.
-fn relative_target(agent_skills_dir: &Path, canonical_dir: &Path, id: &str) -> PathBuf {
-    crate::fsutil::relative_path(agent_skills_dir, &canonical_dir.join(id))
-}
-
-/// Why an agent skill path is foreign — left untouched and warned.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum ForeignReason {
-    /// A real directory or file the user owns (e.g. a pinned copy override).
-    RealDir,
-    /// A symlink whose value is not our canonical target — points elsewhere.
-    ForeignSymlink(PathBuf),
-}
-
-/// Reconciliation action for one agent skill link, by proven ownership.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Link {
-    /// Nothing there → create the relative symlink.
-    Create {
-        id: String,
-        dest: PathBuf,
-        target: PathBuf,
-    },
-    /// A symlink already equal to our target → ensure it (no-op, or heal a
-    /// dangling-but-ours link once its canonical is re-materialised).
-    Relink {
-        id: String,
-        dest: PathBuf,
-        target: PathBuf,
-    },
-    /// Foreign (a real dir, or a symlink pointing elsewhere) → never touched.
-    KeepForeign {
-        id: String,
-        dest: PathBuf,
-        reason: ForeignReason,
-    },
-}
-
-/// Classify `dest` (an agent skill path) against the canonical `target` by
-/// proven ownership. Uses `symlink_metadata`/`read_link`, never `exists()`
-/// (which follows links): a dangling link whose value equals our target is
-/// still ours and is healed, not recreated.
-fn classify_link(id: &str, dest: &Path, target: &Path) -> Link {
-    let Ok(meta) = fs::symlink_metadata(dest) else {
-        return Link::Create {
-            id: id.to_string(),
-            dest: dest.to_path_buf(),
-            target: target.to_path_buf(),
-        };
-    };
-    if !meta.file_type().is_symlink() {
-        return Link::KeepForeign {
-            id: id.to_string(),
-            dest: dest.to_path_buf(),
-            reason: ForeignReason::RealDir,
-        };
-    }
-    match fs::read_link(dest) {
-        Ok(value) if value == target => Link::Relink {
-            id: id.to_string(),
-            dest: dest.to_path_buf(),
-            target: target.to_path_buf(),
-        },
-        Ok(value) => Link::KeepForeign {
-            id: id.to_string(),
-            dest: dest.to_path_buf(),
-            reason: ForeignReason::ForeignSymlink(value),
-        },
-        // Unreadable symlink (race/perm) — treat as foreign, never clobber.
-        Err(_) => Link::KeepForeign {
-            id: id.to_string(),
-            dest: dest.to_path_buf(),
-            reason: ForeignReason::ForeignSymlink(PathBuf::new()),
-        },
-    }
-}
 
 /// Candidate attempts before `stage_from` gives up. Bounded so a hostile
 /// directory cannot hang an install.
@@ -1818,38 +1658,6 @@ fn write_link(dest: &Path, target: &Path) -> anyhow::Result<()> {
             dest.display()
         ))
     })
-}
-
-/// Human-readable `kept` reason for an honest warning.
-fn foreign_reason(reason: &ForeignReason) -> String {
-    match reason {
-        ForeignReason::RealDir => "real dir".to_string(),
-        ForeignReason::ForeignSymlink(to) => format!("foreign symlink → {}", to.display()),
-    }
-}
-
-/// Reconcile one managed link by proven ownership, reporting the action.
-/// The single trichotomy: agents, workflows and skills all call this.
-fn reconcile_link(
-    name: &str,
-    dest: &Path,
-    target: &Path,
-    out: &mut dyn Write,
-) -> anyhow::Result<()> {
-    match classify_link(name, dest, target) {
-        Link::Create { .. } => {
-            write_link(dest, target)?;
-            writeln!(out, "  linked    {name}")?;
-        }
-        Link::Relink { .. } => {
-            write_link(dest, target)?;
-            writeln!(out, "  relinked  {name}")?;
-        }
-        Link::KeepForeign { reason, .. } => {
-            writeln!(out, "  kept      {name} ({})", foreign_reason(&reason))?;
-        }
-    }
-    Ok(())
 }
 
 /// Assemble the `npx skills add …` argv (program `npx`/`bunx` excluded).
@@ -1952,122 +1760,6 @@ pub(crate) fn select_for_install<'a>(
     Ok(select(catalog, skills, domains))
 }
 
-/// Public wrapper for `install_agent_def`.
-pub(crate) fn install_agents_for(
-    root: &Path,
-    agent_name: &str,
-    canon_subdir: Option<&str>,
-    global: bool,
-    dry_run: bool,
-    out: &mut dyn Write,
-) -> anyhow::Result<()> {
-    let embed_asset = match agent_name {
-        "claude" => DISPATCH_WORKER_AGENT_ASSET,
-        _ => DISPATCH_WORKER_AGENT_ASSET_PI,
-    };
-    install_agent_def(
-        root,
-        agent_name,
-        canon_subdir,
-        embed_asset,
-        global,
-        dry_run,
-        out,
-    )
-}
-
-// ---------------------------------------------------------------------------
-// Imperative: printing
-// ---------------------------------------------------------------------------
-
-/// Install an agent def for the given agent: materialize the canonical copy
-/// from the embed into `.doctrine/agents/` (under an optional subdir), then
-/// symlink the agent's link dir at it. Idempotent — refreshes the canonical
-/// each run and only (re)writes a link that is missing or proven ours, never
-/// clobbering a foreign one. Reuses `classify_link`/`write_link`/
-/// `relative_target` — no parallel symlink impl.
-///
-/// The dest filename is DERIVED from `embed_asset`'s basename (SL-206
-/// PHASE-13) — never hardcoded — so this one function seeds every claude-arm
-/// def rather than each needing its own copy-paste variant.
-pub(crate) fn install_agent_def(
-    root: &Path,
-    agent_name: &str,
-    canon_subdir: Option<&str>,
-    embed_asset: &str,
-    global: bool,
-    dry_run: bool,
-    out: &mut dyn Write,
-) -> anyhow::Result<()> {
-    let file_name = Path::new(embed_asset)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .with_context(|| format!("Embedded agent asset '{embed_asset}' has no file name"))?;
-    let canon_base = agent_canonical_dir(root, global)?;
-    let canon_dir = match canon_subdir {
-        Some(sub) => canon_base.join(sub),
-        None => canon_base,
-    };
-    let link_dir = match agent_name {
-        "claude" => claude_agents_dir(root, global)?,
-        _ => pi_agents_dir(root, global)?,
-    };
-    let canon = canon_dir.join(file_name);
-    let dest = link_dir.join(file_name);
-    let target = relative_target(&link_dir, &canon_dir, file_name);
-
-    writeln!(out, "agent {agent_name} ({file_name}):")?;
-    writeln!(out, "  agent     {file_name} → {}", dest.display())?;
-    if dry_run {
-        return Ok(());
-    }
-
-    // 1. Refresh the canonical copy from the embed (always overwrite — derived).
-    let data = embedded_asset(embed_asset)
-        .with_context(|| format!("Embedded agent def '{embed_asset}' not found"))?;
-    fs::create_dir_all(&canon_dir)
-        .with_context(|| format!("Failed to create {}", canon_dir.display()))?;
-    if let Ok(def_str) = std::str::from_utf8(&data)
-        && def_str.contains(WORKER_RESOLVE_MARKER)
-    {
-        let disk = root.join(".doctrine").join(HYMNS_DIRNAME);
-        let embedded = embedded_hymns();
-        let sealed = embedded_seal_set()?;
-        let corpus = load_full_corpus(&disk, &embedded, &sealed)?;
-        let expanded = bake_worker_def(def_str, embed_asset, &corpus, &sealed)?;
-        crate::fsutil::write_atomic(&canon, expanded.as_bytes())?;
-    } else {
-        crate::fsutil::write_atomic(&canon, &data)?;
-    }
-
-    // 2. Reconcile the agent link by proven ownership (re-classify at mutation
-    //    time, like `execute`'s skill links).
-    reconcile_link(file_name, &dest, &target, out)?;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Workflows leg (SL-206 PHASE-13) — seed embedded `install/workflows/*.js`
-// assets into the claude-arm `.claude/workflows/` dir the same way the agents
-// leg installs defs: materialize a canonical copy under `.doctrine/workflows/`,
-// then symlink the link dir at it — reusing `classify_link`/`write_link`/
-// `relative_target`/`install_base`, no parallel symlink impl. SL-254 PHASE-10
-// deleted the only payload (`drive-slice.js`, Mode B's driver), so
-// `embedded_workflow_defs()` enumerates nothing today and this leg is a no-op
-// in production again — mechanism only, ready for the next workflow asset.
-// ---------------------------------------------------------------------------
-
-/// The Claude workflows directory (project-local or, with `global`, user home).
-fn claude_workflows_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
-    Ok(install_base(root, global)?.join(".claude/workflows"))
-}
-
-/// The canonical workflows tree, mirroring `agent_canonical_dir` so the
-/// relative link target is stable.
-fn workflow_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
-    Ok(install_base(root, global)?.join(".doctrine/workflows"))
-}
-
 /// Return every embedded workflow file (under `"workflows/"`) as
 /// `(relative-path, bytes)` pairs — mirrors `embedded_agent_defs`. Empty since
 /// SL-254 PHASE-10 deleted `drive-slice.js`, its only payload.
@@ -2087,74 +1779,11 @@ pub(crate) fn embedded_workflow_defs() -> Vec<(String, Vec<u8>)> {
         .collect()
 }
 
-/// Seed every embedded claude workflow asset: materialize a canonical copy
-/// under `.doctrine/workflows/`, then symlink `.claude/workflows/` at it.
-/// Public entry point — delegates to `install_workflow_assets` over the real
-/// embed, kept separate so tests can drive the mechanism over a synthetic
-/// asset list without an embedded payload.
-pub(crate) fn install_workflows_for(
-    root: &Path,
-    global: bool,
-    dry_run: bool,
-    out: &mut dyn Write,
-) -> anyhow::Result<()> {
-    install_workflow_assets(root, global, dry_run, out, &embedded_workflow_defs())
-}
-
-/// The testable core of the workflows leg: materialize+link every `(name,
-/// bytes)` asset. No embed access — a synthetic list exercises the mechanism
-/// before the real payload (PHASE-14) exists.
-fn install_workflow_assets(
-    root: &Path,
-    global: bool,
-    dry_run: bool,
-    out: &mut dyn Write,
-    assets: &[(String, Vec<u8>)],
-) -> anyhow::Result<()> {
-    let canon_dir = workflow_canonical_dir(root, global)?;
-    let link_dir = claude_workflows_dir(root, global)?;
-    for (rel, data) in assets {
-        let file_name = Path::new(rel)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .with_context(|| format!("Embedded workflow asset '{rel}' has no file name"))?;
-        let canon = canon_dir.join(file_name);
-        let dest = link_dir.join(file_name);
-        let target = relative_target(&link_dir, &canon_dir, file_name);
-
-        writeln!(out, "  workflow  {file_name} → {}", dest.display())?;
-        if dry_run {
-            continue;
-        }
-
-        fs::create_dir_all(&canon_dir)
-            .with_context(|| format!("Failed to create {}", canon_dir.display()))?;
-        crate::fsutil::write_atomic(&canon, data)?;
-
-        reconcile_link(file_name, &dest, &target, out)?;
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
-// Skills leg (SL-250 PHASE-05) — restore the binary-sourced canonical skills
-// tree plus proven-ownership symlinks the plugin channel had shadowed.
-// Recovered near-verbatim from `git show 347197e8^:src/skills.rs`
-// (`materialise_canonical`/`copy_skill` are byte-identical); the orchestration
-// around them is new — parameterised over `link_dirs` (`OQ-9`/`DEC-166`) so a
-// second target (`.agents/skills`, IMP-406) is a call-site change, not a
-// mechanism change.
+// Skill canon materialisation (SL-250 PHASE-05) — the binary-sourced canonical
+// skills tree. Recovered near-verbatim from `git show 347197e8^:src/skills.rs`;
+// the convergence executor calls it for every skill member it writes.
 // ---------------------------------------------------------------------------
-
-/// The canonical skills tree (project-local, or under `$HOME` with `global`).
-fn skills_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
-    Ok(install_base(root, global)?.join(".doctrine/skills"))
-}
-
-/// The Claude skills link dir. The only Claude-specific element in the leg.
-fn claude_skills_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
-    Ok(install_base(root, global)?.join(".claude/skills"))
-}
 
 /// Materialise the canonical copy of `entry` at `dest` (`.doctrine/skills/<id>`),
 /// staged in a unique, exclusively-created `.tmp-<id>.<pid>.<n>` sibling then
@@ -2213,35 +1842,6 @@ fn copy_skill(entry: &Entry, dest: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Refresh the canonical tree once, then reconcile links into it from every
-/// target directory. Parameterised over `link_dirs` per `OQ-9`/`DEC-166`:
-/// materialise runs ONCE, the link phase loops.
-pub(crate) fn install_skills_direct(
-    root: &Path,
-    selected: &[&Entry],
-    link_dirs: &[PathBuf],
-    global: bool,
-    dry_run: bool,
-    out: &mut dyn Write,
-) -> anyhow::Result<()> {
-    let canon_dir = skills_canonical_dir(root, global)?;
-    writeln!(out, "agent claude (direct):")?;
-    for entry in selected {
-        let canon = canon_dir.join(&entry.id);
-        writeln!(out, "  skill     {} → {}", entry.id, canon.display())?;
-        if dry_run {
-            continue;
-        }
-        materialise_canonical(entry, &canon)?;
-        for link_dir in link_dirs {
-            let dest = link_dir.join(&entry.id);
-            let target = relative_target(link_dir, &canon_dir, &entry.id);
-            reconcile_link(&entry.id, &dest, &target, out)?;
-        }
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // Convergence shell (SL-281 PHASE-04, design `sec-convergence`). Builds the
 // desired set and the on-disk snapshot `install_ownership::plan` decides over,
@@ -2252,7 +1852,6 @@ pub(crate) fn install_skills_direct(
 /// The canon root a member kind lives under, relative to the install base.
 /// One per `[framework] roots` entry — pinned equal by
 /// `canon_roots_match_manifest_framework_roots`.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn canon_root(kind: MemberKind) -> &'static str {
     match kind {
         MemberKind::AgentDef => ".doctrine/agents",
@@ -2262,7 +1861,6 @@ fn canon_root(kind: MemberKind) -> &'static str {
 }
 
 /// Where a member's canon bytes come from.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 enum Source<'a> {
     /// An agent def (baked if it carries `WORKER_RESOLVE_MARKER`) or a
     /// workflow; `label` is its embed path below `agents/` / `workflows/`.
@@ -2274,7 +1872,6 @@ enum Source<'a> {
 }
 
 /// The desired set plus each member's source, keyed by `Member.canon`.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 struct Wanted<'a> {
     desired: Desired,
     sources: BTreeMap<PathBuf, Source<'a>>,
@@ -2285,7 +1882,6 @@ struct Wanted<'a> {
 /// An unregistered harness, or one without `agents`/`skills`/`workflows`
 /// routes (codex), contributes nothing. Top-level `AGENTS.md` is never a
 /// member — only `<harness>/<file>` defs match.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn desired_set<'a>(
     base: &Path,
     registry: &Registry,
@@ -2360,7 +1956,6 @@ fn desired_set<'a>(
 
 /// One shipped entry before selection: its link sites, each tagged with the
 /// harness whose route it is, and whether this run asked for it.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 struct Shipped<'a, 'r> {
     kind: MemberKind,
     canon: PathBuf,
@@ -2373,7 +1968,6 @@ impl<'a> Wanted<'a> {
     /// Admit `shipped` as a member; select it (by clone, so `selected` holds
     /// the identical member) and its selected harnesses' sites when this run
     /// asked for it and some selected harness routes it.
-    #[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
     fn add(&mut self, harnesses: &[String], shipped: Shipped<'a, '_>) {
         let picked: Vec<PathBuf> = shipped
             .sites
@@ -2396,7 +1990,6 @@ impl<'a> Wanted<'a> {
 }
 
 /// `(harness, link dir)` for every registered harness carrying `route`.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn routes<'r>(
     registry: &'r Registry,
     route: impl Fn(&'r HarnessSection) -> Option<&'r String>,
@@ -2408,7 +2001,6 @@ fn routes<'r>(
 }
 
 /// The link site for `file` under each routed dir.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn sites<'r>(base: &Path, routes: &[(&'r str, &str)], file: &str) -> Vec<(&'r str, PathBuf)> {
     routes
         .iter()
@@ -2427,7 +2019,6 @@ enum EntryState {
 
 /// `lstat` `path` (never following a final symlink); a symlink carries its
 /// value. A missing entry is `Absent`, not an error.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn entry_state(path: &Path) -> io::Result<EntryState> {
     let meta = match fs::symlink_metadata(path) {
         Ok(meta) => meta,
@@ -2445,7 +2036,6 @@ fn entry_state(path: &Path) -> io::Result<EntryState> {
 
 /// The plan's snapshot plus every scanned path's state (a missing key was
 /// absent) — re-proof state stays in the shell, not in `Snapshot`/`Action`.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 struct Scan {
     snapshot: Snapshot,
     states: BTreeMap<PathBuf, EntryState>,
@@ -2453,7 +2043,6 @@ struct Scan {
 
 /// Every registered harness's link dirs (`agents`, `skills`, `workflows`)
 /// under `base`, de-duplicated — all registered harnesses, not this run's.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn registered_link_dirs(base: &Path, registry: &Registry) -> Vec<PathBuf> {
     let dirs: BTreeSet<PathBuf> = registry
         .values()
@@ -2468,7 +2057,6 @@ fn registered_link_dirs(base: &Path, registry: &Registry) -> Vec<PathBuf> {
 /// root, descending only into real-dir containers of member canon paths;
 /// lists every link dir. Any listed dir reached through a symlinked
 /// component below `base` is prune-blocked. Reads only — creates nothing.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn scan(
     base: &Path,
     roots: &[PathBuf],
@@ -2506,7 +2094,6 @@ fn scan(
     Ok(out)
 }
 
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 impl Scan {
     /// The state the scan recorded at `path`.
     fn scanned(&self, path: &Path) -> EntryState {
@@ -2555,7 +2142,6 @@ impl Scan {
 }
 
 /// The header above the convergence report block.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn report_header(scope: Scope, dry_run: bool) -> String {
     match (dry_run, scope) {
         (true, _) => "Ownership plan (not executed under --dry-run):".to_string(),
@@ -2566,7 +2152,6 @@ fn report_header(scope: Scope, dry_run: bool) -> String {
 
 /// One report line for `action` (design § Report vocabulary) — the single
 /// renderer both the executor and dry-run print through.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn action_line(action: &Action, scan: &Scan, wanted: &Wanted<'_>, dry_run: bool) -> String {
     let shown = |p: &Path| p.display().to_string();
     let name = |p: &Path| {
@@ -2636,13 +2221,11 @@ fn action_line(action: &Action, scan: &Scan, wanted: &Wanted<'_>, dry_run: bool)
 }
 
 /// One report row: the verb padded to the shared 10-char column.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn row(verb: &str, rest: &str) -> String {
     format!("  {verb:<9} {rest}")
 }
 
 /// The line for a mutation withheld because its entry changed since the scan.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn skipped_line(path: &Path) -> String {
     row(
         "skipped",
@@ -2651,7 +2234,6 @@ fn skipped_line(path: &Path) -> String {
 }
 
 /// The paths one convergence run executes against.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 struct Converge<'a> {
     /// Project root — the hymn corpus the worker bake resolves against (a
     /// global install bakes against it too, pre-existing ISS-520).
@@ -2666,7 +2248,6 @@ struct Converge<'a> {
 /// parent became reachable through a symlink is withheld. Aborts on the
 /// first I/O or bake error — plan order puts removals last, so an abort
 /// never strands a link before its target's prune.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn execute(
     cx: &Converge<'_>,
     wanted: &Wanted<'_>,
@@ -2694,8 +2275,38 @@ fn execute(
     Ok(())
 }
 
+/// Scan the disk under `cx.base` and plan its convergence toward `wanted`:
+/// the canon `roots` (`[framework] roots`, base-relative) and every
+/// registered harness's link dirs. Reads only — the dry-run seam.
+fn survey(
+    cx: &Converge<'_>,
+    roots: &[String],
+    registry: &Registry,
+    wanted: &Wanted<'_>,
+) -> anyhow::Result<(Scan, Vec<Action>)> {
+    let roots: Vec<PathBuf> = roots.iter().map(|r| cx.base.join(r)).collect();
+    let link_dirs = registered_link_dirs(cx.base, registry);
+    let scanned = scan(cx.base, &roots, &link_dirs, &wanted.desired)?;
+    let actions =
+        crate::install_ownership::plan(&roots, cx.scope, &wanted.desired, &scanned.snapshot);
+    Ok((scanned, actions))
+}
+
+/// Converge the framework artefacts under `cx.base` toward `wanted`: survey,
+/// then execute under the scope's report header.
+fn converge(
+    cx: &Converge<'_>,
+    roots: &[String],
+    registry: &Registry,
+    wanted: &Wanted<'_>,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    let (scanned, actions) = survey(cx, roots, registry, wanted)?;
+    writeln!(out, "{}", report_header(cx.scope, false))?;
+    execute(cx, wanted, &scanned, &actions, out)
+}
+
 /// How one action fared at mutation time.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 enum Applied<'p> {
     Done,
     /// The entry no longer matches the scan; nothing was touched.
@@ -2705,7 +2316,6 @@ enum Applied<'p> {
 }
 
 /// Re-prove then perform one action. Reports mutate nothing.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn apply<'p>(
     cx: &Converge<'_>,
     wanted: &Wanted<'_>,
@@ -2748,7 +2358,6 @@ fn apply<'p>(
 /// Write member `m`'s canon entry from its source: a skill is materialised;
 /// an asset is written atomically, baked first when it carries
 /// `WORKER_RESOLVE_MARKER`.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 fn write_canon(wanted: &Wanted<'_>, m: &Member, baker: &mut Baker<'_>) -> anyhow::Result<()> {
     match wanted.sources.get(&m.canon) {
         Some(Source::Skill(entry)) => materialise_canonical(entry, &m.canon),
@@ -2769,13 +2378,11 @@ fn write_canon(wanted: &Wanted<'_>, m: &Member, baker: &mut Baker<'_>) -> anyhow
 }
 
 /// The worker-def bake, loading the hymn corpus at most once per run.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 struct Baker<'a> {
     root: &'a Path,
     corpus: Option<(Vec<crate::hymns::Snippet>, crate::hymns::SealSet)>,
 }
 
-#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
 impl Baker<'_> {
     fn bake(&mut self, def: &str, label: &str) -> anyhow::Result<String> {
         let (corpus, sealed) = match &mut self.corpus {
@@ -3244,11 +2851,7 @@ mod tests_converge {
         registry: &Registry,
         wanted: &Wanted<'_>,
     ) -> (Scan, Vec<Action>) {
-        let roots = manifest_roots(cx.base);
-        let dirs = registered_link_dirs(cx.base, registry);
-        let scanned = scan(cx.base, &roots, &dirs, &wanted.desired).unwrap();
-        let actions = plan(&roots, cx.scope, &wanted.desired, &scanned.snapshot);
-        (scanned, actions)
+        survey(cx, &framework_roots().unwrap(), registry, wanted).unwrap()
     }
 
     fn run(cx: &Converge<'_>, wanted: &Wanted<'_>, scanned: &Scan, actions: &[Action]) -> String {
@@ -3711,6 +3314,250 @@ mod tests_converge {
             targets.get(&b),
             Some(&PathBuf::from("../../../.doctrine/skills/x"))
         );
+    }
+
+    // ── converge: the wired chain (T4c migrations of the retired legs) ──
+
+    /// Converge `base` toward `harnesses` over the real catalog with
+    /// `skill_ids` selected and `workflows` shipped (no agent defs); returns
+    /// the report.
+    pub(super) fn converge_report(
+        base: &Path,
+        registry: &Registry,
+        harnesses: &[&str],
+        skill_ids: &[&str],
+        workflows: &[(String, Vec<u8>)],
+    ) -> String {
+        let catalog = discover().unwrap();
+        let picked = select_for_install(&catalog, &names(skill_ids), &[]).unwrap();
+        let wanted = desired_set(
+            base,
+            registry,
+            &names(harnesses),
+            &[],
+            &catalog,
+            &picked,
+            workflows,
+        );
+        let cx = Converge {
+            root: base,
+            base,
+            scope: Scope::Project,
+        };
+        let mut out = Vec::new();
+        converge(
+            &cx,
+            &framework_roots().unwrap(),
+            registry,
+            &wanted,
+            &mut out,
+        )
+        .unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    /// `code-review` converged for claude over the real registry.
+    fn converge_code_review(t: &Tree) -> String {
+        converge_report(
+            t.base(),
+            &real_registry(),
+            &["claude"],
+            &["code-review"],
+            &[],
+        )
+    }
+
+    const CODE_REVIEW_TARGET: &str = "../../.doctrine/skills/code-review";
+
+    #[test]
+    fn converge_materialises_skill_and_links_it() {
+        let t = Tree::new();
+        let out = converge_code_review(&t);
+
+        let canon = t.path(".doctrine/skills/code-review");
+        assert!(canon.join("SKILL.md").is_file());
+        assert_eq!(
+            fs::read_link(t.path(".claude/skills/code-review")).unwrap(),
+            PathBuf::from(CODE_REVIEW_TARGET),
+            "the link value IS the criterion, not mere resolvability"
+        );
+        assert!(out.starts_with("framework artefacts (project):\n"), "{out}");
+        assert!(
+            out.contains(&format!("  skill     code-review → {}", canon.display())),
+            "{out}"
+        );
+        assert!(out.contains("  linked    code-review"), "{out}");
+    }
+
+    #[test]
+    fn converge_is_idempotent() {
+        let t = Tree::new();
+        let first = converge_code_review(&t);
+        assert!(
+            first.contains("  linked    code-review"),
+            "control: {first}"
+        );
+        let skill = t.path(".doctrine/skills/code-review/SKILL.md");
+        let link = t.path(".claude/skills/code-review");
+        let (body, value) = (fs::read(&skill).unwrap(), fs::read_link(&link).unwrap());
+
+        let second = converge_code_review(&t);
+
+        // D1: an already-correct link plans nothing, so prints nothing.
+        for verb in ["linked", "relinked", "kept", "pruned"] {
+            assert!(!second.contains(&format!("  {verb} ")), "{verb}: {second}");
+        }
+        assert_eq!(fs::read(&skill).unwrap(), body);
+        assert_eq!(fs::read_link(&link).unwrap(), value);
+    }
+
+    #[test]
+    fn converge_keeps_real_dir_and_reports_shadowing() {
+        let t = Tree::new();
+        let mine = t.file(".claude/skills/code-review/mine.txt", "user-owned");
+
+        let out = converge_code_review(&t);
+
+        // D2: a real dir shadows like a real file — one wording.
+        assert!(
+            out.contains(
+                "  kept      code-review (real file shadows doctrine def — remove it to receive updates)"
+            ),
+            "{out}"
+        );
+        assert_eq!(fs::read_to_string(&mine).unwrap(), "user-owned");
+        assert_eq!(
+            entry_state(&t.path(".claude/skills/code-review")).unwrap(),
+            EntryState::Dir,
+            "the user's dir survives as a real dir, never replaced"
+        );
+        assert!(
+            t.path(".doctrine/skills/code-review/SKILL.md").is_file(),
+            "control: convergence ran"
+        );
+    }
+
+    #[test]
+    fn converge_heals_a_dangling_owned_link() {
+        let t = Tree::new();
+        let link = t.link(".claude/skills/code-review", CODE_REVIEW_TARGET);
+        assert!(!link.exists(), "control: the owned link dangles before");
+
+        converge_code_review(&t);
+
+        assert!(link.exists(), "the link resolves through the fresh canon");
+        assert_eq!(
+            fs::read_link(&link).unwrap(),
+            PathBuf::from(CODE_REVIEW_TARGET)
+        );
+    }
+
+    #[test]
+    fn converge_links_every_skills_route_site() {
+        // Two link dirs at different depths — a deeper dir must carry a deeper
+        // relative target, proving the per-site target, not a hard-coded one.
+        let registry = registry_from(
+            "[harness.a]\nskills = \".a/skills\"\n[harness.b]\nskills = \".b/deep/skills\"\n",
+        );
+        let t = Tree::new();
+        converge_report(t.base(), &registry, &["a", "b"], &["code-review"], &[]);
+
+        assert_eq!(
+            fs::read_link(t.path(".a/skills/code-review")).unwrap(),
+            PathBuf::from(CODE_REVIEW_TARGET)
+        );
+        assert_eq!(
+            fs::read_link(t.path(".b/deep/skills/code-review")).unwrap(),
+            PathBuf::from("../../../.doctrine/skills/code-review")
+        );
+        assert!(t.path(".b/deep/skills/code-review/SKILL.md").is_file());
+    }
+
+    fn synthetic_workflow() -> Vec<(String, Vec<u8>)> {
+        vec![("drive-slice.js".to_string(), b"// stub workflow".to_vec())]
+    }
+
+    #[test]
+    fn converge_materialises_and_links_a_synthetic_workflow() {
+        let t = Tree::new();
+        let out = converge_report(
+            t.base(),
+            &real_registry(),
+            &["claude"],
+            &["code-review"],
+            &synthetic_workflow(),
+        );
+
+        let canon = t.path(".doctrine/workflows/drive-slice.js");
+        let link = t.path(".claude/workflows/drive-slice.js");
+        assert_eq!(fs::read(&canon).unwrap(), b"// stub workflow");
+        assert_eq!(
+            fs::read_link(&link).unwrap(),
+            PathBuf::from("../../.doctrine/workflows/drive-slice.js"),
+            "linked, not copied, into .claude/workflows/"
+        );
+        assert_eq!(fs::read(&link).unwrap(), b"// stub workflow");
+        assert!(
+            out.contains(&format!("  workflow  drive-slice.js → {}", canon.display())),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn workflow_dry_run_render_writes_nothing() {
+        let t = Tree::new();
+        let registry = real_registry();
+        let catalog = discover().unwrap();
+        let workflows = synthetic_workflow();
+        let wanted = desired_set(
+            t.base(),
+            &registry,
+            &names(&["claude"]),
+            &[],
+            &catalog,
+            &[],
+            &workflows,
+        );
+        let (scanned, actions) = scan_and_plan(&project(&t), &registry, &wanted);
+        let lines: Vec<String> = actions
+            .iter()
+            .map(|a| action_line(a, &scanned, &wanted, true))
+            .collect();
+
+        let canon = t.path(".doctrine/workflows/drive-slice.js");
+        assert!(
+            lines.contains(&format!("  would write {}", canon.display())),
+            "{lines:?}"
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.starts_with("  would link ") && l.contains("drive-slice.js")),
+            "{lines:?}"
+        );
+        assert!(
+            listing(t.base()).is_empty(),
+            "a dry-run render writes nothing"
+        );
+    }
+
+    #[test]
+    fn converge_with_no_workflows_creates_no_workflow_dirs() {
+        let t = Tree::new();
+        let out = converge_report(
+            t.base(),
+            &real_registry(),
+            &["claude"],
+            &["code-review"],
+            &[],
+        );
+        assert!(
+            t.path(".doctrine/skills/code-review").is_dir(),
+            "control: convergence ran"
+        );
+        assert!(!t.path(".doctrine/workflows").exists());
+        assert!(!t.path(".claude/workflows").exists());
+        assert!(!out.contains("workflow"), "{out}");
     }
 }
 
@@ -4276,72 +4123,7 @@ mod tests_skills {
 
     // --- canonical dir + relative target ---
 
-    #[test]
-    fn relative_target_is_computed_from_the_two_dirs() {
-        // Project-local: .claude/skills → .doctrine/skills/<id>.
-        let agent = Path::new("/proj/.claude/skills");
-        let canon = Path::new("/proj/.doctrine/skills");
-        assert_eq!(
-            relative_target(agent, canon, "code-review"),
-            PathBuf::from("../../.doctrine/skills/code-review")
-        );
-        // A shared --global base ($HOME) stays correct — same relative shape,
-        // computed not hard-coded.
-        let g_agent = Path::new("/home/u/.claude/skills");
-        let g_canon = Path::new("/home/u/.doctrine/skills");
-        assert_eq!(
-            relative_target(g_agent, g_canon, "code-review"),
-            PathBuf::from("../../.doctrine/skills/code-review")
-        );
-    }
-
     // --- ownership classification ---
-
-    #[test]
-    fn classify_link_covers_the_ownership_trichotomy() {
-        use std::os::unix::fs::symlink;
-
-        let dir = tempfile::tempdir().unwrap();
-        let target = PathBuf::from("../../.doctrine/skills/code-review");
-
-        // missing → Create
-        let missing = dir.path().join("missing");
-        assert!(matches!(
-            classify_link("code-review", &missing, &target),
-            Link::Create { .. }
-        ));
-
-        // symlink whose value == target → Relink (dangling-but-ours: the target
-        // need not resolve — ownership is the value, not resolvability).
-        let ours = dir.path().join("ours");
-        symlink(&target, &ours).unwrap();
-        assert!(matches!(
-            classify_link("code-review", &ours, &target),
-            Link::Relink { .. }
-        ));
-
-        // symlink pointing elsewhere → KeepForeign(foreign-symlink → where)
-        let foreign = dir.path().join("foreign");
-        symlink("somewhere/else", &foreign).unwrap();
-        match classify_link("code-review", &foreign, &target) {
-            Link::KeepForeign {
-                reason: ForeignReason::ForeignSymlink(where_),
-                ..
-            } => assert_eq!(where_, PathBuf::from("somewhere/else")),
-            other => panic!("expected foreign-symlink, got {other:?}"),
-        }
-
-        // real dir → KeepForeign(real-dir)
-        let real = dir.path().join("real");
-        fs::create_dir_all(&real).unwrap();
-        assert!(matches!(
-            classify_link("code-review", &real, &target),
-            Link::KeepForeign {
-                reason: ForeignReason::RealDir,
-                ..
-            }
-        ));
-    }
 
     // --- delegate argv ---
 
@@ -4405,7 +4187,7 @@ mod tests_skills {
 
     // --- plan ---
 
-    // --- install_skills_direct (SL-250 PHASE-05) ---
+    // --- skill canon staging (SL-250 PHASE-05, SL-281 PHASE-03) ---
 
     /// A REAL embedded skill (not a synthetic `Entry`) — `copy_skill` resolves
     /// `entry.files` through `PluginAssets::get`, so a hand-built entry with
@@ -4416,34 +4198,6 @@ mod tests_skills {
             .into_iter()
             .find(|e| e.id == "code-review" && e.domain == "doctrine")
             .expect("code-review ships in the doctrine domain")
-    }
-
-    #[test]
-    fn install_skills_direct_materialises_and_links() {
-        let dir = tempfile::tempdir().unwrap();
-        let cr = real_skill_entry();
-        let link_dir = dir.path().join(".claude/skills");
-        let mut out = Vec::new();
-
-        install_skills_direct(
-            dir.path(),
-            &[&cr],
-            &[link_dir.clone()],
-            false,
-            false,
-            &mut out,
-        )
-        .unwrap();
-
-        let canon = dir.path().join(".doctrine/skills/code-review");
-        assert!(canon.join("SKILL.md").exists());
-
-        let link = link_dir.join("code-review");
-        assert_eq!(
-            fs::read_link(&link).unwrap(),
-            PathBuf::from("../../.doctrine/skills/code-review"),
-            "the link value IS the criterion, not mere resolvability"
-        );
     }
 
     /// Plant a regular file, a dir holding a file, and a dangling symlink at
@@ -4548,7 +4302,6 @@ mod tests_skills {
 
     #[test]
     fn staging_never_reuses_preexisting_entry_under_symlinked_doctrine() {
-        let cr = real_skill_entry();
         let project = tempfile::tempdir().unwrap();
         let other = tempfile::tempdir().unwrap();
         let real = other.path().join("real-doctrine");
@@ -4559,21 +4312,27 @@ mod tests_skills {
         assert!(planted.iter().all(|p| p.symlink_metadata().is_ok()));
 
         let link_dir = project.path().join(".claude/skills");
-        let mut out = Vec::new();
+        let registry = load_manifest().unwrap().harness;
+        let mut out = String::new();
         for _ in 0..2 {
-            install_skills_direct(
+            out += &super::tests_converge::converge_report(
                 project.path(),
-                &[&cr],
-                &[link_dir.clone()],
-                false,
-                false,
-                &mut out,
-            )
-            .unwrap();
+                &registry,
+                &["claude"],
+                &["code-review"],
+                &[],
+            );
         }
 
         assert_squatters_intact(&planted);
         assert!(real.join("skills/keep-me").is_dir());
+        // The root is reached through the symlinked `.doctrine`, so even the
+        // orphan `keep-me` is withheld from pruning.
+        let blocked = project.path().join(".doctrine/skills");
+        assert!(
+            out.contains(&format!("  prune blocked {}", blocked.display())),
+            "{out}"
+        );
         assert!(real.join("skills/code-review/SKILL.md").exists());
         assert!(link_dir.join("code-review/SKILL.md").exists());
     }
@@ -4605,154 +4364,6 @@ mod tests_skills {
         })
         .unwrap_err();
         assert!(format!("{err:#}").contains("Failed to stage"));
-    }
-
-    #[test]
-    fn install_skills_direct_is_idempotent() {
-        let dir = tempfile::tempdir().unwrap();
-        let cr = real_skill_entry();
-        let link_dir = dir.path().join(".claude/skills");
-
-        let mut first = Vec::new();
-        install_skills_direct(
-            dir.path(),
-            &[&cr],
-            &[link_dir.clone()],
-            false,
-            false,
-            &mut first,
-        )
-        .unwrap();
-
-        let mut second = Vec::new();
-        install_skills_direct(
-            dir.path(),
-            &[&cr],
-            &[link_dir.clone()],
-            false,
-            false,
-            &mut second,
-        )
-        .unwrap();
-        let second = String::from_utf8(second).unwrap();
-
-        assert!(
-            second.contains("  relinked  code-review"),
-            "expected a relink line, got {second}"
-        );
-        assert!(!second.contains("  kept"), "no churn expected: {second}");
-        assert!(
-            dir.path()
-                .join(".doctrine/skills/code-review/SKILL.md")
-                .exists()
-        );
-    }
-
-    #[test]
-    fn install_skills_direct_keeps_a_foreign_skill_dir() {
-        let dir = tempfile::tempdir().unwrap();
-        let cr = real_skill_entry();
-        let link_dir = dir.path().join(".claude/skills");
-        fs::create_dir_all(link_dir.join("code-review")).unwrap();
-        fs::write(link_dir.join("code-review/mine.txt"), b"user-owned").unwrap();
-
-        let mut out = Vec::new();
-        install_skills_direct(
-            dir.path(),
-            &[&cr],
-            &[link_dir.clone()],
-            false,
-            false,
-            &mut out,
-        )
-        .unwrap();
-        let out = String::from_utf8(out).unwrap();
-
-        assert!(
-            out.contains("  kept      code-review (real dir)"),
-            "expected a kept line, got {out}"
-        );
-        assert!(link_dir.join("code-review/mine.txt").exists());
-        assert!(
-            !fs::symlink_metadata(link_dir.join("code-review"))
-                .unwrap()
-                .file_type()
-                .is_symlink(),
-            "the foreign dir must survive as a real dir, never replaced"
-        );
-    }
-
-    #[test]
-    fn install_skills_direct_heals_a_dangling_owned_link() {
-        use std::os::unix::fs::symlink;
-
-        let dir = tempfile::tempdir().unwrap();
-        let cr = real_skill_entry();
-        let link_dir = dir.path().join(".claude/skills");
-        fs::create_dir_all(&link_dir).unwrap();
-        let canon_dir = dir.path().join(".doctrine/skills");
-        let target = relative_target(&link_dir, &canon_dir, "code-review");
-        let dest = link_dir.join("code-review");
-        symlink(&target, &dest).unwrap();
-        // Proven ours by value, but dangling: canonical does not exist yet.
-        assert!(!dest.exists(), "sanity: the link must not resolve yet");
-
-        let mut out = Vec::new();
-        install_skills_direct(
-            dir.path(),
-            &[&cr],
-            &[link_dir.clone()],
-            false,
-            false,
-            &mut out,
-        )
-        .unwrap();
-        let out = String::from_utf8(out).unwrap();
-
-        assert!(
-            out.contains("  relinked  code-review"),
-            "a dangling-but-ours link is healed, not kept-foreign: {out}"
-        );
-        assert!(
-            dest.exists(),
-            "the link now resolves through the fresh canonical"
-        );
-    }
-
-    #[test]
-    fn install_skills_direct_links_every_target_dir() {
-        // VT-3: a real loop over TWO link dirs sitting at different depths — an
-        // untested N=1 loop is indistinguishable from a hard-coded target.
-        let dir = tempfile::tempdir().unwrap();
-        let cr = real_skill_entry();
-        let shallow = dir.path().join(".claude/skills");
-        let deep = dir.path().join("agents/pi/skills");
-        let mut out = Vec::new();
-
-        install_skills_direct(
-            dir.path(),
-            &[&cr],
-            &[shallow.clone(), deep.clone()],
-            false,
-            false,
-            &mut out,
-        )
-        .unwrap();
-
-        assert_eq!(
-            fs::read_link(shallow.join("code-review")).unwrap(),
-            PathBuf::from("../../.doctrine/skills/code-review")
-        );
-        assert_eq!(
-            fs::read_link(deep.join("code-review")).unwrap(),
-            PathBuf::from("../../../.doctrine/skills/code-review"),
-            "a deeper link dir must carry a deeper relative target — proves the loop, not a hard-coded value"
-        );
-        assert!(
-            dir.path()
-                .join(".doctrine/skills/code-review/SKILL.md")
-                .exists()
-        );
     }
 }
 
@@ -5381,35 +4992,6 @@ mod tests {
         assert_eq!(expanded, def);
     }
 
-    #[test]
-    fn install_agent_def_expands_worker_marker_before_write() {
-        let dir = tempfile::tempdir().unwrap();
-        let hymns_dir = dir
-            .path()
-            .join(".doctrine")
-            .join(HYMNS_DIRNAME)
-            .join("role");
-        fs::create_dir_all(&hymns_dir).unwrap();
-        fs::write(hymns_dir.join("worker.md"), "RESOLVED WORKER BODY").unwrap();
-
-        let mut out = Vec::new();
-        install_agent_def(
-            dir.path(),
-            "claude",
-            None,
-            DISPATCH_WORKER_AGENT_ASSET,
-            false,
-            false,
-            &mut out,
-        )
-        .unwrap();
-
-        let written =
-            fs::read_to_string(dir.path().join(".doctrine/agents/dispatch-worker.md")).unwrap();
-        assert!(written.contains("RESOLVED WORKER BODY"), "{written}");
-        assert!(!written.contains(WORKER_RESOLVE_MARKER), "{written}");
-    }
-
     // SL-254 PHASE-10 retired two tests here with the assets they drove:
     //   - `install_agent_def_dispatch_probe_writes_bytes_identically_under_the_
     //     derived_dest` proved the dest filename is DERIVED from the embed-asset
@@ -5418,59 +5000,14 @@ mod tests {
     //     was the only one; both surviving defs (claude + pi `dispatch-worker.md`)
     //     carry `WORKER_RESOLVE_MARKER`, and their basenames are exactly the name
     //     the old bug hardcoded — so derived and hardcoded are now
-    //     indistinguishable from any real asset. `install_agent_def` reads the
-    //     embed directly, so no synthetic asset can be injected either.
+    //     indistinguishable from any real asset. (SL-281 PHASE-04 restored the
+    //     proof: `execute_bakes_agent_defs_and_copies_skills` writes the
+    //     marker-free capsule defs byte-identical under their own names.)
     //   - `embedded_workflow_defs_carries_the_drive_slice_payload` asserted the
     //     workflows leg was live in production. It is a no-op again: the embed
     //     root ships no `workflows/*.js` since `drive-slice.js` went with Mode B.
-    // The leg's MECHANISM stays covered by the synthetic-asset tests below.
-
-    // --- Workflows leg (SL-206 PHASE-13 T6) ---
-
-    #[test]
-    fn install_workflow_assets_materializes_and_links_a_synthetic_workflow() {
-        // Drives the mechanism over a synthetic asset list (no real embed payload
-        // exists yet) — proves materialize+link works before PHASE-14 ships the
-        // first real `.js` file.
-        let dir = tempfile::tempdir().unwrap();
-        let mut out = Vec::new();
-        let assets = vec![("drive-slice.js".to_string(), b"// stub workflow".to_vec())];
-        install_workflow_assets(dir.path(), false, false, &mut out, &assets).unwrap();
-
-        let canon = dir.path().join(".doctrine/workflows/drive-slice.js");
-        let link = dir.path().join(".claude/workflows/drive-slice.js");
-        assert_eq!(fs::read(&canon).unwrap(), b"// stub workflow");
-        assert!(
-            fs::symlink_metadata(&link)
-                .unwrap()
-                .file_type()
-                .is_symlink(),
-            "the workflows leg links, not copies, into .claude/workflows/"
-        );
-        assert_eq!(fs::read(&link).unwrap(), b"// stub workflow");
-    }
-
-    #[test]
-    fn install_workflow_assets_dry_run_writes_nothing() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut out = Vec::new();
-        let assets = vec![("drive-slice.js".to_string(), b"// stub".to_vec())];
-        install_workflow_assets(dir.path(), false, true, &mut out, &assets).unwrap();
-
-        assert!(!dir.path().join(".doctrine/workflows").exists());
-        assert!(!dir.path().join(".claude/workflows").exists());
-    }
-
-    #[test]
-    fn install_workflow_assets_empty_list_is_a_no_op() {
-        // The production shape TODAY (PHASE-14 payload absent): no assets ⇒ no
-        // dirs created, no error.
-        let dir = tempfile::tempdir().unwrap();
-        let mut out = Vec::new();
-        install_workflow_assets(dir.path(), false, false, &mut out, &[]).unwrap();
-        assert!(!dir.path().join(".doctrine/workflows").exists());
-        assert!(!dir.path().join(".claude/workflows").exists());
-    }
+    // The workflow MECHANISM stays covered by the synthetic-asset converge
+    // tests in `tests_converge`.
 
     // --- trait-aware bake (SL-191 VT-3) ---
 

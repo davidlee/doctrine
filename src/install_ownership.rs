@@ -10,10 +10,6 @@
 //! A pure leaf (ADR-001): no clock, git, disk or env. Every path it is handed
 //! is absolute and lexically normal; a link's value is the only path it
 //! normalises itself.
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "wired into install by SL-281 PHASE-04")
-)]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;

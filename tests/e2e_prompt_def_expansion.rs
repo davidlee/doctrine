@@ -45,7 +45,8 @@ fn dispatch_worker_install_expands_worker_role_marker() {
         String::from_utf8_lossy(&out.stderr),
     );
 
-    let written = fs::read_to_string(root.join(".doctrine/agents/dispatch-worker.md")).unwrap();
+    let written =
+        fs::read_to_string(root.join(".doctrine/agents/claude/dispatch-worker.md")).unwrap();
     assert!(
         written.contains("Role body from prompt resolve --role worker"),
         "{written}"
@@ -70,7 +71,7 @@ fn dispatch_worker_install_refresh_is_stable_when_role_body_is_unchanged() {
         "first install failed: {}",
         String::from_utf8_lossy(&first.stderr),
     );
-    let before = fs::read(root.join(".doctrine/agents/dispatch-worker.md")).unwrap();
+    let before = fs::read(root.join(".doctrine/agents/claude/dispatch-worker.md")).unwrap();
 
     let second = install(root);
     assert!(
@@ -78,6 +79,6 @@ fn dispatch_worker_install_refresh_is_stable_when_role_body_is_unchanged() {
         "second install failed: {}",
         String::from_utf8_lossy(&second.stderr),
     );
-    let after = fs::read(root.join(".doctrine/agents/dispatch-worker.md")).unwrap();
+    let after = fs::read(root.join(".doctrine/agents/claude/dispatch-worker.md")).unwrap();
     assert_eq!(before, after);
 }

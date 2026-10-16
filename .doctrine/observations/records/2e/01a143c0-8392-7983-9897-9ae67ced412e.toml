@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a143c0-8392-7983-9897-9ae67ced412e"
+recorded_at = "2026-10-16T08:07:32.498187172Z"
+kind = "friction"
+summary = "capsule-worker; SL-281 PHASE-04b: cargo test without --no-fail-fast hides later binaries behind the known shim failure; VA-1 positive-control pattern too loose"
+detail = "Under the toolchain shim, e2e_surface_neutral_roundtrip fails and plain cargo test stops there, silently skipping remaining test binaries; gate commands should carry --no-fail-fast. Sheet delete list missed embedded_asset (caught by unused=deny). VA-1's positive control grep install_ownership::plan also matches a comment and a test import; install_ownership::plan(& is the tight pattern."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
