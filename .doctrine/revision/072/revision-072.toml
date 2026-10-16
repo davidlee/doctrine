@@ -1,8 +1,8 @@
 id      = 72
 slug    = "reconcile-sl-281-residuals"
 title   = "SL-281 spec residuals"
-status = "started"
-approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
+status = "done"
+approval = "approved"
 updated = "2026-10-16"
 tags    = []
 

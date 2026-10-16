@@ -131,3 +131,38 @@ blocker.
   D5/D4 headings, SPEC-010 overview, dual-path routing, D2, hypotheses) →
   second REV "SL-281 spec residuals", `modify` rows, excerpts aligned to
   REV-071's landed text.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- `design.md` (`reconcile(SL-281): design.md and selectors…`):
+  - sec-ownership: test-pinned `canon_root()` map (F-7).
+  - §Links prose and flowchart: foreign symlinks are reported only at a
+    member link site (F-3).
+  - §Shape: the `Unreadable` variants, the extended report vocabulary, and the
+    D1/D3/D4 convergence rules (F-4).
+  - §Revision: the D7 row reads "explicit or detected-and-confirmed" (F-8).
+  - §Verification: the codex boot-adapter case moves to unit coverage (F-14).
+  - §Code impact: new rows mirroring the selectors (F-10).
+- Selector registry: design-target `src/fsutil.rs`, `src/memory.rs`,
+  `tests/e2e_install_ownership.rs`, `.doctrine/adr/001/layering.toml`,
+  `.pi/agents/dispatch-worker.md` (F-10). Conformance: 0 undelivered; the
+  remaining undeclared paths are the slice toml and observation records,
+  tolerated as process byproducts.
+- DEC-372: amendment appended for the detected-and-confirmed trigger (F-8).
+
+### REVs completed
+- REV-071 (Install converges framework-owned artefacts): done. All 7 manual
+  rows landed in `234c9b2da` (SPEC-009, SPEC-010, REQ-167/170/172/176/180).
+  The D7 excerpt was amended for F-8 before landing.
+- REV-072 (`reconcile-sl-281-residuals`): done. Residual SPEC-009/SPEC-010
+  passages contradicting REV-071 landed in `de73d6288` (F-17); the user
+  approved the excerpts.
+
+### Follow-up / tolerated
+- F-6: ISS-353 resolves at close for doctrine-linked harnesses only; the
+  npx-written `.agents/skills` remainder is IMP-406.
+- F-11: CHR-179.
+- F-12, F-13, F-16: tolerated; rationale is in the dispositions.
+
+Reconcile pass complete; hand off to /close.
