@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a143b3-abaa-7de1-ab92-21e51262803f"
+recorded_at = "2026-10-16T07:53:30.7947498Z"
+kind = "friction"
+summary = "capsule-worker; SL-281 PHASE-04a: dead_code/unused deny blocks observable RED for staged code; sheet VT-3 assumed marketplace ids disjoint from doctrine domain"
+detail = "With unused/dead_code denied, a stub that never constructs a variant fails to compile in test build, so each RED needed a temporary allow. A plain expect(dead_code) on a field read only by new test-built code goes unfulfilled in the test build; must be cfg_attr(not(test), ...) from the start. Planner's VT-3 assertion (no marketplace id is a member) was wrong: record-memory/retrieve-memory/pair/walkthrough exist in the doctrine domain too; worker asserted by source domain instead. Worker contract forbids writing the phase sheet's Findings section, so deviations ride only in the hand-back."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

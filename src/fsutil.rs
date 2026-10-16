@@ -84,6 +84,33 @@ pub(crate) fn is_real_dir(path: &Path) -> bool {
     matches!(fs::symlink_metadata(path), Ok(m) if m.is_dir())
 }
 
+/// The first component of `dir` strictly below `base` (`dir` included) that
+/// is a symlink, by `lstat`. `None` when every component is a real entry or
+/// the first missing one is reached (nothing below an absent entry exists).
+/// `base` itself is never examined — it is the caller's chosen anchor (a
+/// symlinked `$HOME` is not a reason to withhold anything). Errs when `dir`
+/// is not under `base`.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+pub(crate) fn symlinked_component(base: &Path, dir: &Path) -> std::io::Result<Option<PathBuf>> {
+    let below = dir.strip_prefix(base).map_err(|e| {
+        std::io::Error::new(
+            ErrorKind::InvalidInput,
+            format!("{} is not under {} ({e})", dir.display(), base.display()),
+        )
+    })?;
+    let mut cur = base.to_path_buf();
+    for comp in below.components() {
+        cur.push(comp);
+        match fs::symlink_metadata(&cur) {
+            Ok(m) if m.file_type().is_symlink() => return Ok(Some(cur)),
+            Ok(_) => {}
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(None)
+}
+
 /// Ensure a symlink at `link` points at `target`: create it if absent, replace
 /// it if it is a symlink to somewhere else, leave it if already correct, and
 /// **error** if a real file or directory squats the path (finding 10). The
@@ -520,6 +547,60 @@ mod tests {
         // a symlink to a dir is NOT a real dir — it must not be silently traversed
         assert!(!is_real_dir(&link));
         assert!(!is_real_dir(&dir.path().join("absent")));
+    }
+
+    // --- symlinked_component (ancestor lstat guard, SL-281) ---
+
+    #[test]
+    fn symlinked_component_finds_the_first_symlink_below_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        let elsewhere = tempfile::tempdir().unwrap();
+        fs::create_dir_all(base.join("real/inner")).unwrap();
+        fs::create_dir_all(elsewhere.path().join("inner")).unwrap();
+        std::os::unix::fs::symlink(elsewhere.path(), base.join("mid")).unwrap();
+        std::os::unix::fs::symlink(base.join("real/inner"), base.join("real/leaf")).unwrap();
+
+        // none: every component real
+        assert_eq!(
+            symlinked_component(base, &base.join("real/inner")).unwrap(),
+            None
+        );
+        // leaf: `dir` itself is a symlink
+        assert_eq!(
+            symlinked_component(base, &base.join("real/leaf")).unwrap(),
+            Some(base.join("real/leaf"))
+        );
+        // middle: an ancestor below base is a symlink (its tail resolves)
+        assert!(
+            base.join("mid/inner").is_dir(),
+            "control: reachable through link"
+        );
+        assert_eq!(
+            symlinked_component(base, &base.join("mid/inner")).unwrap(),
+            Some(base.join("mid"))
+        );
+        // absent tail: nothing below a missing entry can be a symlink
+        assert_eq!(
+            symlinked_component(base, &base.join("real/gone/deeper")).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn symlinked_component_ignores_a_symlinked_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join("real/sub")).unwrap();
+        let base = tmp.path().join("home");
+        std::os::unix::fs::symlink(tmp.path().join("real"), &base).unwrap();
+        assert_eq!(symlinked_component(&base, &base.join("sub")).unwrap(), None);
+        assert_eq!(symlinked_component(&base, &base).unwrap(), None);
+    }
+
+    #[test]
+    fn symlinked_component_rejects_a_dir_outside_base() {
+        let err = symlinked_component(Path::new("/a"), Path::new("/b/c")).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidInput);
     }
 
     // --- set_symlink (verified convenience-link refresh) ---

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a143a1-6457-7963-a1d7-322348ad12eb"
+recorded_at = "2026-10-16T07:33:32.887548629Z"
+kind = "friction"
+summary = "capsule-phase-planner; SL-281 PHASE-04: memory retrieve prints full bodies; research-drift warning during /phase-plan on a locked design"
+detail = "Planner had to triage with memory search then show per id because retrieve dumps full bodies. doctrine slice research 281 reported drift (design.md/plan.toml changed since baseline) although the design is locked and supersedes research — noise during phase planning."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

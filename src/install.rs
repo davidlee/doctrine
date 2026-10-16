@@ -13,6 +13,9 @@ use anyhow::{Context, bail};
 use rust_embed::RustEmbed;
 use serde::Deserialize;
 
+use crate::install_ownership::{
+    Action, Desired, LinkSeen, Member, MemberKind, Notice, Scope, Snapshot,
+};
 use crate::memory::MemoryType;
 
 /// Embedded skill plugins — everything under `plugins/`.
@@ -103,16 +106,22 @@ struct HarnessSection {
     /// The boot adapter name; absent means no boot leg.
     boot: Option<String>,
     /// The link dir for the def set under `install/agents/<harness>/`.
-    #[expect(
-        dead_code,
-        reason = "read by the convergence executor, SL-281 PHASE-04"
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "read by the convergence executor, SL-281 PHASE-04"
+        )
     )]
     agents: Option<String>,
     skills: Option<String>,
     skills_via: Option<String>,
-    #[expect(
-        dead_code,
-        reason = "read by the convergence executor, SL-281 PHASE-04"
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "read by the convergence executor, SL-281 PHASE-04"
+        )
     )]
     workflows: Option<String>,
 }
@@ -2231,6 +2240,1478 @@ pub(crate) fn install_skills_direct(
         }
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Convergence shell (SL-281 PHASE-04, design `sec-convergence`). Builds the
+// desired set and the on-disk snapshot `install_ownership::plan` decides over,
+// then executes its actions, re-proving each against the scan before it
+// mutates (SPEC-010 REQ-178).
+// ---------------------------------------------------------------------------
+
+/// The canon root a member kind lives under, relative to the install base.
+/// One per `[framework] roots` entry — pinned equal by
+/// `canon_roots_match_manifest_framework_roots`.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn canon_root(kind: MemberKind) -> &'static str {
+    match kind {
+        MemberKind::AgentDef => ".doctrine/agents",
+        MemberKind::Skill => ".doctrine/skills",
+        MemberKind::Workflow => ".doctrine/workflows",
+    }
+}
+
+/// Where a member's canon bytes come from.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+enum Source<'a> {
+    /// An agent def (baked if it carries `WORKER_RESOLVE_MARKER`) or a
+    /// workflow; `label` is its embed path below `agents/` / `workflows/`.
+    Asset {
+        label: String,
+        bytes: &'a [u8],
+    },
+    Skill(&'a Entry),
+}
+
+/// The desired set plus each member's source, keyed by `Member.canon`.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+struct Wanted<'a> {
+    desired: Desired,
+    sources: BTreeMap<PathBuf, Source<'a>>,
+}
+
+/// Build the desired set (design § Desired set): members span every
+/// registered harness; `selected` and `new_links` only those in `harnesses`.
+/// An unregistered harness, or one without `agents`/`skills`/`workflows`
+/// routes (codex), contributes nothing. Top-level `AGENTS.md` is never a
+/// member — only `<harness>/<file>` defs match.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn desired_set<'a>(
+    base: &Path,
+    registry: &Registry,
+    harnesses: &[String],
+    agent_defs: &'a [(String, Vec<u8>)],
+    catalog: &'a [Entry],
+    skills: &[&Entry],
+    workflows: &'a [(String, Vec<u8>)],
+) -> Wanted<'a> {
+    let mut wanted = Wanted {
+        desired: Desired::default(),
+        sources: BTreeMap::new(),
+    };
+    let agents_root = base.join(canon_root(MemberKind::AgentDef));
+    for (name, h) in registry {
+        let Some(dir) = &h.agents else { continue };
+        for (rel, bytes) in agent_defs {
+            let Some(file) = rel
+                .strip_prefix(name.as_str())
+                .and_then(|r| r.strip_prefix('/'))
+                .filter(|f| !f.contains('/'))
+            else {
+                continue;
+            };
+            wanted.add(
+                harnesses,
+                Shipped {
+                    kind: MemberKind::AgentDef,
+                    canon: agents_root.join(name).join(file),
+                    sites: vec![(name.as_str(), base.join(dir).join(file))],
+                    requested: true,
+                    source: Source::Asset {
+                        label: rel.clone(),
+                        bytes,
+                    },
+                },
+            );
+        }
+    }
+    let skill_routes = routes(registry, |h| h.skills.as_ref());
+    for entry in catalog {
+        wanted.add(
+            harnesses,
+            Shipped {
+                kind: MemberKind::Skill,
+                canon: base.join(canon_root(MemberKind::Skill)).join(&entry.id),
+                sites: sites(base, &skill_routes, &entry.id),
+                requested: skills.iter().any(|s| s.id == entry.id),
+                source: Source::Skill(entry),
+            },
+        );
+    }
+    let workflow_routes = routes(registry, |h| h.workflows.as_ref());
+    for (rel, bytes) in workflows {
+        let file = rel.rsplit('/').next().unwrap_or(rel);
+        wanted.add(
+            harnesses,
+            Shipped {
+                kind: MemberKind::Workflow,
+                canon: base.join(canon_root(MemberKind::Workflow)).join(file),
+                sites: sites(base, &workflow_routes, file),
+                requested: true,
+                source: Source::Asset {
+                    label: rel.clone(),
+                    bytes,
+                },
+            },
+        );
+    }
+    wanted
+}
+
+/// One shipped entry before selection: its link sites, each tagged with the
+/// harness whose route it is, and whether this run asked for it.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+struct Shipped<'a, 'r> {
+    kind: MemberKind,
+    canon: PathBuf,
+    sites: Vec<(&'r str, PathBuf)>,
+    requested: bool,
+    source: Source<'a>,
+}
+
+impl<'a> Wanted<'a> {
+    /// Admit `shipped` as a member; select it (by clone, so `selected` holds
+    /// the identical member) and its selected harnesses' sites when this run
+    /// asked for it and some selected harness routes it.
+    #[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+    fn add(&mut self, harnesses: &[String], shipped: Shipped<'a, '_>) {
+        let picked: Vec<PathBuf> = shipped
+            .sites
+            .iter()
+            .filter(|(h, _)| harnesses.iter().any(|s| s == h))
+            .map(|(_, site)| site.clone())
+            .collect();
+        let member = Member {
+            kind: shipped.kind,
+            canon: shipped.canon,
+            links: shipped.sites.into_iter().map(|(_, site)| site).collect(),
+        };
+        if shipped.requested && !picked.is_empty() {
+            self.desired.selected.insert(member.clone());
+            self.desired.new_links.extend(picked);
+        }
+        self.sources.insert(member.canon.clone(), shipped.source);
+        self.desired.members.insert(member);
+    }
+}
+
+/// `(harness, link dir)` for every registered harness carrying `route`.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn routes<'r>(
+    registry: &'r Registry,
+    route: impl Fn(&'r HarnessSection) -> Option<&'r String>,
+) -> Vec<(&'r str, &'r str)> {
+    registry
+        .iter()
+        .filter_map(|(name, h)| route(h).map(|dir| (name.as_str(), dir.as_str())))
+        .collect()
+}
+
+/// The link site for `file` under each routed dir.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn sites<'r>(base: &Path, routes: &[(&'r str, &str)], file: &str) -> Vec<(&'r str, PathBuf)> {
+    routes
+        .iter()
+        .map(|(name, dir)| (*name, base.join(dir).join(file)))
+        .collect()
+}
+
+/// What `lstat` saw at a path; the executor's re-proof compares against it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum EntryState {
+    Absent,
+    File,
+    Dir,
+    Symlink(PathBuf),
+}
+
+/// `lstat` `path` (never following a final symlink); a symlink carries its
+/// value. A missing entry is `Absent`, not an error.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn entry_state(path: &Path) -> io::Result<EntryState> {
+    let meta = match fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(EntryState::Absent),
+        Err(e) => return Err(e),
+    };
+    Ok(if meta.file_type().is_symlink() {
+        EntryState::Symlink(fs::read_link(path)?)
+    } else if meta.is_dir() {
+        EntryState::Dir
+    } else {
+        EntryState::File
+    })
+}
+
+/// The plan's snapshot plus every scanned path's state (a missing key was
+/// absent) — re-proof state stays in the shell, not in `Snapshot`/`Action`.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+struct Scan {
+    snapshot: Snapshot,
+    states: BTreeMap<PathBuf, EntryState>,
+}
+
+/// Every registered harness's link dirs (`agents`, `skills`, `workflows`)
+/// under `base`, de-duplicated — all registered harnesses, not this run's.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn registered_link_dirs(base: &Path, registry: &Registry) -> Vec<PathBuf> {
+    let dirs: BTreeSet<PathBuf> = registry
+        .values()
+        .flat_map(|h| [&h.agents, &h.skills, &h.workflows])
+        .flatten()
+        .map(|dir| base.join(dir))
+        .collect();
+    dirs.into_iter().collect()
+}
+
+/// Read the disk the plan decides over (design § Shape). Lists each canon
+/// root, descending only into real-dir containers of member canon paths;
+/// lists every link dir. Any listed dir reached through a symlinked
+/// component below `base` is prune-blocked. Reads only — creates nothing.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn scan(
+    base: &Path,
+    roots: &[PathBuf],
+    link_dirs: &[PathBuf],
+    want: &Desired,
+) -> anyhow::Result<Scan> {
+    let mut out = Scan {
+        snapshot: Snapshot::default(),
+        states: BTreeMap::new(),
+    };
+    for root in roots {
+        out.canon_dir(base, root, want)?;
+    }
+    for dir in link_dirs {
+        for path in out.list(base, dir)? {
+            let name = path.file_name().unwrap_or_default().to_os_string();
+            let dir = dir.clone();
+            // An unreadable symlink is recorded as real (no state): the plan
+            // only reports a real entry, so nothing ever re-proves or touches it.
+            let Ok(state) = entry_state(&path) else {
+                out.snapshot.links.push(LinkSeen::Real { dir, name });
+                continue;
+            };
+            out.snapshot.links.push(match &state {
+                EntryState::Symlink(value) => LinkSeen::Symlink {
+                    dir,
+                    name,
+                    value: value.clone(),
+                },
+                _ => LinkSeen::Real { dir, name },
+            });
+            out.states.insert(path, state);
+        }
+    }
+    Ok(out)
+}
+
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+impl Scan {
+    /// The state the scan recorded at `path`.
+    fn scanned(&self, path: &Path) -> EntryState {
+        self.states.get(path).cloned().unwrap_or(EntryState::Absent)
+    }
+
+    /// List canon dir `dir`, descending into each child that is a real-dir
+    /// container of some member canon path — never into a symlink, never
+    /// below member depth (the canon depth contract).
+    fn canon_dir(&mut self, base: &Path, dir: &Path, want: &Desired) -> anyhow::Result<()> {
+        for path in self.list(base, dir)? {
+            let state =
+                entry_state(&path).with_context(|| format!("Failed to read {}", path.display()))?;
+            let container = state == EntryState::Dir
+                && want
+                    .members
+                    .iter()
+                    .any(|m| m.canon != path && m.canon.starts_with(&path));
+            self.snapshot.canon.push(path.clone());
+            self.states.insert(path.clone(), state);
+            if container {
+                self.canon_dir(base, &path, want)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// `dir`'s entries, sorted; empty when `dir` is absent or not a
+    /// directory. Prune-blocks `dir` when reached through a symlinked
+    /// component below `base`.
+    fn list(&mut self, base: &Path, dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
+        if !dir.is_dir() {
+            return Ok(Vec::new());
+        }
+        if crate::fsutil::symlinked_component(base, dir)?.is_some() {
+            self.snapshot.prune_blocked.insert(dir.to_path_buf());
+        }
+        let mut paths = fs::read_dir(dir)
+            .with_context(|| format!("Failed to list {}", dir.display()))?
+            .map(|e| e.map(|e| e.path()))
+            .collect::<io::Result<Vec<_>>>()
+            .with_context(|| format!("Failed to list {}", dir.display()))?;
+        paths.sort();
+        Ok(paths)
+    }
+}
+
+/// The header above the convergence report block.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn report_header(scope: Scope, dry_run: bool) -> String {
+    match (dry_run, scope) {
+        (true, _) => "Ownership plan (not executed under --dry-run):".to_string(),
+        (false, Scope::Project) => "framework artefacts (project):".to_string(),
+        (false, Scope::Global) => "framework artefacts (global):".to_string(),
+    }
+}
+
+/// One report line for `action` (design § Report vocabulary) — the single
+/// renderer both the executor and dry-run print through.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn action_line(action: &Action, scan: &Scan, wanted: &Wanted<'_>, dry_run: bool) -> String {
+    let shown = |p: &Path| p.display().to_string();
+    let name = |p: &Path| {
+        p.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
+    };
+    match (action, dry_run) {
+        (Action::WriteCanon(m), true) => format!("  would write {}", shown(&m.canon)),
+        (Action::WriteCanon(m), false) => {
+            let (verb, label) = match wanted.sources.get(&m.canon) {
+                Some(Source::Skill(e)) => ("skill", e.id.clone()),
+                Some(Source::Asset { label, .. }) if m.kind == MemberKind::Workflow => {
+                    ("workflow", label.clone())
+                }
+                Some(Source::Asset { label, .. }) => ("agent", label.clone()),
+                None => ("write", name(&m.canon)),
+            };
+            row(verb, &format!("{label} → {}", shown(&m.canon)))
+        }
+        (Action::Link { dest, target }, true) => {
+            format!("  would link {} → {}", shown(dest), shown(target))
+        }
+        (Action::Link { dest, .. }, false) => row("linked", &name(dest)),
+        (Action::Relink { dest, target }, true) => {
+            format!("  would relink {} → {}", shown(dest), shown(target))
+        }
+        (Action::Relink { dest, .. }, false) => row("relinked", &name(dest)),
+        (Action::Unlink(p) | Action::PruneCanon(p), true) => format!("  would prune {}", shown(p)),
+        (Action::Unlink(p) | Action::PruneCanon(p), false) => row("pruned", &shown(p)),
+        (Action::Report(notice), _) => match notice {
+            Notice::Orphan(p) => row(
+                "orphan",
+                &format!(
+                    "{} (global install never removes; delete it if unwanted)",
+                    shown(p)
+                ),
+            ),
+            Notice::ForeignSymlink(p) => {
+                let value = match scan.scanned(p) {
+                    EntryState::Symlink(value) => shown(&value),
+                    _ => String::new(),
+                };
+                row("kept", &format!("{} (foreign symlink → {value})", name(p)))
+            }
+            Notice::Shadows(p) => row(
+                "kept",
+                &format!(
+                    "{} (real file shadows doctrine def — remove it to receive updates)",
+                    name(p)
+                ),
+            ),
+            Notice::PruneBlocked(p) => row(
+                "prune blocked",
+                &format!(
+                    "{} (reached through a symlink — nothing removed there)",
+                    shown(p)
+                ),
+            ),
+            Notice::StaleStaging(p) => row(
+                "stale staging",
+                &format!("{} (left by an interrupted install — delete it)", shown(p)),
+            ),
+        },
+    }
+}
+
+/// One report row: the verb padded to the shared 10-char column.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn row(verb: &str, rest: &str) -> String {
+    format!("  {verb:<9} {rest}")
+}
+
+/// The line for a mutation withheld because its entry changed since the scan.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn skipped_line(path: &Path) -> String {
+    row(
+        "skipped",
+        &format!("{} (changed since scan)", path.display()),
+    )
+}
+
+/// The paths one convergence run executes against.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+struct Converge<'a> {
+    /// Project root — the hymn corpus the worker bake resolves against (a
+    /// global install bakes against it too, pre-existing ISS-520).
+    root: &'a Path,
+    /// `install_base(root, global)` — where canon roots and link dirs live.
+    base: &'a Path,
+    scope: Scope,
+}
+
+/// Run `actions` in plan order, re-proving each mutation's entry against
+/// `scan` first: a changed entry is skipped and reported; a removal whose
+/// parent became reachable through a symlink is withheld. Aborts on the
+/// first I/O or bake error — plan order puts removals last, so an abort
+/// never strands a link before its target's prune.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn execute(
+    cx: &Converge<'_>,
+    wanted: &Wanted<'_>,
+    scan: &Scan,
+    actions: &[Action],
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    let mut baker = Baker {
+        root: cx.root,
+        corpus: None,
+    };
+    for action in actions {
+        let line = match apply(cx, wanted, scan, action, &mut baker)? {
+            Applied::Done => action_line(action, scan, wanted, false),
+            Applied::Changed(path) => skipped_line(path),
+            Applied::Blocked(dir) => action_line(
+                &Action::Report(Notice::PruneBlocked(dir)),
+                scan,
+                wanted,
+                false,
+            ),
+        };
+        writeln!(out, "{line}")?;
+    }
+    Ok(())
+}
+
+/// How one action fared at mutation time.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+enum Applied<'p> {
+    Done,
+    /// The entry no longer matches the scan; nothing was touched.
+    Changed(&'p Path),
+    /// A removal's dir is now reached through a symlink; nothing removed.
+    Blocked(PathBuf),
+}
+
+/// Re-prove then perform one action. Reports mutate nothing.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn apply<'p>(
+    cx: &Converge<'_>,
+    wanted: &Wanted<'_>,
+    scan: &Scan,
+    action: &'p Action,
+    baker: &mut Baker<'_>,
+) -> anyhow::Result<Applied<'p>> {
+    let path = match action {
+        Action::Report(_) => return Ok(Applied::Done),
+        Action::WriteCanon(m) => &m.canon,
+        Action::Link { dest, .. } | Action::Relink { dest, .. } => dest,
+        Action::Unlink(p) | Action::PruneCanon(p) => {
+            let dir = p.parent().unwrap_or(cx.base);
+            if crate::fsutil::symlinked_component(cx.base, dir)?.is_some() {
+                return Ok(Applied::Blocked(dir.to_path_buf()));
+            }
+            p
+        }
+    };
+    let now = entry_state(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    if now != scan.scanned(path) {
+        return Ok(Applied::Changed(path));
+    }
+    match action {
+        Action::WriteCanon(m) => write_canon(wanted, m, baker)?,
+        Action::Link { dest, target } | Action::Relink { dest, target } => {
+            write_link(dest, target)?;
+        }
+        Action::Unlink(p) | Action::PruneCanon(p) => match now {
+            EntryState::Dir => fs::remove_dir_all(p),
+            EntryState::File | EntryState::Symlink(_) => fs::remove_file(p),
+            EntryState::Absent => return Ok(Applied::Changed(path)),
+        }
+        .with_context(|| format!("Failed to remove {}", p.display()))?,
+        Action::Report(_) => {}
+    }
+    Ok(Applied::Done)
+}
+
+/// Write member `m`'s canon entry from its source: a skill is materialised;
+/// an asset is written atomically, baked first when it carries
+/// `WORKER_RESOLVE_MARKER`.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+fn write_canon(wanted: &Wanted<'_>, m: &Member, baker: &mut Baker<'_>) -> anyhow::Result<()> {
+    match wanted.sources.get(&m.canon) {
+        Some(Source::Skill(entry)) => materialise_canonical(entry, &m.canon),
+        Some(Source::Asset { label, bytes }) => {
+            if let Some(parent) = m.canon.parent() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("Failed to create {}", parent.display()))?;
+            }
+            match std::str::from_utf8(bytes) {
+                Ok(def) if def.contains(WORKER_RESOLVE_MARKER) => {
+                    crate::fsutil::write_atomic(&m.canon, baker.bake(def, label)?.as_bytes())
+                }
+                _ => crate::fsutil::write_atomic(&m.canon, bytes),
+            }
+        }
+        None => bail!("no source for canon member {}", m.canon.display()),
+    }
+}
+
+/// The worker-def bake, loading the hymn corpus at most once per run.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+struct Baker<'a> {
+    root: &'a Path,
+    corpus: Option<(Vec<crate::hymns::Snippet>, crate::hymns::SealSet)>,
+}
+
+#[cfg_attr(not(test), expect(dead_code, reason = "wired by SL-281 PHASE-04 T4"))]
+impl Baker<'_> {
+    fn bake(&mut self, def: &str, label: &str) -> anyhow::Result<String> {
+        let (corpus, sealed) = match &mut self.corpus {
+            Some(loaded) => loaded,
+            slot @ None => {
+                let disk = self.root.join(".doctrine").join(HYMNS_DIRNAME);
+                let sealed = embedded_seal_set()?;
+                let corpus = load_full_corpus(&disk, &embedded_hymns(), &sealed)?;
+                slot.insert((corpus, sealed))
+            }
+        };
+        bake_worker_def(def, label, corpus, sealed)
+    }
+}
+
+// ── Tests: convergence shell (SL-281 PHASE-04) ────────────────
+
+#[cfg(test)]
+mod tests_converge {
+    use super::*;
+    use crate::install_ownership::plan;
+
+    const BASE: &str = "/p";
+
+    fn real_registry() -> Registry {
+        load_manifest().unwrap().harness
+    }
+
+    fn registry_from(toml: &str) -> Registry {
+        parse_manifest(toml).unwrap().harness
+    }
+
+    fn names(harnesses: &[&str]) -> Vec<String> {
+        harnesses.iter().map(ToString::to_string).collect()
+    }
+
+    fn canons(set: &BTreeSet<Member>) -> BTreeSet<PathBuf> {
+        set.iter().map(|m| m.canon.clone()).collect()
+    }
+
+    fn manifest_roots(base: &Path) -> Vec<PathBuf> {
+        framework_roots()
+            .unwrap()
+            .iter()
+            .map(|r| base.join(r))
+            .collect()
+    }
+
+    /// A tempdir install base plus plant helpers that prove what they made.
+    struct Tree {
+        tmp: tempfile::TempDir,
+    }
+
+    impl Tree {
+        fn new() -> Self {
+            Self {
+                tmp: tempfile::tempdir().unwrap(),
+            }
+        }
+
+        fn base(&self) -> &Path {
+            self.tmp.path()
+        }
+
+        fn path(&self, rel: &str) -> PathBuf {
+            self.base().join(rel)
+        }
+
+        fn file(&self, rel: &str, body: &str) -> PathBuf {
+            let p = self.path(rel);
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(&p, body).unwrap();
+            p
+        }
+
+        fn link(&self, rel: &str, value: impl AsRef<Path>) -> PathBuf {
+            let p = self.path(rel);
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::os::unix::fs::symlink(value, &p).unwrap();
+            p
+        }
+    }
+
+    fn member(kind: MemberKind, canon: PathBuf, links: &[PathBuf]) -> Member {
+        Member {
+            kind,
+            canon,
+            links: links.iter().cloned().collect(),
+        }
+    }
+
+    fn desired(members: Vec<Member>) -> Desired {
+        Desired {
+            members: members.into_iter().collect(),
+            ..Desired::default()
+        }
+    }
+
+    fn listing(dir: &Path) -> BTreeSet<PathBuf> {
+        walk(dir).into_iter().collect()
+    }
+
+    fn walk(dir: &Path) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        for e in fs::read_dir(dir).unwrap() {
+            let p = e.unwrap().path();
+            out.push(p.clone());
+            if crate::fsutil::is_real_dir(&p) {
+                out.extend(walk(&p));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn entry_state_reads_without_following() {
+        let t = Tree::new();
+        let f = t.file("f", "x");
+        let l = t.link("l", "gone/target");
+        fs::create_dir(t.path("d")).unwrap();
+        assert_eq!(entry_state(&f).unwrap(), EntryState::File);
+        assert_eq!(entry_state(&t.path("d")).unwrap(), EntryState::Dir);
+        assert_eq!(
+            entry_state(&l).unwrap(),
+            EntryState::Symlink(PathBuf::from("gone/target"))
+        );
+        assert_eq!(entry_state(&t.path("absent")).unwrap(), EntryState::Absent);
+    }
+
+    #[test]
+    fn registered_link_dirs_cover_every_harness_route_once() {
+        let registry = registry_from(
+            "[harness.a]\nagents = \".a/agents\"\nskills = \".s\"\nworkflows = \".a/wf\"\n\
+             [harness.b]\nskills = \".s\"\n[harness.c]\nskills_via = \"universal\"\n",
+        );
+        let base = Path::new(BASE);
+        let dirs: BTreeSet<PathBuf> = registered_link_dirs(base, &registry).into_iter().collect();
+        assert_eq!(
+            dirs,
+            BTreeSet::from([base.join(".a/agents"), base.join(".s"), base.join(".a/wf")])
+        );
+        assert_eq!(
+            registered_link_dirs(base, &registry).len(),
+            3,
+            "de-duplicated"
+        );
+    }
+
+    #[test]
+    fn scan_lists_canon_at_member_depth_descending_only_containers() {
+        let t = Tree::new();
+        let other = tempfile::tempdir().unwrap();
+        fs::write(other.path().join("dw.md"), "x").unwrap();
+        fs::write(other.path().join("stray.md"), "x").unwrap();
+        t.file(".doctrine/agents/claude/dw.md", "x");
+        t.file(".doctrine/agents/claude/old.md", "x");
+        t.file(".doctrine/agents/codex/x.md", "x");
+        t.file(".doctrine/agents/flat.md", "x");
+        t.file(".doctrine/skills/code-review/SKILL.md", "x");
+        t.link(".doctrine/agents/pi", other.path());
+        let want = desired(vec![
+            member(
+                MemberKind::AgentDef,
+                t.path(".doctrine/agents/claude/dw.md"),
+                &[],
+            ),
+            member(
+                MemberKind::AgentDef,
+                t.path(".doctrine/agents/pi/dw.md"),
+                &[],
+            ),
+            member(
+                MemberKind::Skill,
+                t.path(".doctrine/skills/code-review"),
+                &[],
+            ),
+        ]);
+        let roots = manifest_roots(t.base());
+        let got = scan(t.base(), &roots, &[], &want).unwrap();
+
+        let canon: BTreeSet<PathBuf> = got.snapshot.canon.iter().cloned().collect();
+        let expected: BTreeSet<PathBuf> = [
+            ".doctrine/agents/claude",
+            ".doctrine/agents/claude/dw.md",
+            ".doctrine/agents/claude/old.md",
+            ".doctrine/agents/codex",
+            ".doctrine/agents/flat.md",
+            ".doctrine/agents/pi",
+            ".doctrine/skills/code-review",
+        ]
+        .iter()
+        .map(|r| t.path(r))
+        .collect();
+        assert_eq!(
+            canon, expected,
+            "container descended; non-container and symlink not"
+        );
+        assert_eq!(
+            got.scanned(&t.path(".doctrine/agents/claude")),
+            EntryState::Dir
+        );
+        assert_eq!(
+            got.scanned(&t.path(".doctrine/agents/flat.md")),
+            EntryState::File
+        );
+        assert_eq!(
+            got.scanned(&t.path(".doctrine/agents/pi")),
+            EntryState::Symlink(other.path().to_path_buf())
+        );
+        assert!(
+            got.snapshot.prune_blocked.is_empty(),
+            "{:?}",
+            got.snapshot.prune_blocked
+        );
+    }
+
+    #[test]
+    fn scan_classifies_link_dir_entries() {
+        let t = Tree::new();
+        let link = t.link(".claude/agents/a.md", "../../.doctrine/agents/claude/a.md");
+        let real = t.file(".claude/agents/b.md", "mine");
+        let dir = t.path(".claude/agents");
+        let got = scan(t.base(), &[], &[dir.clone()], &Desired::default()).unwrap();
+
+        let value = PathBuf::from("../../.doctrine/agents/claude/a.md");
+        assert_eq!(got.snapshot.links.len(), 2);
+        assert!(got.snapshot.links.contains(&LinkSeen::Symlink {
+            dir: dir.clone(),
+            name: "a.md".into(),
+            value: value.clone(),
+        }));
+        assert!(got.snapshot.links.contains(&LinkSeen::Real {
+            dir,
+            name: "b.md".into(),
+        }));
+        assert_eq!(got.scanned(&link), EntryState::Symlink(value));
+        assert_eq!(got.scanned(&real), EntryState::File);
+    }
+
+    #[test]
+    fn scan_blocks_prune_through_symlinked_ancestors() {
+        let t = Tree::new();
+        let real = tempfile::tempdir().unwrap();
+        let keep = real.path().join("agents/claude/keep.md");
+        fs::create_dir_all(keep.parent().unwrap()).unwrap();
+        fs::write(&keep, "x").unwrap();
+        fs::create_dir_all(real.path().join("agents/claude-links")).unwrap();
+        t.link(".doctrine", real.path());
+        t.link(".claude", real.path().join("agents"));
+        let want = desired(vec![member(
+            MemberKind::AgentDef,
+            t.path(".doctrine/agents/claude/dw.md"),
+            &[],
+        )]);
+        let roots = manifest_roots(t.base());
+        let link_dir = t.path(".claude/claude-links");
+        let got = scan(t.base(), &roots, &[link_dir.clone()], &want).unwrap();
+
+        assert!(
+            got.snapshot
+                .canon
+                .contains(&t.path(".doctrine/agents/claude/keep.md")),
+            "control: listed through the symlink"
+        );
+        assert_eq!(
+            got.snapshot.prune_blocked,
+            BTreeSet::from([
+                t.path(".doctrine/agents"),
+                t.path(".doctrine/agents/claude"),
+                link_dir,
+            ])
+        );
+    }
+
+    #[test]
+    fn scan_of_a_bare_tree_creates_nothing() {
+        let t = Tree::new();
+        let roots = manifest_roots(t.base());
+        let dirs = registered_link_dirs(t.base(), &real_registry());
+        assert!(
+            !roots.is_empty() && !dirs.is_empty(),
+            "control: scan given paths"
+        );
+        let before = listing(t.base());
+        let want = desired(vec![member(
+            MemberKind::AgentDef,
+            t.path(".doctrine/agents/claude/dw.md"),
+            &[],
+        )]);
+        let got = scan(t.base(), &roots, &dirs, &want).unwrap();
+        assert!(got.snapshot.canon.is_empty() && got.snapshot.links.is_empty());
+        assert_eq!(listing(t.base()), before);
+        // control: the same paths are read once something is there
+        t.file(".doctrine/agents/stray.md", "x");
+        let again = scan(t.base(), &roots, &dirs, &want).unwrap();
+        assert_eq!(
+            again.snapshot.canon,
+            vec![t.path(".doctrine/agents/stray.md")]
+        );
+    }
+
+    /// A wanted set with one member of each kind and a scan that saw a
+    /// foreign symlink — the fixture every vocabulary row renders against.
+    fn vocabulary_fixture() -> (Vec<Entry>, Vec<(String, Vec<u8>)>, Scan) {
+        let skill = Entry {
+            domain: "doctrine".to_string(),
+            id: "code-review".to_string(),
+            description: String::new(),
+            files: Vec::new(),
+        };
+        let assets = vec![
+            ("claude/dw.md".to_string(), b"def".to_vec()),
+            ("flow.js".to_string(), b"wf".to_vec()),
+        ];
+        let mut scan = Scan {
+            snapshot: Snapshot::default(),
+            states: BTreeMap::new(),
+        };
+        scan.states.insert(
+            PathBuf::from("/p/.claude/agents/f.md"),
+            EntryState::Symlink(PathBuf::from("/elsewhere/f.md")),
+        );
+        (vec![skill], assets, scan)
+    }
+
+    fn vocabulary_wanted<'a>(catalog: &'a [Entry], assets: &'a [(String, Vec<u8>)]) -> Wanted<'a> {
+        let base = Path::new(BASE);
+        let mut w = Wanted {
+            desired: Desired::default(),
+            sources: BTreeMap::new(),
+        };
+        w.sources.insert(
+            base.join(".doctrine/skills/code-review"),
+            Source::Skill(&catalog[0]),
+        );
+        for ((label, bytes), canon) in assets.iter().zip([
+            ".doctrine/agents/claude/dw.md",
+            ".doctrine/workflows/flow.js",
+        ]) {
+            w.sources.insert(
+                base.join(canon),
+                Source::Asset {
+                    label: label.clone(),
+                    bytes,
+                },
+            );
+        }
+        w
+    }
+
+    #[test]
+    fn action_line_renders_every_vocabulary_row() {
+        let (catalog, assets, scan) = vocabulary_fixture();
+        let w = vocabulary_wanted(&catalog, &assets);
+        let p = |rel: &str| PathBuf::from(BASE).join(rel);
+        let write = |kind, rel: &str| Action::WriteCanon(member(kind, p(rel), &[]));
+        let dest = p(".claude/agents/f.md");
+        let target = PathBuf::from("../../.doctrine/agents/claude/f.md");
+        let rows: Vec<(Action, &str, &str)> = vec![
+            (
+                write(MemberKind::Skill, ".doctrine/skills/code-review"),
+                "  skill     code-review → /p/.doctrine/skills/code-review",
+                "  would write /p/.doctrine/skills/code-review",
+            ),
+            (
+                write(MemberKind::AgentDef, ".doctrine/agents/claude/dw.md"),
+                "  agent     claude/dw.md → /p/.doctrine/agents/claude/dw.md",
+                "  would write /p/.doctrine/agents/claude/dw.md",
+            ),
+            (
+                write(MemberKind::Workflow, ".doctrine/workflows/flow.js"),
+                "  workflow  flow.js → /p/.doctrine/workflows/flow.js",
+                "  would write /p/.doctrine/workflows/flow.js",
+            ),
+            (
+                Action::Link {
+                    dest: dest.clone(),
+                    target: target.clone(),
+                },
+                "  linked    f.md",
+                "  would link /p/.claude/agents/f.md → ../../.doctrine/agents/claude/f.md",
+            ),
+            (
+                Action::Relink {
+                    dest: dest.clone(),
+                    target,
+                },
+                "  relinked  f.md",
+                "  would relink /p/.claude/agents/f.md → ../../.doctrine/agents/claude/f.md",
+            ),
+            (
+                Action::Unlink(dest.clone()),
+                "  pruned    /p/.claude/agents/f.md",
+                "  would prune /p/.claude/agents/f.md",
+            ),
+            (
+                Action::PruneCanon(p(".doctrine/agents/old.md")),
+                "  pruned    /p/.doctrine/agents/old.md",
+                "  would prune /p/.doctrine/agents/old.md",
+            ),
+        ];
+        for (action, live, dry) in rows {
+            assert_eq!(action_line(&action, &scan, &w, false), live);
+            assert_eq!(action_line(&action, &scan, &w, true), dry);
+        }
+
+        let notices = [
+            (
+                Notice::Orphan(p(".doctrine/agents/old.md")),
+                "  orphan    /p/.doctrine/agents/old.md (global install never removes; delete it if unwanted)",
+            ),
+            (
+                Notice::ForeignSymlink(dest.clone()),
+                "  kept      f.md (foreign symlink → /elsewhere/f.md)",
+            ),
+            (
+                Notice::Shadows(dest),
+                "  kept      f.md (real file shadows doctrine def — remove it to receive updates)",
+            ),
+            (
+                Notice::PruneBlocked(p(".doctrine/agents")),
+                "  prune blocked /p/.doctrine/agents (reached through a symlink — nothing removed there)",
+            ),
+            (
+                Notice::StaleStaging(p(".doctrine/skills/.tmp-x.1.0")),
+                "  stale staging /p/.doctrine/skills/.tmp-x.1.0 (left by an interrupted install — delete it)",
+            ),
+        ];
+        for (notice, line) in notices {
+            let action = Action::Report(notice);
+            assert_eq!(action_line(&action, &scan, &w, false), line);
+            assert_eq!(
+                action_line(&action, &scan, &w, true),
+                line,
+                "same under dry-run"
+            );
+        }
+        assert_eq!(
+            skipped_line(&p(".claude/agents/f.md")),
+            "  skipped   /p/.claude/agents/f.md (changed since scan)"
+        );
+    }
+
+    #[test]
+    fn report_header_names_scope_or_dry_run() {
+        assert_eq!(
+            report_header(Scope::Project, false),
+            "framework artefacts (project):"
+        );
+        assert_eq!(
+            report_header(Scope::Global, false),
+            "framework artefacts (global):"
+        );
+        assert_eq!(
+            report_header(Scope::Project, true),
+            "Ownership plan (not executed under --dry-run):"
+        );
+    }
+
+    const CLAUDE_ONLY: &str =
+        "[harness.claude]\nagents = \".claude/agents\"\nskills = \".claude/skills\"\n";
+
+    /// Scan `t` against `wanted` and plan; the plan is what `execute` runs.
+    fn scan_and_plan(
+        cx: &Converge<'_>,
+        registry: &Registry,
+        wanted: &Wanted<'_>,
+    ) -> (Scan, Vec<Action>) {
+        let roots = manifest_roots(cx.base);
+        let dirs = registered_link_dirs(cx.base, registry);
+        let scanned = scan(cx.base, &roots, &dirs, &wanted.desired).unwrap();
+        let actions = plan(&roots, cx.scope, &wanted.desired, &scanned.snapshot);
+        (scanned, actions)
+    }
+
+    fn run(cx: &Converge<'_>, wanted: &Wanted<'_>, scanned: &Scan, actions: &[Action]) -> String {
+        let mut out = Vec::new();
+        execute(cx, wanted, scanned, actions, &mut out).unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    fn project(t: &Tree) -> Converge<'_> {
+        Converge {
+            root: t.base(),
+            base: t.base(),
+            scope: Scope::Project,
+        }
+    }
+
+    /// Plant an orphan doctrine link and an orphan canon skill dir; both are
+    /// planned for removal (asserted — the control every skip test leans on).
+    fn plant_orphans(t: &Tree, actions_of: impl Fn() -> Vec<Action>) -> (PathBuf, PathBuf) {
+        let link = t.link(".claude/skills/retired", "../../.doctrine/skills/retired");
+        t.file(".doctrine/skills/retired/SKILL.md", "old");
+        let dir = t.path(".doctrine/skills/retired");
+        let actions = actions_of();
+        assert!(
+            actions.contains(&Action::Unlink(link.clone())),
+            "{actions:?}"
+        );
+        assert!(
+            actions.contains(&Action::PruneCanon(dir.clone())),
+            "{actions:?}"
+        );
+        (link, dir)
+    }
+
+    #[test]
+    fn execute_skips_action_whose_entry_changed_since_scan() {
+        let registry = registry_from(CLAUDE_ONLY);
+        let catalog = discover().unwrap();
+        for mutate in [false, true] {
+            let t = Tree::new();
+            let cx = project(&t);
+            let wanted = desired_set(
+                t.base(),
+                &registry,
+                &names(&["claude"]),
+                &[],
+                &catalog,
+                &[],
+                &[],
+            );
+            let (link, dir) = plant_orphans(&t, || scan_and_plan(&cx, &registry, &wanted).1);
+            let (scanned, actions) = scan_and_plan(&cx, &registry, &wanted);
+            if mutate {
+                fs::remove_file(&link).unwrap();
+                std::os::unix::fs::symlink("../../.doctrine/skills/other", &link).unwrap();
+                fs::remove_dir_all(&dir).unwrap();
+                fs::write(&dir, "now a file").unwrap();
+            }
+            let out = run(&cx, &wanted, &scanned, &actions);
+            if mutate {
+                assert_eq!(
+                    fs::read_link(&link).unwrap(),
+                    PathBuf::from("../../.doctrine/skills/other")
+                );
+                assert_eq!(fs::read_to_string(&dir).unwrap(), "now a file");
+                assert!(out.contains(&skipped_line(&link)), "{out}");
+                assert!(out.contains(&skipped_line(&dir)), "{out}");
+            } else {
+                assert!(entry_state(&link).unwrap() == EntryState::Absent, "{out}");
+                assert!(entry_state(&dir).unwrap() == EntryState::Absent, "{out}");
+                assert!(
+                    out.contains(&format!("  pruned    {}", link.display())),
+                    "{out}"
+                );
+                assert!(
+                    out.contains(&format!("  pruned    {}", dir.display())),
+                    "{out}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn execute_withholds_removal_when_ancestor_became_symlink() {
+        let registry = registry_from(CLAUDE_ONLY);
+        let catalog = discover().unwrap();
+        let t = Tree::new();
+        let cx = project(&t);
+        let wanted = desired_set(
+            t.base(),
+            &registry,
+            &names(&["claude"]),
+            &[],
+            &catalog,
+            &[],
+            &[],
+        );
+        let (_, dir) = plant_orphans(&t, || scan_and_plan(&cx, &registry, &wanted).1);
+        let (scanned, actions) = scan_and_plan(&cx, &registry, &wanted);
+        assert!(
+            scanned.snapshot.prune_blocked.is_empty(),
+            "control: clean at scan"
+        );
+
+        fs::rename(t.path(".doctrine"), t.path("moved")).unwrap();
+        t.link(".doctrine", "moved");
+        let out = run(&cx, &wanted, &scanned, &actions);
+
+        assert_eq!(
+            fs::read_to_string(t.path("moved/skills/retired/SKILL.md")).unwrap(),
+            "old"
+        );
+        let blocked = Action::Report(Notice::PruneBlocked(t.path(".doctrine/skills")));
+        assert!(
+            out.contains(&action_line(&blocked, &scanned, &wanted, false)),
+            "{out}"
+        );
+        assert!(
+            !out.contains(&format!("  pruned    {}", dir.display())),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn execute_bakes_agent_defs_and_copies_skills() {
+        let t = Tree::new();
+        t.file(".doctrine/hymns/role/worker.md", "RESOLVED WORKER BODY");
+        let cx = project(&t);
+        let registry = real_registry();
+        let defs = embedded_agent_defs();
+        let catalog = discover().unwrap();
+        let picked = select_for_install(&catalog, &names(&["code-review"]), &[]).unwrap();
+        let wanted = desired_set(
+            t.base(),
+            &registry,
+            &names(&["claude"]),
+            &defs,
+            &catalog,
+            &picked,
+            &[],
+        );
+        let (scanned, actions) = scan_and_plan(&cx, &registry, &wanted);
+        let out = run(&cx, &wanted, &scanned, &actions);
+
+        let worker =
+            fs::read_to_string(t.path(".doctrine/agents/claude/dispatch-worker.md")).unwrap();
+        assert!(worker.contains("RESOLVED WORKER BODY"), "{worker}");
+        assert!(!worker.contains(WORKER_RESOLVE_MARKER), "{worker}");
+
+        let (_, capsule) = defs
+            .iter()
+            .find(|(rel, _)| rel == "claude/capsule-worker.md")
+            .unwrap();
+        assert!(
+            !String::from_utf8_lossy(capsule).contains(WORKER_RESOLVE_MARKER),
+            "control: no marker"
+        );
+        assert_eq!(
+            &fs::read(t.path(".doctrine/agents/claude/capsule-worker.md")).unwrap(),
+            capsule
+        );
+
+        let review = t.path(".doctrine/skills/code-review");
+        assert!(review.join("SKILL.md").is_file());
+        assert_eq!(
+            fs::read_link(t.path(".claude/skills/code-review")).unwrap(),
+            PathBuf::from("../../.doctrine/skills/code-review")
+        );
+        assert_eq!(
+            fs::read_link(t.path(".claude/agents/dispatch-worker.md")).unwrap(),
+            PathBuf::from("../../.doctrine/agents/claude/dispatch-worker.md")
+        );
+        assert!(
+            out.contains(&format!("  skill     code-review → {}", review.display())),
+            "{out}"
+        );
+        assert!(out.contains("  linked    dispatch-worker.md"), "{out}");
+        assert!(!t.path(".doctrine/agents/pi").exists(), "pi not selected");
+    }
+
+    #[test]
+    fn execute_prunes_dir_with_remove_dir_all_and_link_with_remove_file() {
+        let registry = registry_from(CLAUDE_ONLY);
+        let catalog = discover().unwrap();
+        let t = Tree::new();
+        let cx = project(&t);
+        let wanted = desired_set(
+            t.base(),
+            &registry,
+            &names(&["claude"]),
+            &[],
+            &catalog,
+            &[],
+            &[],
+        );
+        let (link, dir) = plant_orphans(&t, || scan_and_plan(&cx, &registry, &wanted).1);
+        let kept = t.file("keep/inside.md", "mine");
+        let canon_link = t.link(".doctrine/skills/stray", "../../keep");
+        assert!(
+            t.path(".doctrine/skills/stray/inside.md").is_file(),
+            "control: link resolves"
+        );
+        let (scanned, actions) = scan_and_plan(&cx, &registry, &wanted);
+        assert!(
+            actions.contains(&Action::PruneCanon(canon_link.clone())),
+            "{actions:?}"
+        );
+
+        let out = run(&cx, &wanted, &scanned, &actions);
+        for gone in [&link, &dir, &canon_link] {
+            assert_eq!(
+                entry_state(gone).unwrap(),
+                EntryState::Absent,
+                "{}",
+                gone.display()
+            );
+            assert!(
+                out.contains(&format!("  pruned    {}", gone.display())),
+                "{out}"
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(&kept).unwrap(),
+            "mine",
+            "symlink target survives"
+        );
+    }
+
+    #[test]
+    fn canon_roots_match_manifest_framework_roots() {
+        let declared: BTreeSet<String> = framework_roots().unwrap().into_iter().collect();
+        let coded: BTreeSet<String> = [
+            MemberKind::AgentDef,
+            MemberKind::Skill,
+            MemberKind::Workflow,
+        ]
+        .into_iter()
+        .map(|k| canon_root(k).to_string())
+        .collect();
+        assert_eq!(coded, declared);
+    }
+
+    // VT-3: marketplace-only skills are never desired members. Their ids
+    // collide with `doctrine`-domain skills (`pair`, `record-memory`, …), so
+    // the proof is by each skill member's source domain, not by id.
+    #[test]
+    fn plan_excludes_marketplace_only_skills_from_members() {
+        let marketplace_only: BTreeSet<String> = PluginAssets::iter()
+            .filter_map(|p| {
+                let parts: Vec<&str> = p.split('/').collect();
+                match parts.as_slice() {
+                    [domain, "skills", skill, ..] if MARKETPLACE_ONLY_DOMAINS.contains(domain) => {
+                        Some((*skill).to_string())
+                    }
+                    _ => None,
+                }
+            })
+            .collect();
+        assert!(
+            !marketplace_only.is_empty(),
+            "control: marketplace-only skills embedded"
+        );
+
+        let base = Path::new(BASE);
+        let defs = embedded_agent_defs();
+        let catalog = discover().unwrap();
+        let all: Vec<&Entry> = catalog.iter().collect();
+        let w = desired_set(
+            base,
+            &real_registry(),
+            &names(&["claude"]),
+            &defs,
+            &catalog,
+            &all,
+            &[],
+        );
+
+        let review = base.join(".doctrine/skills/code-review");
+        assert!(
+            canons(&w.desired.members).contains(&review),
+            "control: code-review is a member"
+        );
+        for m in w
+            .desired
+            .members
+            .iter()
+            .filter(|m| m.kind == MemberKind::Skill)
+        {
+            let Some(Source::Skill(e)) = w.sources.get(&m.canon) else {
+                panic!("skill member {} has no skill source", m.canon.display());
+            };
+            assert!(
+                !MARKETPLACE_ONLY_DOMAINS.contains(&e.domain.as_str()),
+                "{} sourced from marketplace-only {}",
+                m.canon.display(),
+                e.domain
+            );
+        }
+    }
+
+    #[test]
+    fn desired_set_spans_every_registered_harness() {
+        let base = Path::new(BASE);
+        let defs = embedded_agent_defs();
+        assert!(
+            defs.iter().any(|(rel, _)| rel == "AGENTS.md"),
+            "control: AGENTS.md embedded"
+        );
+        let w = desired_set(
+            base,
+            &real_registry(),
+            &names(&["claude"]),
+            &defs,
+            &[],
+            &[],
+            &[],
+        );
+
+        let pi = base.join(".doctrine/agents/pi/dispatch-worker.md");
+        let claude = base.join(".doctrine/agents/claude/dispatch-worker.md");
+        assert!(canons(&w.desired.members).contains(&pi));
+        assert!(
+            canons(&w.desired.selected).contains(&claude),
+            "control: claude selected"
+        );
+        assert!(!canons(&w.desired.selected).contains(&pi));
+        assert!(
+            !w.desired
+                .new_links
+                .contains(&base.join(".pi/agents/dispatch-worker.md"))
+        );
+        assert!(
+            w.desired
+                .members
+                .iter()
+                .all(|m| !m.canon.ends_with("AGENTS.md"))
+        );
+        assert!(
+            w.sources
+                .keys()
+                .all(|c| canons(&w.desired.members).contains(c))
+        );
+        assert_eq!(w.sources.len(), w.desired.members.len());
+    }
+
+    #[test]
+    fn desired_set_installs_every_claude_def() {
+        let shipped: BTreeSet<String> =
+            fs::read_dir(crate::test_support::repo_root().join("install/agents/claude"))
+                .unwrap()
+                .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+                .filter(|n| n.ends_with(".md"))
+                .collect();
+        assert!(
+            shipped.contains("capsule-worker.md"),
+            "control: non-empty walk"
+        );
+
+        let base = Path::new(BASE);
+        let defs = embedded_agent_defs();
+        let w = desired_set(
+            base,
+            &real_registry(),
+            &names(&["claude"]),
+            &defs,
+            &[],
+            &[],
+            &[],
+        );
+        let canon_dir = base.join(".doctrine/agents/claude");
+        let selected: BTreeSet<String> = w
+            .desired
+            .selected
+            .iter()
+            .filter(|m| m.kind == MemberKind::AgentDef && m.canon.parent() == Some(&canon_dir))
+            .map(|m| m.canon.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(selected, shipped);
+        for f in &shipped {
+            assert!(
+                w.desired
+                    .new_links
+                    .contains(&base.join(".claude/agents").join(f)),
+                "{f}"
+            );
+        }
+    }
+
+    #[test]
+    fn desired_set_selects_nothing_for_codex_or_unregistered() {
+        let base = Path::new(BASE);
+        let defs = embedded_agent_defs();
+        let catalog = discover().unwrap();
+        let all: Vec<&Entry> = catalog.iter().collect();
+        let w = desired_set(
+            base,
+            &real_registry(),
+            &names(&["codex", "cursor"]),
+            &defs,
+            &catalog,
+            &all,
+            &[],
+        );
+        assert!(!w.desired.members.is_empty(), "control: members built");
+        assert!(w.desired.selected.is_empty());
+        assert!(w.desired.new_links.is_empty());
+    }
+
+    #[test]
+    fn desired_set_skill_member_carries_every_skills_route_site() {
+        let registry = registry_from(
+            "[harness.a]\nskills = \".a/skills\"\n[harness.b]\nskills = \".b/deep/skills\"\n",
+        );
+        let skill = Entry {
+            domain: "doctrine".to_string(),
+            id: "x".to_string(),
+            description: String::new(),
+            files: Vec::new(),
+        };
+        let catalog = vec![skill];
+        let picked: Vec<&Entry> = catalog.iter().collect();
+        let base = Path::new(BASE);
+        let a = base.join(".a/skills/x");
+        let b = base.join(".b/deep/skills/x");
+
+        let one = desired_set(base, &registry, &names(&["a"]), &[], &catalog, &picked, &[]);
+        let [member] = one.desired.members.iter().collect::<Vec<_>>()[..] else {
+            panic!("one skill member expected: {:?}", one.desired.members);
+        };
+        assert_eq!(member.links, BTreeSet::from([a.clone(), b.clone()]));
+        assert!(
+            one.desired.selected.contains(member),
+            "selected by clone, same links"
+        );
+        assert_eq!(one.desired.new_links, BTreeSet::from([a.clone()]));
+
+        let both = desired_set(
+            base,
+            &registry,
+            &names(&["a", "b"]),
+            &[],
+            &catalog,
+            &picked,
+            &[],
+        );
+        let roots = manifest_roots(base);
+        let targets: BTreeMap<PathBuf, PathBuf> =
+            plan(&roots, Scope::Project, &both.desired, &Snapshot::default())
+                .into_iter()
+                .filter_map(|act| match act {
+                    Action::Link { dest, target } => Some((dest, target)),
+                    _ => None,
+                })
+                .collect();
+        assert_eq!(
+            targets.get(&a),
+            Some(&PathBuf::from("../../.doctrine/skills/x"))
+        );
+        assert_eq!(
+            targets.get(&b),
+            Some(&PathBuf::from("../../../.doctrine/skills/x"))
+        );
+    }
 }
 
 // ── Tests: hymns manifest accessors (PHASE-02) ────────────────
