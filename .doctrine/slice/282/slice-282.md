@@ -44,12 +44,17 @@ Decisions settled in design: DEC-378 to DEC-385 (`doctrine show DEC-NNN`).
    (asked once only when none is detected or given); skills via flags.
 2. **One harness resolver** (DEC-381). Boot wiring and convergence consume the
    same set; boot detection's `AGENTS.md` rule moves into it.
-3. **Commit hint** (DEC-382). Print `git add <paths> && git commit -m "…"` for
-   exactly the tracked paths this run created, changed or removed.
+3. **Commit hint** (DEC-382). Print a path-limited
+   `git add -- <paths> && git commit -m "…" -- <paths>` for exactly the tracked
+   paths doctrine's own writers created, changed or removed; delegated `npx
+   skills` output gets a review line instead. Stamps are written last, only
+   when every install leg succeeded.
 4. **Hymn starters on demand** (DEC-384). Remove the install starter leg and
    `[hymns].expose`; add `doctrine prompt customise <slot>`; install removes
    (and reports) legacy starters byte-identical to their framework body with
-   no sidecar or only the default self-replace. Resolves ISS-210, ISS-521.
+   no sidecar or only the default self-replace, once, while the repo has no
+   recorded version; `prompt customise` refuses until it has one. Resolves
+   ISS-210, ISS-521.
 5. **Version currency** (DEC-378, DEC-379, DEC-380).
    - Tracked `installed-version` in `doctrine.toml` `[install]`: the repo's
      version, an advisory team pin.
@@ -57,8 +62,10 @@ Decisions settled in design: DEC-378 to DEC-385 (`doctrine show DEC-NNN`).
    - Pure leaf `install_state` classifies and owns the advisory text; the
      session hook (`prompt resolve`), `doctrine boot` / `boot --check` and
      `status` print it when not current, never inside snapshot bytes.
-   - Install run by a binary older than the stamp warns and asks; under `-y`
-     it refuses without an override flag.
+   - Linked worktrees read the main worktree's marker; an unlocatable main
+     worktree is disclosed.
+   - Install run by a binary older than the stamp or the local marker warns
+     and asks; under `-y` it refuses without an override flag.
 6. **Not-installed clause** (DEC-383). One sentence added to the boot guard;
    prior guard texts upgrade in place.
 7. **Shared install plan** (DEC-379). `InstallPlan` composes the existing
@@ -77,6 +84,8 @@ Decisions settled in design: DEC-378 to DEC-385 (`doctrine show DEC-NNN`).
 - Hymn model coverage, currency and model-key vocabulary (IMP-489 incl.
   concern 5, ISS-491).
 - Codex agent defs and the bake format (SL-283).
+- Root-marker divergence between install and the readers (ISS-522); the
+  `--only-memory` and `--global` leg sets (ISS-523, ISS-524).
 
 ## Affected surface
 
