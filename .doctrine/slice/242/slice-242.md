@@ -1,5 +1,22 @@
 # Retire the projected reference-doc model
 
+## Status check (2026-10-16)
+
+Partly overtaken; re-scope before running.
+
+- Objective 2 (DEC-010): done — DEC-010 is `accepted` (2026-09-26).
+- Objective 3 (untrack residue): half done. SL-281 added the managed gitignore
+  block and resolved CHR-043 (objective 5). Still tracked here: seven reference-doc
+  copies (`dispatch-mechanics`, `glossary`, `harvest`, `model-band`,
+  `review-ledger`, `using-doctrine`, plus user-owned `governance`), `templates/`,
+  `mod.just`, `doctrine.toml.example`.
+- Objective 4: moved to SL-273 (already noted).
+- Objective 1 (four shipped memories): still needed — all four still name
+  `.doctrine/*.md` paths.
+- R1 for `hymns/`: SL-282 treats hymns as user-owned and handles install-output
+  starters (byte-identical twins) in its inq-7; drop `hymns/` from this slice's
+  residue list.
+
 ## Context
 
 SL-227 (governed by ADR-019) made projection minimal: `doctrine install` eagerly

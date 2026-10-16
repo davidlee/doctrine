@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14472-ae98-7760-9b5e-7b6b50b44ab1"
+recorded_at = "2026-10-16T11:22:08.920297494Z"
+kind = "friction"
+summary = "research: pi research agents ran with a broken doctrine binary (SL-282)"
+detail = "User reported the doctrine bin wasn't working for pi-research/pi-scout during the SL-282 research round; fixed after. Output was still usable, but agents may have fallen back to raw file reads. No preflight check that the agent's doctrine binary works."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
