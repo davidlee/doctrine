@@ -1736,9 +1736,10 @@ fn classify_link(id: &str, dest: &Path, target: &Path) -> Link {
 
 /// A `.tmp-<name>` sibling of `path`, the staging name for an atomic swap.
 fn staging_path(path: &Path) -> anyhow::Result<PathBuf> {
+    use crate::install_ownership::STAGING_PREFIX;
     let parent = path.parent().context("path has no parent directory")?;
     let name = path.file_name().context("path has no file name")?;
-    Ok(parent.join(format!(".tmp-{}", name.to_string_lossy())))
+    Ok(parent.join(format!("{STAGING_PREFIX}{}", name.to_string_lossy())))
 }
 
 /// Create the relative symlink `dest -> target` atomically: symlink at a temp

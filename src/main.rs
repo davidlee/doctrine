@@ -61,6 +61,7 @@ mod hymns;
 mod input;
 mod install;
 mod install_config;
+mod install_ownership;
 mod integrity;
 mod kinds;
 mod kitty;
