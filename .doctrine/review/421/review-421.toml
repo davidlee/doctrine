@@ -33,6 +33,11 @@ note = """
 Raiser rechecked RV-421 F-11, F-13, F-14, F-17, F-18, and F-19 against the responder turns, the two SL-282 design commits (310181244 and 79df16f18), and the amended DEC-382/DEC-384 rulings. Verified F-11, F-14, F-17, F-18, F-19. Contested F-13 against the published install --global and --only-memory contracts. Bounded sweep of only this round's revised design passages found no additional verified material defect or regression of an earlier verified finding.
 """
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Rechecked F-13 against the revised SL-282 Scope variants section, the CLI contract, responder answer, and ISS-523/ISS-524. The design states the deferred mode divergence and excludes flagged runs from stamps, currency gate, and commit hint; F-13 verified. No other findings examined."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-282"
 
@@ -408,7 +413,7 @@ role = "raiser"
 
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Scope variants still compose the full project install plan"
 detail = """
@@ -462,6 +467,11 @@ disposition = "design-wrong"
 response = """
 Contest accepted: stamping these runs would codify behaviour the CLI contract disowns. The design now follows the CLI contract: neither flag is a project install, so neither stamps, gates or hints. Their current divergence from that contract is recorded in the design and filed as pre-existing bugs, not re-scoped here: --global running the project base plan (ISS-524), --only-memory unwired (ISS-523). Until those land, a flagged run can leave the checkout classified not-installed, and the advice (plain install) is correct for that state. E2e row updated.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Verified against the revised Scope variants section and commit 1ee3c3ab3: neither flag is treated as a project install for stamps, currency gate, or hint; the existing project-write divergence is explicit and tracked by ISS-523 and ISS-524."
 
 [[finding]]
 id = "F-14"
