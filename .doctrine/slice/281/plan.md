@@ -52,11 +52,21 @@ DEC-376: one REV over SPEC-009, REQ-170 and REQ-176, rows per design
 - **PHASE-04 size.** Mitigated by PHASE-02/03 carrying the logic and the safety
   primitives; if the phase sheet still exceeds one coherent unit, split at
   phase-plan time (append `PHASE-07`, never renumber).
-- **`--dry-run` scope.** Today dry-run skips forward steps entirely; PHASE-04
-  makes it compute the ownership plan. That needs the scan without the
-  executor — the split is already the design's shell shape.
-- **Global e2e.** Relies on install honouring a temp `$HOME` for the global
-  base; confirm `install_base` reads it at PHASE-04 phase-plan time.
+- **`--dry-run` scope.** `install::run` returns after `print_forward_summary`
+  under `--dry-run`, before any forward step (verified). PHASE-04 adds the scan
+  and plan print to that path; the executor stays unreached — the design's
+  scan / plan / execute split already allows it.
+- **Global e2e.** `install_base` reads `$HOME` (verified), so a temp `$HOME`
+  is sufficient.
+- **Unregistered harness defs.** Until PHASE-04 deletes the `_ => pi` arm, an
+  unregistered `--agent` still receives pi's def; PHASE-01 only adds the
+  disclosure. Interim, not shipped (one slice).
+- **`plan_excludes_marketplace_only_skills_from_members`** sits in
+  `src/install.rs`, not `install_ownership.rs` as the design lists it:
+  membership is built in the shell from `discover()`, so that is where the
+  exclusion is testable.
+- **Convergence e2e** gets its own file, `tests/e2e_install_ownership.rs`;
+  `e2e_claude_install.rs` keeps the def-set assertions only.
 - **Embedded `agents/AGENTS.md`.** A publication asset under the agents embed
   prefix; the desired-set builder must filter to `agents/<harness>/` or it
   becomes a phantom member (PHASE-04 EX-1).
