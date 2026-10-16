@@ -54,6 +54,31 @@ intent = "design-target"
 selector = ".doctrine/agents/AGENTS.md"
 intent = "design-target"
 
+[[selector]]
+selector = "src/fsutil.rs"
+intent = "design-target"
+note = "RV-420 F-10"
+
+[[selector]]
+selector = "tests/e2e_install_ownership.rs"
+intent = "design-target"
+note = "RV-420 F-10"
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+note = "RV-420 F-10"
+
+[[selector]]
+selector = ".pi/agents/dispatch-worker.md"
+intent = "design-target"
+note = "RV-420 F-10"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "design-target"
+note = "RV-420 F-10"
+
 [[relation]]
 label = "fulfils"
 target = "IMP-468"

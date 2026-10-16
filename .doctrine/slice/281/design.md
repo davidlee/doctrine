@@ -1,9 +1,11 @@
 <!-- doctrine:section sec-ownership -->
 ## Ownership declaration
 
-Ownership is declared once, in `install/manifest.toml` (DEC-373). Nothing else
-lists a framework path; gitignore lines, prune scope and link targets all derive
-from it.
+Ownership is declared once, in `install/manifest.toml` (DEC-373). Gitignore
+lines, prune scope and link targets all derive from it. The one code-side list,
+`canon_root()`'s kind→root map, exists because manifest roots carry no kind; a
+test (`canon_roots_match_manifest_framework_roots`) pins it to the manifest, as
+`DERIVED_RUNTIME` is pinned (RV-420 F-7).
 
 ```toml
 [framework]
@@ -152,6 +154,11 @@ executor and the disk scan are the thin impure shell around it.
 | `src/install_ownership.rs` (new) | pure `plan`, `Desired`/`Snapshot`/`Action`, `render_block`, `splice_block` |
 | `src/install.rs` | `FrameworkSection`/`HarnessSection` on `Manifest`; desired-set builder over `embedded_agent_defs` + catalog; disk scan; one executor replacing `install_agents_for`/`install_agent_def`/`install_skills_direct`/`install_workflows_for` legs; lexical "into a framework root" test beside `classify_link`; gitignore block written after the forward legs from a re-scan, replacing `Step::Gitignore`; `detect_agents` and `boot_harness_names` read the registry; `install_harnesses` derives the boot set from the registry in both the flagged and unflagged paths, unioning `boot::resolve_harnesses`' AGENTS.md rule; unregistered names keep npx delegation with a disclosure; `.tmp-` staging prefix named; `ensure_gitignored` deleted (no caller once `Step::Gitignore` goes); executor re-proves before each mutation; delete `DISPATCH_WORKER_AGENT_ASSET{,_PI}`, `claude_agents_dir`/`pi_agents_dir`, both `_ => pi` arms; `delegate_argv` receives de-duplicated `skills_via` targets |
 | `src/main.rs` | `mod install_ownership;` |
+| `src/fsutil.rs` | lexical path algebra lifted from `install.rs`/`memory.rs`; `symlinked_component` (RV-420 F-10) |
+| `src/memory.rs` | drops its `lexical_normalise` copy for `fsutil`'s |
+| `.doctrine/adr/001/layering.toml` | classifies `install_ownership` for the layering gate |
+| `tests/e2e_install_ownership.rs` (new) | real-binary convergence cases (PHASE-04 EX-7) |
+| `.pi/agents/dispatch-worker.md` | relinked to the pi canon by dogfood install; untracked (RV-420 F-5) |
 | `src/worktree/allowlist.rs` | `DERIVED_RUNTIME` gains `.doctrine/workflows/*`; test that every `[framework] roots` entry is covered |
 | `tests/e2e_claude_install.rs` | walk `install/agents/claude/*.md`; canon path moves to `.doctrine/agents/claude/` |
 | `tests/e2e_prompt_def_expansion.rs` | canon path `.doctrine/agents/claude/dispatch-worker.md` |
@@ -209,7 +216,9 @@ A doctrine link is mapped to its member by harness and name. Mapped: its member
 joins the write set and the link is relinked to the current layout. Unmapped
 (the member is no longer shipped): unlinked. **New** links are created only for
 the harnesses selected in this run. A non-symlink entry is never touched; if its
-name matches a member it is reported as shadowing.
+name matches a member it is reported as shadowing. A foreign symlink is always
+kept, and reported only when it sits at a member's link site; elsewhere it is
+simply not doctrine's (PHASE-02 OQ-1, RV-420 F-3).
 
 This widens SPEC-010's REQ-176 (ownership by exact target value) to
 ownership by target-inside-a-framework-root; the Revision carries that row.
@@ -230,7 +239,9 @@ flowchart TD
   F -- yes --> KS[keep, report 'shadows doctrine def']
   F -- no --> K[keep]
   D -- yes --> T{target inside a framework root?}
-  T -- no --> KF[keep, report 'foreign symlink']
+  T -- no --> FM{at a member link site?}
+  FM -- yes --> KF[keep, report 'foreign symlink']
+  FM -- no --> K
   T -- yes --> M{maps to a member?}
   M -- yes --> RL[relink; member joins write set]
   M -- no --> UL{project install?}
@@ -287,14 +298,15 @@ pub(crate) struct Desired { members: BTreeSet<Member>, selected: BTreeSet<Member
                             new_links: Vec<LinkWant> }   // selected harnesses only
 pub(crate) struct Snapshot { canon: Vec<PathBuf>, links: Vec<LinkSeen>,
                              prune_blocked: BTreeSet<PathBuf> }  // symlinked dirs
-pub(crate) enum LinkSeen { Symlink { dir, name, value: PathBuf }, Real { dir, name } }
+pub(crate) enum LinkSeen { Symlink { dir, name, value: PathBuf }, Real { dir, name },
+                           Unreadable { dir, name } }
 pub(crate) enum Scope { Project, Global }
 
 pub(crate) enum Action {
   WriteCanon(Member),             // agent defs: per-project bake; skills: copy
   Link { dest, target }, Relink { dest, target }, Unlink(PathBuf),
   PruneCanon(PathBuf),
-  Report(Notice),                 // Orphan | ForeignSymlink | Shadows | PruneBlocked
+  Report(Notice),                 // Orphan | ForeignSymlink | Shadows | PruneBlocked | Unreadable
 }
 
 pub(crate) fn plan(roots: &[PathBuf], scope: Scope, want: &Desired,
@@ -306,8 +318,15 @@ embed and the install catalog; scans canon roots and every registered link dir
 into a `Snapshot`; then executes in a fixed order: canon writes, link writes,
 unlinks, canon prunes. `--dry-run` prints the plan, including would-prune
 actions, and executes nothing. Report lines extend today's
-`linked / relinked / kept` with `pruned`, `orphan`, `prune blocked` and
-`kept … (real file shadows doctrine def — remove it to receive updates)`.
+`linked / relinked / kept` with `pruned`, `orphan`, `prune blocked`,
+`kept … (real file shadows doctrine def — remove it to receive updates)`,
+`skipped … (changed since scan)` and `unreadable … (left untouched)`.
+
+Convergence runs once per install, and only when at least one harness is
+confirmed; with none, nothing is pruned (the gitignore block is still written).
+The executor aborts on the first I/O or bake error (`framework install
+failed`). An already-correct link emits no line (PHASE-04 D1/D3/D4, accepted
+2026-10-16; RV-420 F-4).
 
 The agent-def bake (`bake_worker_def`, `WORKER_RESOLVE_MARKER`) is unchanged and
 runs inside `WriteCanon`; skills keep `materialise_canonical`'s staged swap.
@@ -416,7 +435,7 @@ rows are `modify`; excerpts ride in the REV's companion prose.
 | SPEC-009 D2 | Split by ownership: user-owned write-if-absent, never overwritten; framework canon roots converge exactly on project installs (global: no prune, orphans reported); shared link dirs prune by recognition; gitignore via a managed block. Dirs stay create-if-missing. |
 | SPEC-009 D4 | The manifest also declares `[framework] roots` and the `[harness.*]` registry (detect, boot, agents, skills route). |
 | SPEC-009 D5 + Overview boundary paragraph | Rewrite the "skills distribution is a sibling container … install does not own the skill symlink tree, only its gitignore negation" claim: install owns skill canon and links (true since SL-250); the `npx skills` route is the peer mechanism it uses for delegated harnesses. |
-| SPEC-009 D7 | Clarified: an explicit `--agent` harness leg installs that harness's defs as integration, not default projection (DEC-372). |
+| SPEC-009 D7 | Clarified: an explicit `--agent` harness leg, or a detected harness the user confirms (prompt or `-y`), installs that harness's defs as integration, not default projection (DEC-372; RV-420 F-8). |
 | SPEC-009 manifest section | `[gitignore].entries` become the runtime part of a rewritten managed block, not lines appended. |
 | SPEC-009 "Plan then execute" | The plan carries write/relink/unlink/prune actions, not only install/skip; re-install converges framework-owned files rather than being a no-op; user-owned files keep never-overwrite. |
 | SPEC-009 Concerns | "Never-overwrite is the safety contract" narrowed to user-owned; "entries are additive" replaced by the managed-block contract. |
@@ -498,6 +517,9 @@ Manifest and wiring tests (`src/install.rs`):
   `render_block`; the two `ensure_gitignored_*` tests retire with the helper
 - `framework_roots_are_classified_derived_runtime`
 - `repo_gitignore_contains_static_block_entries` (dogfood parity)
+- `detection_and_boot_follow_registry`: no `--agent` in a project with only
+  `.pi/` wires the codex boot adapter — a pure registry mapping, so unit
+  coverage suffices (RV-420 F-14)
 
 End-to-end (`tests/e2e_claude_install.rs`, real binary, temp project):
 
@@ -521,7 +543,6 @@ End-to-end (`tests/e2e_claude_install.rs`, real binary, temp project):
 - a write under a symlinked `.doctrine` (pointing into a second temp dir)
   refreshes only member paths there; a planted non-member beside them
   survives, and install reports `prune blocked`;
-- no `--agent` in a project with only `.pi/` wires the codex boot adapter;
 - `--global` under a temp `$HOME` with a planted orphan reports it and keeps it.
 
 Absence assertions are paired with a positive control (the path existed before
