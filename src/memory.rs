@@ -12,7 +12,7 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
 use std::io::{self, Read, Write};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
@@ -10873,22 +10873,6 @@ pub(crate) fn paths_from_patch(patch: &str) -> Vec<PathBuf> {
     out
 }
 
-/// Fold `.`/`..` lexically — never canonicalising, because the file may not
-/// exist yet (a `Write`/`Add File` to a new path).
-fn lexical_normalise(p: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for c in p.components() {
-        match c {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                out.pop();
-            }
-            other => out.push(other.as_os_str()),
-        }
-    }
-    out
-}
-
 /// Resolve one reported value against the anchor and strip `root` (design §5.1).
 /// Pure — the anchor's two forms and the root are threaded in as data.
 ///
@@ -10917,7 +10901,7 @@ fn resolve_probe_path(value: &str, anchor: &SurfaceAnchor, root: &Path) -> Optio
     } else {
         anchor.canonical.join(p)
     };
-    lexical_normalise(&joined)
+    crate::fsutil::lexical_normalise(&joined)
         .strip_prefix(root)
         .ok()
         .map(Path::to_path_buf)

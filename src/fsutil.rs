@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Shared filesystem primitives — the path-containment chokepoint and the
 //! accountable, atomic create operations used by both the scaffold engine
-//! (`entity.rs`) and the runtime-state writer (`state.rs`, slice-004 D3).
+//! (`entity.rs`) and the runtime-state writer (`state.rs`, slice-004 D3) —
+//! plus the pure, lexical path algebra (`lexical_normalise`, `relative_path`)
+//! that callers needing no disk access share.
 //!
 //! The split between those modules is of *contracts* (scaffold-once vs
 //! mutate-in-place), not of IO: both reach disk through the same safe-join and
@@ -367,6 +369,38 @@ fn ensure_dir_components(path: &Path) -> anyhow::Result<()> {
         create_dir_component(&cur)?;
     }
     Ok(())
+}
+
+/// Fold `.`/`..` lexically — never canonicalising or following links, so the
+/// path need not exist (a file not yet written, a dangling link's value).
+pub(crate) fn lexical_normalise(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+/// Relative path from `from` to `to`. Both must be absolute and normalised
+/// (no `.`/`..` components) — the root-/`$HOME`-derived dirs always are.
+pub(crate) fn relative_path(from: &Path, to: &Path) -> PathBuf {
+    let from_c: Vec<_> = from.components().collect();
+    let to_c: Vec<_> = to.components().collect();
+    let common = from_c.iter().zip(&to_c).take_while(|(a, b)| a == b).count();
+    let mut rel = PathBuf::new();
+    for _ in common..from_c.len() {
+        rel.push("..");
+    }
+    for c in to_c.iter().skip(common) {
+        rel.push(c.as_os_str());
+    }
+    rel
 }
 
 // ---------------------------------------------------------------------------

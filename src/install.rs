@@ -1654,28 +1654,12 @@ fn agent_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
     Ok(install_base(root, global)?.join(".doctrine/agents"))
 }
 
-/// Relative path from `from` to `to`. Both must be absolute and normalised
-/// (no `.`/`..` components) — the root-/`$HOME`-derived dirs always are.
-fn relative_path(from: &Path, to: &Path) -> PathBuf {
-    let from_c: Vec<_> = from.components().collect();
-    let to_c: Vec<_> = to.components().collect();
-    let common = from_c.iter().zip(&to_c).take_while(|(a, b)| a == b).count();
-    let mut rel = PathBuf::new();
-    for _ in common..from_c.len() {
-        rel.push("..");
-    }
-    for c in to_c.iter().skip(common) {
-        rel.push(c.as_os_str());
-    }
-    rel
-}
-
 /// The relative symlink value for `<id>`: from the agent skills dir (where the
 /// link lives) to `canonical_dir/<id>`. Derived from the two dirs, never
 /// hard-coded — `../../.doctrine/skills/<id>` in the common project-local case,
 /// and correct under a shared `--global` base.
 fn relative_target(agent_skills_dir: &Path, canonical_dir: &Path, id: &str) -> PathBuf {
-    relative_path(agent_skills_dir, &canonical_dir.join(id))
+    crate::fsutil::relative_path(agent_skills_dir, &canonical_dir.join(id))
 }
 
 /// Why an agent skill path is foreign — left untouched and warned.
