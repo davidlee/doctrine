@@ -63,7 +63,9 @@ skills_via = "universal"
 [gitignore]
 # Runtime state is disposable and must never be committed; the convenience
 # `phases` symlink and ad-hoc `handover.md` are gitignored so they never enter
-# the tracked authored tree. Additive — re-install is a no-op.
+# the tracked authored tree. Rewritten into a managed block on each project
+# install, not appended; each framework root's `<root>/*` is added to the block
+# from `[framework] roots`, so it is not listed here.
 #
 # Memory: `items/` holds committed authored entities (created above, NOT ignored).
 # The derived subtrees (index/embeddings/state) are regenerable — ignore the
@@ -80,7 +82,6 @@ entries = [
   ".doctrine/memory/state/*",
   ".doctrine/memory/shipped/",
   ".doctrine/dispatch/",
-  ".doctrine/skills/*",
   # Observations: authoritative records under
   # `.doctrine/observations/records/` are AUTHORED collection data — committed,
   # diffable, visible in review by default. Only the reserved publication

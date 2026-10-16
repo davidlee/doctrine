@@ -302,6 +302,117 @@ fn admit(
     admitted
 }
 
+// ── managed gitignore block (SL-281 design `sec-gitignore`) ──
+
+/// The managed block's opening line. Detection uses [`BLOCK_START_PREFIX`],
+/// so a later wording change still finds blocks written under this one.
+pub(crate) const BLOCK_START: &str =
+    "# >>> doctrine managed — rewritten by `doctrine install`; edit outside this block";
+pub(crate) const BLOCK_END: &str = "# <<< doctrine managed";
+const BLOCK_START_PREFIX: &str = "# >>> doctrine managed";
+const BLOCK_END_PREFIX: &str = "# <<< doctrine managed";
+
+/// Doctrine-owned link sites in `seen`: symlinks whose value lies strictly
+/// under a framework root (see [`is_doctrine_link`]). Sorted, deduplicated.
+pub(crate) fn doctrine_links(roots: &[PathBuf], seen: &[LinkSeen]) -> Vec<PathBuf> {
+    seen.iter()
+        .filter_map(|entry| match entry {
+            LinkSeen::Symlink { dir, name, value } if is_doctrine_link(roots, dir, value) => {
+                Some(dir.join(name))
+            }
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+/// The link sites that exist once `actions` have run: `links` (on disk now)
+/// plus every `Link`/`Relink` destination, minus every `Unlink`. The dry-run
+/// block uses it to predict what a live run's re-scan will find.
+pub(crate) fn links_after(links: Vec<PathBuf>, actions: &[Action]) -> Vec<PathBuf> {
+    let mut sites: BTreeSet<PathBuf> = links.into_iter().collect();
+    for action in actions {
+        match action {
+            Action::Link { dest, .. } | Action::Relink { dest, .. } => {
+                sites.insert(dest.clone());
+            }
+            Action::Unlink(path) => {
+                sites.remove(path);
+            }
+            _ => {}
+        }
+    }
+    sites.into_iter().collect()
+}
+
+/// The block, markers included: runtime `entries`, then `<root>/*` per root,
+/// then one line per link (already `/`-anchored, project-relative; sorted and
+/// deduplicated here so the output is byte-stable). Only the markers carry
+/// `#` — gitignore has no inline comments.
+pub(crate) fn render_block(entries: &[String], roots: &[String], links: &[String]) -> Vec<String> {
+    let links: BTreeSet<&String> = links.iter().collect();
+    std::iter::once(BLOCK_START.to_owned())
+        .chain(entries.iter().cloned())
+        .chain(roots.iter().map(|root| format!("{root}/*")))
+        .chain(links.into_iter().cloned())
+        .chain(std::iter::once(BLOCK_END.to_owned()))
+        .collect()
+}
+
+/// Why [`splice_block`] left a file alone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SpliceRefusal {
+    /// Not exactly one start line followed by one end line, nor none of either.
+    Malformed { starts: usize, ends: usize },
+}
+
+/// Replace the managed block in `existing` with `block`, or append it when
+/// the file has none. Bytes outside the block are untouched, so a user's
+/// later negation stays after it. The line ending is CRLF iff the first line
+/// ends `\r\n`; every emitted block line carries it.
+pub(crate) fn splice_block(existing: &str, block: &[String]) -> Result<String, SpliceRefusal> {
+    let eol = if existing
+        .split_inclusive('\n')
+        .next()
+        .is_some_and(|l| l.ends_with("\r\n"))
+    {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let lines: Vec<&str> = existing.split_inclusive('\n').collect();
+    let marked = |prefix: &str| -> Vec<usize> {
+        lines
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| line.trim_end_matches(['\n', '\r']).starts_with(prefix))
+            .map(|(i, _)| i)
+            .collect()
+    };
+    let (starts, ends) = (marked(BLOCK_START_PREFIX), marked(BLOCK_END_PREFIX));
+    let rendered: String = block.iter().flat_map(|l| [l.as_str(), eol]).collect();
+    match (starts.as_slice(), ends.as_slice()) {
+        ([], []) => {
+            let gap = if existing.is_empty() || existing.ends_with('\n') {
+                ""
+            } else {
+                eol
+            };
+            Ok(format!("{existing}{gap}{rendered}"))
+        }
+        ([start], [end]) if start < end => {
+            let before: String = lines.iter().take(*start).copied().collect();
+            let after: String = lines.iter().skip(end + 1).copied().collect();
+            Ok(format!("{before}{rendered}{after}"))
+        }
+        _ => Err(SpliceRefusal::Malformed {
+            starts: starts.len(),
+            ends: ends.len(),
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -778,5 +889,227 @@ mod tests {
             5,
             "{actions:#?}"
         );
+    }
+
+    // ── managed gitignore block (SL-281 PHASE-05) ──
+
+    fn block(lines: &[&str]) -> Vec<String> {
+        lines.iter().map(|l| (*l).to_owned()).collect()
+    }
+
+    /// The rendered block for a fixed, small input.
+    fn sample_block() -> Vec<String> {
+        render_block(
+            &block(&[".doctrine/state/"]),
+            &block(&[".doctrine/skills"]),
+            &block(&["/.claude/skills/a"]),
+        )
+    }
+
+    fn splice(existing: &str) -> String {
+        splice_block(existing, &sample_block()).expect("splices")
+    }
+
+    fn joined(lines: &[String], eol: &str) -> String {
+        lines.iter().map(|l| format!("{l}{eol}")).collect()
+    }
+
+    fn marker_counts(text: &str) -> (usize, usize) {
+        let count = |prefix| text.lines().filter(|l| l.starts_with(prefix)).count();
+        (count(BLOCK_START_PREFIX), count(BLOCK_END_PREFIX))
+    }
+
+    #[test]
+    fn splice_block_appends_when_absent() {
+        let out = splice("target/\n");
+        assert_eq!(out, format!("target/\n{}", joined(&sample_block(), "\n")));
+        assert_eq!(splice(""), joined(&sample_block(), "\n"));
+    }
+
+    #[test]
+    fn splice_block_replaces_between_markers() {
+        let old = block(&[BLOCK_START, "/stale", BLOCK_END]);
+        let existing = format!("before\n{}after\n", joined(&old, "\n"));
+        let out = splice(&existing);
+        assert_eq!(
+            out,
+            format!("before\n{}after\n", joined(&sample_block(), "\n"))
+        );
+    }
+
+    #[test]
+    fn splice_block_finds_a_block_with_older_marker_wording() {
+        let existing = "# >>> doctrine managed (old words)\n/stale\n# <<< doctrine managed\nuser\n";
+        let out = splice(existing);
+        assert_eq!(out, format!("{}user\n", joined(&sample_block(), "\n")));
+    }
+
+    #[test]
+    fn splice_block_preserves_user_negations_after_block() {
+        let existing = format!(
+            "mine\n{}!/.claude/skills/a\n",
+            joined(&sample_block(), "\n")
+        );
+        let out = splice(&existing);
+        assert_eq!(out, existing);
+        assert!(out.ends_with("!/.claude/skills/a\n"));
+    }
+
+    #[test]
+    fn splice_block_refuses_lone_or_duplicate_markers() {
+        let (s, e) = (BLOCK_START, BLOCK_END);
+        let cases = [
+            (format!("{s}\nx\n"), (1, 0)),
+            (format!("x\n{e}\n"), (0, 1)),
+            (format!("{s}\n{e}\n{s}\n{e}\n"), (2, 2)),
+            (format!("{s}\n{s}\n{e}\n"), (2, 1)),
+            (format!("{e}\n{s}\n"), (1, 1)),
+        ];
+        for (existing, (starts, ends)) in cases {
+            assert_eq!(
+                splice_block(&existing, &sample_block()),
+                Err(SpliceRefusal::Malformed { starts, ends }),
+                "{existing:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn splice_block_adds_newline_to_unterminated_file() {
+        let out = splice("target/");
+        assert_eq!(out, format!("target/\n{}", joined(&sample_block(), "\n")));
+        // An unterminated end marker gains its newline, then is stable.
+        let unterminated = joined(&sample_block(), "\n").trim_end().to_owned();
+        let once = splice(&unterminated);
+        assert_eq!(once, joined(&sample_block(), "\n"));
+        assert_eq!(splice(&once), once);
+    }
+
+    #[test]
+    fn splice_block_keeps_crlf() {
+        let appended = splice("target/\r\n");
+        assert_eq!(
+            appended,
+            format!("target/\r\n{}", joined(&sample_block(), "\r\n"))
+        );
+        let existing = format!(
+            "a\r\n{}b\r\n",
+            joined(&block(&[BLOCK_START, BLOCK_END]), "\r\n")
+        );
+        let out = splice(&existing);
+        assert_eq!(
+            out,
+            format!("a\r\n{}b\r\n", joined(&sample_block(), "\r\n"))
+        );
+        assert_eq!(splice(&out), out);
+    }
+
+    #[test]
+    fn splice_block_is_idempotent() {
+        for existing in [
+            "",
+            "x",
+            "x\n",
+            "x\r\ny\r\n",
+            "a\n# >>> doctrine managed\n# <<< doctrine managed",
+        ] {
+            let once = splice(existing);
+            assert_eq!(splice(&once), once, "{existing:?}");
+            assert_eq!(marker_counts(&once), (1, 1));
+        }
+    }
+
+    #[test]
+    fn render_block_lists_runtime_entries_roots_and_links() {
+        let out = render_block(
+            &block(&[".doctrine/state/", ".doctrine/memory/shipped/"]),
+            &block(&[".doctrine/agents", ".doctrine/skills"]),
+            &block(&["/.pi/agents/b.md", "/.claude/skills/a", "/.pi/agents/b.md"]),
+        );
+        assert_eq!(
+            out,
+            block(&[
+                BLOCK_START,
+                ".doctrine/state/",
+                ".doctrine/memory/shipped/",
+                ".doctrine/agents/*",
+                ".doctrine/skills/*",
+                "/.claude/skills/a",
+                "/.pi/agents/b.md",
+                BLOCK_END,
+            ])
+        );
+        let inline = out[1..out.len() - 1].iter().any(|l| l.contains('#'));
+        assert!(!inline, "only the markers carry `#`");
+    }
+
+    /// The scan of a project: (a) a doctrine link, (b) an npx-style link
+    /// elsewhere, (c) a real entry.
+    fn scanned() -> (Vec<PathBuf>, Vec<LinkSeen>) {
+        let sym = |dir: &str, name: &str, value: &str| LinkSeen::Symlink {
+            dir: p(dir),
+            name: name.into(),
+            value: value.into(),
+        };
+        let seen = vec![
+            sym(".claude/skills", "a", "../../.doctrine/skills/a"),
+            sym(".agents/skills", "x", "../../../elsewhere/x"),
+            LinkSeen::Real {
+                dir: p(".claude/skills"),
+                name: "mine".into(),
+            },
+        ];
+        (ROOTS.iter().map(|r| p(r)).collect(), seen)
+    }
+
+    fn rendered_links(roots: &[PathBuf], seen: &[LinkSeen]) -> Vec<String> {
+        let links = doctrine_links(roots, seen)
+            .iter()
+            .map(|l| format!("/{}", l.strip_prefix(BASE).unwrap().display()))
+            .collect::<Vec<_>>();
+        render_block(&[], &[], &links)
+    }
+
+    #[test]
+    fn links_after_applies_the_plan_to_the_links_on_disk() {
+        let actions = [
+            Action::Link {
+                dest: p(".claude/skills/new"),
+                target: "t".into(),
+            },
+            Action::Relink {
+                dest: p(".claude/skills/a"),
+                target: "t".into(),
+            },
+            Action::Unlink(p(".claude/skills/gone")),
+            Action::PruneCanon(p(".doctrine/skills/gone")),
+        ];
+        let on_disk = vec![p(".claude/skills/a"), p(".claude/skills/gone")];
+        assert_eq!(
+            links_after(on_disk, &actions),
+            vec![p(".claude/skills/a"), p(".claude/skills/new")]
+        );
+    }
+
+    #[test]
+    fn doctrine_links_returns_only_symlinks_into_a_root() {
+        let (roots, seen) = scanned();
+        assert_eq!(doctrine_links(&roots, &seen), vec![p(".claude/skills/a")]);
+    }
+
+    #[test]
+    fn render_block_omits_npx_written_skill_copies() {
+        let (roots, seen) = scanned();
+        let out = rendered_links(&roots, &seen);
+        assert!(out.contains(&"/.claude/skills/a".to_owned()));
+        assert!(!out.iter().any(|l| l.contains(".agents/skills")), "{out:?}");
+    }
+
+    #[test]
+    fn render_block_omits_user_owned_paths() {
+        let (roots, seen) = scanned();
+        let out = rendered_links(&roots, &seen);
+        assert!(!out.iter().any(|l| l.contains("mine")), "{out:?}");
+        assert_eq!(out.len(), 3, "markers + the one doctrine link: {out:?}");
     }
 }

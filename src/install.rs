@@ -14,7 +14,7 @@ use rust_embed::RustEmbed;
 use serde::Deserialize;
 
 use crate::install_ownership::{
-    Action, Desired, LinkSeen, Member, MemberKind, Notice, Scope, Snapshot,
+    Action, Desired, LinkSeen, Member, MemberKind, Notice, Scope, Snapshot, SpliceRefusal,
 };
 use crate::memory::MemoryType;
 
@@ -169,7 +169,6 @@ enum Step {
     CreateDir(PathBuf),
     Install { source: String, dest: PathBuf },
     Skip { source: String, dest: PathBuf },
-    Gitignore { entry: String, dest: PathBuf },
 }
 
 /// Everything needed to run the install.
@@ -216,7 +215,10 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     // ── Stage 1: base install ──
     if args.dry_run {
         print_forward_summary(&project_root, args, &manifest.harness)?;
-        print_ownership_plan(&project_root, args, &manifest)?;
+        let planned = print_ownership_plan(&project_root, args, &manifest)?;
+        if !args.global {
+            write_gitignore_block(&project_root, &manifest, &planned, true)?;
+        }
         return Ok(());
     }
 
@@ -232,6 +234,10 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     // ── Stage 2: forward steps ──
     let exec = crate::boot::resolve_exec()?;
     run_forward_steps(&project_root, &exec, args, &manifest)?;
+    // Last: the block reflects what is now on disk, whatever the steps did.
+    if !args.global {
+        write_gitignore_block(&project_root, &manifest, &[], false)?;
+    }
     Ok(())
 }
 
@@ -486,15 +492,16 @@ fn with_wanted<R>(
     f(&cx, &wanted)
 }
 
-/// `--dry-run`: survey the disk and print the ownership plan. Mutates nothing.
+/// `--dry-run`: survey the disk and print the ownership plan, returning its
+/// actions. Mutates nothing.
 fn print_ownership_plan(
     root: &Path,
     args: &InstallArgs<'_>,
     manifest: &Manifest,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<Action>> {
     let agents = detect_agents(args.agents, root, &manifest.harness);
     if agents.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
     let catalog = discover()?;
     let selected = select_for_install(&catalog, args.skills, args.domains)?;
@@ -513,7 +520,7 @@ fn print_ownership_plan(
             for a in &actions {
                 writeln!(out, "{}", action_line(a, &scanned, wanted, true))?;
             }
-            Ok(())
+            Ok(actions)
         },
     )
 }
@@ -1233,7 +1240,7 @@ fn build_plan(manifest: &Manifest, project_root: &Path) -> Plan {
     // 2. Base backings — the MINIMAL projection (SL-227 FR-007/FR-008, D8). Only
     //    the manifest-declared `[base].backings` land eagerly; every other embedded
     //    asset is published (reachable on demand), never eagerly copied. `.gitignore`
-    //    is served by leg 3, so it is skipped here; the two content backings map to
+    //    is the managed block (`write_gitignore_block`), so it is skipped here; the two content backings map to
     //    `install/<key>` embed sources and land write-if-absent under the target.
     //    `embedded_filenames()` stays defined (the crux reachability gate consumes
     //    it) but no longer drives projection.
@@ -1253,18 +1260,6 @@ fn build_plan(manifest: &Manifest, project_root: &Path) -> Plan {
             steps.push(Step::Skip { source, dest });
         } else {
             steps.push(Step::Install { source, dest });
-        }
-    }
-
-    // 3. Gitignore entries.
-    let gitignore_path = project_root.join(".gitignore");
-    let existing = read_gitignore_lines(&gitignore_path);
-    for entry in &manifest.gitignore.entries {
-        if !existing.contains(entry.as_str()) {
-            steps.push(Step::Gitignore {
-                entry: entry.clone(),
-                dest: gitignore_path.clone(),
-            });
         }
     }
 
@@ -1295,30 +1290,76 @@ fn embedded_filenames() -> Vec<String> {
     names
 }
 
-fn read_gitignore_lines(path: &Path) -> BTreeSet<String> {
-    let Ok(content) = fs::read_to_string(path) else {
-        return BTreeSet::new();
-    };
-    content.lines().map(str::to_string).collect()
+/// Operator disclosure: the block cannot list what it cannot attribute.
+const NPX_SKILLS_NOTE: &str = "note: skill copies written by `npx skills` (.agents/skills/<id>) are not listed in the block; doctrine cannot tell them from yours.";
+
+/// The managed block (design `sec-gitignore`): the manifest's runtime entries,
+/// each framework root's contents, and one anchored line per doctrine link
+/// under `base` — the links on disk now, adjusted by `planned` actions not yet
+/// executed (a dry-run's prediction; empty for a live run).
+fn gitignore_block(
+    base: &Path,
+    manifest: &Manifest,
+    planned: &[Action],
+) -> anyhow::Result<Vec<String>> {
+    let link_dirs = registered_link_dirs(base, &manifest.harness);
+    let scanned = scan(base, &[], &link_dirs, &Desired::default())?;
+    let roots: Vec<PathBuf> = manifest
+        .framework
+        .roots
+        .iter()
+        .map(|r| base.join(r))
+        .collect();
+    let on_disk = crate::install_ownership::doctrine_links(&roots, &scanned.snapshot.links);
+    let links: Vec<String> = crate::install_ownership::links_after(on_disk, planned)
+        .iter()
+        .filter_map(|site| site.strip_prefix(base).ok())
+        .map(|rel| format!("/{}", rel.display()))
+        .collect();
+    Ok(crate::install_ownership::render_block(
+        &manifest.gitignore.entries,
+        &manifest.framework.roots,
+        &links,
+    ))
 }
 
-/// Append `entry` to the project `.gitignore` when absent (idempotent, additive;
-/// creates the file if missing). Shared seam so each command can self-enforce its
-/// own derived-tree ignore invariant rather than depend on a prior `doctrine
-/// install` (SL-010 F4). Framework convergence does NOT call this — `.doctrine/skills/*`
-/// is already listed in `install/manifest.toml`, which lands the entry.
-pub(crate) fn ensure_gitignored(root: &Path, entry: &str) -> anyhow::Result<()> {
+/// Splice the managed block into the project `.gitignore` (or, under
+/// `dry_run`, print it and write nothing). A malformed file is left untouched
+/// and reported — the install still succeeds (D2).
+fn write_gitignore_block(
+    root: &Path,
+    manifest: &Manifest,
+    planned: &[Action],
+    dry_run: bool,
+) -> anyhow::Result<()> {
+    let block = gitignore_block(root, manifest, planned)?;
     let path = root.join(".gitignore");
-    if read_gitignore_lines(&path).contains(entry) {
-        return Ok(());
+    let existing = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e).with_context(|| format!("Failed to read {}", path.display())),
+    };
+    let mut out = io::stdout();
+    match crate::install_ownership::splice_block(&existing, &block) {
+        Ok(_) if dry_run => {
+            writeln!(out, "\nGitignore block (not written under --dry-run):")?;
+            for line in &block {
+                writeln!(out, "  {line}")?;
+            }
+        }
+        Ok(text) => {
+            crate::fsutil::write_atomic(&path, text.as_bytes())?;
+            let rest = format!(".gitignore (managed block, {} lines)", block.len());
+            writeln!(out, "\n{}", row("gitignore", &rest))?;
+        }
+        Err(SpliceRefusal::Malformed { starts, ends }) => {
+            let rest = format!(
+                ".gitignore left untouched: found {starts} start / {ends} end managed-block markers (expected one of each, or none)"
+            );
+            writeln!(out, "\n{}", row("gitignore", &rest))?;
+        }
     }
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .with_context(|| format!("Failed to open {} for appending", path.display()))?;
-    writeln!(file, "{entry}")
-        .with_context(|| format!("Failed to append gitignore entry to {}", path.display()))?;
+    writeln!(out, "{NPX_SKILLS_NOTE}")?;
     Ok(())
 }
 
@@ -1353,9 +1394,6 @@ fn print_plan(plan: &Plan) -> io::Result<()> {
                     source,
                     dest.display()
                 )?;
-            }
-            Step::Gitignore { entry, dest } => {
-                writeln!(stdout, "  gitignore    + \"{entry}\"  ({})", dest.display())?;
             }
         }
     }
@@ -1439,9 +1477,6 @@ fn execute_plan(plan: &Plan) -> anyhow::Result<()> {
             }
             Step::Skip { .. } => {
                 // nothing to do
-            }
-            Step::Gitignore { entry, .. } => {
-                ensure_gitignored(&plan.project_root, entry)?;
             }
         }
     }
@@ -4589,53 +4624,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn plan_includes_gitignore_entries() {
-        let dir = tempfile::tempdir().unwrap();
-        let manifest = Manifest {
-            gitignore: GitignoreSection {
-                entries: vec!["ignored-dir/".to_string()],
-            },
-            ..Manifest::default_for_tests()
-        };
-        let plan = build_plan(&manifest, dir.path());
-
-        let gi: Vec<_> = plan
-            .steps
-            .iter()
-            .filter_map(|s| match s {
-                Step::Gitignore { entry, .. } => Some(entry.clone()),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(gi, vec!["ignored-dir/".to_string()]);
-    }
-
-    #[test]
-    fn gitignore_skips_duplicate_entries() {
-        let dir = tempfile::tempdir().unwrap();
-        let gi = dir.path().join(".gitignore");
-        fs::write(&gi, "skip-me\n").unwrap();
-
-        let manifest = Manifest {
-            gitignore: GitignoreSection {
-                entries: vec!["skip-me".to_string(), "new-one".to_string()],
-            },
-            ..Manifest::default_for_tests()
-        };
-        let plan = build_plan(&manifest, dir.path());
-
-        let entries: Vec<_> = plan
-            .steps
-            .iter()
-            .filter_map(|s| match s {
-                Step::Gitignore { entry, .. } => Some(entry.as_str()),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(entries, vec!["new-one"]);
-    }
-
     // ---------------------------------------------------------------
     // embedded manifest
     // ---------------------------------------------------------------
@@ -4741,18 +4729,15 @@ mod tests {
             crate::fsutil::PUBLICATION_TEMP_PREFIX
         );
 
-        // Surface 2: it actually reaches a client's `.gitignore`.
-        let dir = tempfile::tempdir().unwrap();
-        let plan = build_plan(&manifest, dir.path());
-        for step in &plan.steps {
-            if let Step::Gitignore { entry, .. } = step {
-                ensure_gitignored(dir.path(), entry).unwrap();
-            }
-        }
-        let projected = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+        // Surface 2: it actually reaches a client's `.gitignore` block.
+        let block = crate::install_ownership::render_block(
+            &manifest.gitignore.entries,
+            &manifest.framework.roots,
+            &[],
+        );
         assert!(
-            projected.lines().any(|l| l == entry),
-            "the reserved-temp rule must land verbatim in a client .gitignore; got:\n{projected}"
+            block.iter().any(|l| l == entry),
+            "the reserved-temp rule must land verbatim in the managed block; got:\n{block:#?}"
         );
     }
 
@@ -4903,48 +4888,25 @@ mod tests {
             !manifest.dirs.create.iter().any(|d| d == ".doctrine/skills"),
             "skills dir is created by `skills install`, not `doctrine install`"
         );
+        // The ignore comes from the `[framework] roots` glob in the managed
+        // block, not a literal manifest entry (SL-281 PHASE-05).
         assert!(
-            manifest
+            !manifest
                 .gitignore
                 .entries
                 .iter()
                 .any(|e| e == ".doctrine/skills/*"),
-            "manifest must gitignore the derived skills tree"
+            "the skills glob is derived from the framework roots, not listed"
         );
-    }
-
-    #[test]
-    fn ensure_gitignored_appends_once_and_is_idempotent() {
-        let dir = tempfile::tempdir().unwrap();
-        let gi = dir.path().join(".gitignore");
-
-        // Creates the file when missing.
-        ensure_gitignored(dir.path(), ".doctrine/skills/*").unwrap();
-        assert!(gi.is_file());
-        let after_first = fs::read_to_string(&gi).unwrap();
-        assert!(after_first.contains(".doctrine/skills/*"));
-
-        // Second call is a no-op — no duplicate line.
-        ensure_gitignored(dir.path(), ".doctrine/skills/*").unwrap();
-        let after_second = fs::read_to_string(&gi).unwrap();
-        assert_eq!(after_first, after_second);
-        assert_eq!(
-            after_second.matches(".doctrine/skills/*").count(),
-            1,
-            "entry must appear exactly once"
+        let block = crate::install_ownership::render_block(
+            &manifest.gitignore.entries,
+            &manifest.framework.roots,
+            &[],
         );
-    }
-
-    #[test]
-    fn ensure_gitignored_preserves_existing_entries() {
-        let dir = tempfile::tempdir().unwrap();
-        let gi = dir.path().join(".gitignore");
-        fs::write(&gi, "/pre-existing\n").unwrap();
-
-        ensure_gitignored(dir.path(), ".doctrine/skills/*").unwrap();
-        let content = fs::read_to_string(&gi).unwrap();
-        assert!(content.contains("/pre-existing"));
-        assert!(content.contains(".doctrine/skills/*"));
+        assert!(
+            block.iter().any(|l| l == ".doctrine/skills/*"),
+            "the managed block must gitignore the derived skills tree; got:\n{block:#?}"
+        );
     }
 
     // ---------------------------------------------------------------
@@ -4971,23 +4933,6 @@ mod tests {
         assert!(orientation.is_file());
         let content = fs::read_to_string(&orientation).unwrap();
         assert!(content.contains("Project Orientation"));
-    }
-
-    #[test]
-    fn execute_appends_gitignore() {
-        let dir = tempfile::tempdir().unwrap();
-        let manifest = Manifest {
-            gitignore: GitignoreSection {
-                entries: vec!["/doctest-entry".to_string()],
-            },
-            target: ".doctrine".to_string(),
-            ..Manifest::default_for_tests()
-        };
-        let plan = build_plan(&manifest, dir.path());
-        execute_plan(&plan).unwrap();
-
-        let gi_content = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
-        assert!(gi_content.contains("/doctest-entry"));
     }
 
     // SL-018 OQ-C / EX-3: install hints at `memory sync` but does NOT run it.
@@ -5241,7 +5186,9 @@ mod tests {
             ],
             "the target holds exactly the two content base backings"
         );
-        // The third base member, .gitignore, lands at the project root (leg 3).
+        // The third base member, .gitignore, lands at the project root as the
+        // managed block (written after the forward steps, not by the plan).
+        write_gitignore_block(dir.path(), &manifest, &[], false).unwrap();
         assert!(dir.path().join(".gitignore").is_file());
         // The seed gate: no memory entity was created on a base install.
         assert!(
@@ -5252,7 +5199,7 @@ mod tests {
 
     /// VT-3 — `build_plan` leg 2 is driven by the manifest `[base].backings` set: the
     /// two content backings land as Install steps under the target, and `.gitignore`
-    /// is NOT projected by leg 2 (leg 3 owns it).
+    /// is NOT projected by leg 2 (the managed block owns it).
     #[test]
     fn build_plan_projects_the_manifest_base_backings() {
         let dir = tempfile::tempdir().unwrap();
@@ -5280,10 +5227,10 @@ mod tests {
             .collect();
         assert!(installs.contains("doctrine.toml"));
         assert!(installs.contains("project-orientation.md"));
-        // .gitignore is served by leg 3 — never an Install into the target.
+        // .gitignore is the managed block — never an Install into the target.
         assert!(
             !installs.contains(".gitignore"),
-            "leg 2 must not project .gitignore; leg 3 owns it"
+            "leg 2 must not project .gitignore; the managed block owns it"
         );
     }
 

@@ -349,3 +349,144 @@ fn pi_without_npx_still_writes_defs() {
     );
     assert!(link.exists(), "the pi def link resolves");
 }
+
+// ── PHASE-05: the managed `.gitignore` block ──
+
+const BLOCK_START_PREFIX: &str = "# >>> doctrine managed";
+const BLOCK_END_PREFIX: &str = "# <<< doctrine managed";
+
+impl Project {
+    fn gitignore(&self) -> String {
+        fs::read_to_string(self.path(".gitignore")).expect("read .gitignore")
+    }
+}
+
+fn marker_count(text: &str, prefix: &str) -> usize {
+    text.lines().filter(|l| l.starts_with(prefix)).count()
+}
+
+fn has_line(text: &str, line: &str) -> bool {
+    text.lines().any(|l| l == line)
+}
+
+#[test]
+fn gitignore_block_is_stable_across_installs() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let p = Project::new();
+    p.install();
+    let first = p.gitignore();
+    p.install();
+    let second = p.gitignore();
+
+    assert_eq!(
+        first, second,
+        "a reinstall rewrites the block byte-for-byte"
+    );
+    assert_eq!(marker_count(&second, BLOCK_START_PREFIX), 1);
+    assert_eq!(marker_count(&second, BLOCK_END_PREFIX), 1);
+    assert!(has_line(&second, "/.claude/skills/code-review"), "{second}");
+    assert!(has_line(&second, ".doctrine/skills/*"), "{second}");
+    assert!(has_line(&second, ".doctrine/memory/shipped/"), "{second}");
+}
+
+#[test]
+fn user_negation_after_block_survives() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let p = Project::new();
+    p.install();
+    let block_only = p.gitignore();
+    let edited = format!("# mine\ntarget/\n{block_only}!/.claude/skills/code-review\n");
+    p.plant_file(".gitignore", &edited);
+
+    p.install();
+
+    assert_eq!(p.gitignore(), edited, "block unchanged, user lines intact");
+    let text = p.gitignore();
+    let block_end = text.find(BLOCK_END_PREFIX).expect("end marker");
+    let negation = text.find("!/.claude/skills/code-review").expect("negation");
+    assert!(negation > block_end, "the negation still follows the block");
+}
+
+#[test]
+fn pi_without_npx_block_reflects_landed_links() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let p = Project::new();
+    let empty_path = tempfile::tempdir().expect("tempdir");
+    p.run(
+        &["--agent", "pi", "--yes"],
+        &[("PATH", empty_path.path().as_os_str())],
+    );
+
+    let text = p.gitignore();
+    assert!(has_line(&text, "/.pi/agents/dispatch-worker.md"), "{text}");
+    assert!(!text.contains(".agents/skills"), "no npx copies: {text}");
+    for line in text.lines().filter(|l| l.starts_with('/')) {
+        let rel = line.trim_start_matches('/');
+        assert!(
+            fs::symlink_metadata(p.path(rel)).is_ok(),
+            "block names `{rel}`, which is not on disk"
+        );
+    }
+}
+
+#[test]
+fn malformed_block_is_left_untouched_and_reported() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let p = Project::new();
+    let body = format!("keep/\n{BLOCK_START_PREFIX} (hand-edited)\nstale\n");
+    let path = p.plant_file(".gitignore", &body);
+
+    let out = p.install();
+
+    assert_eq!(fs::read_to_string(path).unwrap(), body, "byte-unchanged");
+    assert!(
+        out.contains("found 1 start / 0 end managed-block markers"),
+        "{out}"
+    );
+}
+
+#[test]
+fn dry_run_prints_the_block_and_writes_no_gitignore() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let p = Project::new();
+    assert!(!p.path(".gitignore").exists(), "control: none yet");
+    let mut args = BASE_ARGS.to_vec();
+    args.push("--dry-run");
+
+    let out = p.run(&args, &[]);
+
+    assert!(
+        out.contains("Gitignore block (not written under --dry-run):"),
+        "{out}"
+    );
+    // The printed block is indented under its header.
+    let printed: String = out.lines().map(|l| format!("{}\n", l.trim())).collect();
+    assert!(has_line(&printed, "/.claude/skills/code-review"), "{out}");
+    assert!(has_line(&printed, ".doctrine/skills/*"), "{out}");
+    assert!(!p.path(".gitignore").exists(), "dry-run wrote nothing");
+}
+
+#[test]
+fn global_install_writes_no_project_gitignore() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let p = Project::new();
+    let home = tempfile::tempdir().expect("tempdir");
+    p.install_with(&["--global"], &[("HOME", home.path().as_os_str())]);
+    assert!(
+        home.path().join(CLAUDE_WORKER).is_file(),
+        "control: the global leg ran"
+    );
+    assert!(!p.path(".gitignore").exists());
+}

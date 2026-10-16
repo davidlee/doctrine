@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a143c9-43be-72f3-b5da-344a21198bc1"
+recorded_at = "2026-10-16T08:17:05.983010311Z"
+kind = "friction"
+summary = "capsule-phase-planner; SL-281 PHASE-05: doctrine memory search rejects multi-word queries"
+detail = "memory search 'gitignore splice' failed with unexpected argument 'splice'; planner ran separate single-word searches. entity search accepts multi-word; inconsistent CLI shape."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
