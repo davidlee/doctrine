@@ -91,10 +91,14 @@ parallel model (DEC-379):
 | currency | `install_state::classify` (downgrade gate) |
 
 `boot::wire(root, exec, harnesses, dry_run) -> Result<()>` (`src/boot.rs:3102`)
-prints and returns nothing, so it is split into `plan_wire` (pure: the per-file
-edits it would make) and `apply_wire` (writes, reports); `wire` becomes their
-composition, so `boot install` is unchanged and its suites are the
-behaviour-preservation proof.
+prints and returns nothing, and it catches each harness's refresh error,
+prints `refresh failed` and continues (`src/boot.rs:3307-3310`). It is split
+into `plan_wire` (pure: the per-file edits it would make) and `apply_wire`
+(writes, prints the same lines, continues past a failed harness, and returns
+per-harness results). `wire` becomes their composition and still returns
+`Ok(())` after printing, so `boot install` is unchanged and its suites are the
+behaviour-preservation proof; install maps any failed harness to a `Failed`
+boot-wiring leg.
 
 Executing the plan returns a `LegOutcome` per leg (`Done(Vec<Touched>)`,
 `Refused(reason)` or `Failed(error)`), with
@@ -175,10 +179,13 @@ Next: git add -- .gitignore .doctrine/doctrine.toml CLAUDE.md AGENTS.md .claude/
 ### Scope variants
 
 `--global` and `--only-memory` keep today's leg set; this slice does not
-re-scope them. Today `--global` still runs the base plan (including the project
-`doctrine.toml`) and redirects convergence, and `--only-memory` is parsed but
-unwired (`src/install.rs:189-201`). Both: no stamps, no currency gate, no
-commit hint; the overview renders whatever legs the plan holds.
+re-scope them. Today both run the full project plan: `--global` still runs the
+base plan (including the project `doctrine.toml`) and only redirects
+convergence to the user scope, and `--only-memory` is parsed but unwired
+(`src/install.rs:189-201`; ISS-523). Since the project is installed either way,
+both get the same stamps, currency gate and commit hint as a plain install.
+User-scope writes under `--global` are outside the project and never enter the
+commit hint.
 
 <!-- doctrine:section sec-currency -->
 ## Version currency
@@ -209,7 +216,13 @@ Marker lookup (DEC-379 as amended, RV-421 F-1) is one command-tier helper,
 2. otherwise, when `root` is a linked git worktree (`git rev-parse
    --git-common-dir` differs from `--git-dir`), the main worktree's marker
    (`MarkerSource::Main(path)`); linked worktrees and dispatch forks never
-   receive `.doctrine/state/` (fork provisioning withholds the state tier);
+   receive `.doctrine/state/` (fork provisioning withholds the state tier).
+   The main root is the common dir's parent, accepted only if that directory's
+   `.git` is the common dir itself or a gitfile pointing to it. Otherwise (e.g.
+   `git init --separate-git-dir`, where the common dir sits outside any
+   checkout) the main root cannot be located: `MarkerSource::Unlocated`, and
+   the `CheckoutNotInstalled` line says so (`… (main worktree not located)`)
+   rather than silently reporting this checkout alone (STD-003);
 3. otherwise `Absent`.
 
 Outside git, or when git is unavailable, only step 1 applies (POL-002). When
@@ -287,9 +300,11 @@ of the two):
   you are running B. Proceeding will downgrade generated files.` and `Proceed?`
   defaults to N as usual;
 - `-y`: refuse with that line plus `pass --allow-downgrade to proceed`;
-- `--allow-downgrade`: proceed; the local marker records B, the tracked stamp is
-  left at R (one stale binary does not lower the team's recorded version), so
-  `RepoNewer` keeps reporting until the binary is upgraded.
+- `--allow-downgrade`: proceed; the local marker records B. The tracked stamp
+  is preserved only when it is newer than B (one stale binary does not lower
+  the team's recorded version, so `RepoNewer` keeps reporting until the binary
+  is upgraded); when it is absent or older (only the local marker was newer),
+  it is written as B like any successful install.
 
 <!-- doctrine:section sec-guard -->
 ## Boot guard
@@ -452,8 +467,8 @@ E2e (built binary, `tests/common`):
   unreadable → expected line from `prompt resolve` (after the snapshot; snapshot
   bytes unchanged) and `boot`; structured finding in `status --json`.
 - downgrade (stamp newer, and marker newer with stamp absent): interactive
-  warns; `-y` refuses; `--allow-downgrade` proceeds, rewrites the local marker
-  and leaves the tracked stamp.
+  warns; `-y` refuses; `--allow-downgrade` proceeds and rewrites the local
+  marker; the tracked stamp follows the rule above.
 - `prompt customise role/worker` writes starter + sidecar; sealed slot refused;
   existing file left alone.
 - legacy starters: identical copies removed and reported; edited copy kept;
@@ -462,7 +477,13 @@ E2e (built binary, `tests/common`):
   worker contract.
 - linked worktree of an installed checkout: no checkout advisory; of an
   uninstalled one: the advisory names the main root; a worktree with its own
-  marker uses it.
+  marker uses it; `--separate-git-dir` layout: `main worktree not located`.
+- boot wiring with one harness's refresh failing (caught inside `apply_wire`):
+  `boot install` output unchanged; install reports the leg failed and writes
+  no stamps.
+- `--allow-downgrade` with only the local marker newer: tracked stamp absent →
+  written as B; tracked older → rewritten to B; tracked newer → kept.
+- `--global` and `--only-memory`: stamps and commit hint as a plain install.
 - install → `prompt customise role/worker` → install: both files remain.
 - legacy removal does not run once `installed-version` exists.
 

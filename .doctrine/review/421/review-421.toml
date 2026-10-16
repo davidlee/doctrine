@@ -19,12 +19,19 @@ note = """
 Adversarial design pass over SL-282 scope, the managed design, DEC-378 through DEC-385, research, PRD-006, SPEC-009/SPEC-011/SPEC-023, ADR-001/ADR-019, POL-002/POL-003, STD-001/STD-003, and the current installer, boot, status, prompt, config, worktree, manifest, and hymn loader seams. Checked existing RV-421 F-1 through F-8 to avoid duplicate raises. Raised F-9 through F-16, including an explicit major-severity strengthening of F-6; all claims are static source checks, not runtime execution of the proposed design.
 """
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Raiser pass over all 16 responder dispositions against SL-282's revised design at 4e2387bc3, accepted DEC-378 through DEC-385 (including the user's DEC-379 and DEC-384 amendments), PRD-006 and SPEC-009/011/023, and relevant install/boot/prompt source. Verified 13 original findings, including the user-directed F-9 route to ISS-522; contested F-11, F-13 and F-14. Probed revised InstallPlan/LegOutcome, path-limited hint, currency and downgrade rules, linked-worktree lookup, legacy hymn cleanup and verification rows; raised F-17 through F-19. No implementation or design files were changed.
+"""
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-282"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Fresh worktrees and dispatch forks report CheckoutNotInstalled on every session"
 detail = """
@@ -47,9 +54,13 @@ response = """
 User ruling 2026-10-17 ("1a"). DEC-379 amended: a linked worktree with no marker of its own reads the main worktree's marker via git's common dir; outside git only the checkout's own marker applies (POL-002). New command-tier helper read_install_marker -> (StampRead, MarkerSource); advisory takes the source and names the main root when it came from there. E2e rows for linked worktrees added.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Tracked Absent classified as RepoOlder, but RepoOlder carries a Version"
 detail = """
@@ -72,9 +83,13 @@ response = """
 Agreed: RepoOlder{repo} cannot represent an absent stamp. Added Currency::RepoUnstamped with its own line; dropped beside CheckoutNotInstalled (installing writes the stamp, the hint carries it). DEC-378's "missing reads as older" kept in substance. sec-currency classifier + advisory table; unit row added.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "No CheckoutNewer: the stale-PATH case the Context motivates is not detected"
 detail = """
@@ -97,9 +112,13 @@ response = """
 Agreed. Added CheckoutNewer{checkout} (local > binary) with advisory text naming PATH. Downgrade gate now fires on RepoNewer or CheckoutNewer (newer of the two quoted). Matrix and e2e rows extended (marker newer, stamp absent).
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Touched.tier (tracked vs ignored) has no defined source"
 detail = """
@@ -122,9 +141,13 @@ response = """
 Agreed the source was undefined. Dropped the tier field: hint paths are Touched paths not covered by the ignore contract install itself maintains (managed block entries + .doctrine/state/). No git query, keeping DEC-382's rejection of a git-status source; a path ignored by the user's own rules makes `git add` refuse visibly. Deleted paths are listed; `git add -- <deleted>` stages the deletion.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "boot::wire has no plan seam; InstallPlan composition is not just existing parts"
 detail = """
@@ -147,9 +170,13 @@ response = """
 Verified: boot::wire returns () and prints (src/boot.rs:3102). Design now splits it into plan_wire (pure) + apply_wire, wire = composition so boot install is unchanged and its suites are the preservation proof. InstallPlan table and boot.rs code-impact row updated.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Stamps must be written last and only on full success"
 detail = """
@@ -172,9 +199,13 @@ response = """
 Agreed, merged with F-14: stamps are the final step, written only when every leg's LegOutcome is Done; otherwise "install incomplete: <legs>; version not recorded" and both stamps stay as they were. E2e forced-failure row added.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "status --json carries currency as prose lines"
 detail = """
@@ -197,9 +228,13 @@ response = """
 Agreed. BootSection.currency is Vec<Currency>, serialised as structured findings (kind + versions/path); only the text view renders advisory().
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Allow-downgrade moves the team pin down"
 detail = "Under --allow-downgrade the tracked stamp is rewritten to the older B, so one developer with a stale binary lowers the repo's recorded version and teammates then see RepoOlder. Consider writing only the local marker on an allowed downgrade, or state the intent explicitly."
@@ -220,9 +255,13 @@ response = """
 Agreed. --allow-downgrade now writes only the local marker; the tracked stamp stays at R, so RepoNewer keeps reporting until the binary is upgraded. E2e row updated.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Install accepts roots that every currency advisory site rejects"
 detail = """
@@ -247,9 +286,13 @@ response = """
 Verified: install uses manifest [root_markers] (incl. pyproject.toml, justfile); prompt resolve / boot / status use root::default_markers(). Pre-existing divergence, and it already breaks the session hook in such projects regardless of SL-282. User ruling 2026-10-17: follow-up. Filed ISS-522; recorded as a residual in sec-risks.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Commit hint can commit unrelated staged work"
 detail = """
@@ -274,9 +317,13 @@ response = """
 Verified and agreed. Hint is now `git add -- <paths> && git commit -m "…" -- <paths>`, root-relative, shell-quoted, prefixed `cd <root> &&` when cwd differs. E2e rows: unrelated staged file excluded; nested-directory run.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "contested"
 severity = "major"
 title = "Delegated skills changes cannot enter the exact commit hint"
 detail = """
@@ -301,9 +348,16 @@ response = """
 Verified (Runner::run returns only success; NPX_SKILLS_NOTE src/install.rs:1334). Narrowed the contract to doctrine's own writes; when the delegated leg ran, the hint adds "also review .agents/skills/ (written by npx skills)". DEC-382's "exactly" now reads as exactly doctrine's writes — noted for the REV.
 """
 
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+The response narrows the promise to Doctrine-owned writes, but accepted DEC-382 still requires the hint to name exactly the tracked paths this install run created or changed. Revised design.md:165-169 still omits trackable `.agents/skills/` copies written by its delegated npx leg; a prose `also review` note is not a path-limited `git add`/`git commit` command for them. The proposed REV is only future reconciliation, not an amendment to DEC-382. Resolve the contract conflict with a user ruling and matching governance change, or obtain bounded delegated path outcomes and test a trackable codex/pi fixture.
+"""
+
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Shared resolver drops the lone AGENTS symlink case"
 detail = """
@@ -328,6 +382,10 @@ response = """
 Verified (src/boot.rs:763-779, test at :4884). The design now moves the claude-detected && same-target predicate verbatim; lone symlinked pair stays codex; test runs through both install and boot install.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-13"
 status = "answered"
@@ -340,7 +398,7 @@ Fix: specify which InstallPlan legs each mode includes before rendering and exec
 """
 disposition = "design-wrong"
 response = """
-Verified: --global still runs build_plan; --only-memory is parsed but unwired (src/install.rs:189-201). The design's claims were false. Rather than re-scope those modes here, the design now states both keep today's leg set, write no stamps, get no currency gate or hint, and the overview renders whatever legs the plan holds.
+Contest accepted: suppressing stamps while running the full plan was incoherent. Today both modes run the full project plan (--global only redirects convergence to user scope; --only-memory is unwired). The design now treats both as a plain install for stamps, currency gate and commit hint; user-scope writes never enter the hint. Re-scoping the modes stays out of scope: --only-memory being dead is filed as ISS-523. E2e row added.
 """
 
 [[finding.turn]]
@@ -353,6 +411,21 @@ role = "responder"
 disposition = "design-wrong"
 response = """
 Verified: --global still runs build_plan; --only-memory is parsed but unwired (src/install.rs:189-201). The design's claims were false. Rather than re-scope those modes here, the design now states both keep today's leg set, write no stamps, get no currency gate or hint, and the overview renders whatever legs the plan holds.
+"""
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+Revised design.md:177-181 still composes and executes the full project install for both variants (`src/install.rs:207-240`), while suppressing stamps, currency gate and hint. Thus `--only-memory` still installs the base, boot and harness legs, and a successful `--global`/`--only-memory` run can change the project yet leave it classified as not installed and offer no commit hint. Correcting the description of today's bug does not address the original mode-specific plan gap. Define the actual leg subsets and their stamp/hint effects, or obtain an explicit user ruling that revises the install contracts.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Contest accepted: suppressing stamps while running the full plan was incoherent. Today both modes run the full project plan (--global only redirects convergence to user scope; --only-memory is unwired). The design now treats both as a plain install for stamps, currency gate and commit hint; user-scope writes never enter the hint. Re-scoping the modes stays out of scope: --only-memory being dead is filed as ISS-523. E2e row added.
 """
 
 [[finding]]
@@ -367,7 +440,7 @@ Fix: make the executor collect explicit per-leg outcomes (including soft refusal
 """
 disposition = "design-wrong"
 response = """
-Verified (src/install.rs:593-714 catches and returns Ok; gitignore writer :1366-1404). Integrated: per-leg LegOutcome {Done, Refused, Failed}; both writers return outcomes while keeping their progress/error lines (POL-003); stamps only when all Done; skipped/no-op legs are Done. E2e: forced boot-wire failure and malformed gitignore markers → no stamps.
+Contest accepted; verified src/boot.rs:3307-3310 catches per-harness refresh errors and returns Ok. apply_wire now returns per-harness results while printing the same lines and continuing; wire still returns Ok after printing (boot install unchanged); install maps any failed harness to a Failed boot-wiring leg, so no stamps. E2e row: one harness's refresh fails inside apply_wire.
 """
 
 [[finding.turn]]
@@ -382,9 +455,24 @@ response = """
 Verified (src/install.rs:593-714 catches and returns Ok; gitignore writer :1366-1404). Integrated: per-leg LegOutcome {Done, Refused, Failed}; both writers return outcomes while keeping their progress/error lines (POL-003); stamps only when all Done; skipped/no-op legs are Done. E2e: forced boot-wire failure and malformed gitignore markers → no stamps.
 """
 
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+The proposed outer LegOutcome is still blind to failures caught inside boot::wire: `src/boot.rs:3130` loops over harnesses, `src/boot.rs:3307-3310` prints `refresh failed` and returns Ok(()). Revised design.md:93-105 splits wire into plan_wire/apply_wire but says boot install behaviour is unchanged and specifies outcomes only for the install leg runner and gitignore writer. A harness refresh failure can therefore yield Done and permit both current stamps, the precise failure F-14 raised. Make apply_wire report per-harness failures into the install LegOutcome while preserving boot install's disclosure/continuation, and test an internally caught refresh failure.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Contest accepted; verified src/boot.rs:3307-3310 catches per-harness refresh errors and returns Ok. apply_wire now returns per-harness results while printing the same lines and continuing; wire still returns Ok after printing (boot install unchanged); install maps any failed harness to a Failed boot-wiring leg, so no stamps. E2e row: one harness's refresh fails inside apply_wire.
+"""
+
 [[finding]]
 id = "F-15"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Detail choice needs a tri-state prompt contract"
 detail = """
@@ -409,9 +497,13 @@ response = """
 Verified (prompt_confirm returns bool; callers boot.rs:2956, corpus.rs:447,491). New prompt_choice → Choice{Proceed,Abort,Details}; only install loops on Details; prompt_confirm becomes an adapter. Unit and e2e rows added.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-16"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Legacy cleanup deletes a newly customised starter on reinstall"
 detail = """
@@ -434,6 +526,79 @@ role = "responder"
 disposition = "design-wrong"
 response = """
 Verified: project_starters output is exactly what the removal rule matches. User ruling 2026-10-17 ("only delete unversioned"): DEC-384 amended so legacy removal runs only while the tracked installed-version is absent — a one-time migration for pre-stamp installs. Customise output can never be a candidate. sec-hymns, risks and e2e rows (install → customise → install keeps both files; no removal once stamped) updated.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding]]
+id = "F-17"
+status = "answered"
+severity = "major"
+title = "Local-only downgrade can finish without a tracked version"
+detail = """
+Expected: after a successful project install, DEC-378's tracked `installed-version` records the repo version; preserving a newer team pin applies only when the tracked stamp itself is newer than the binary.
+Observed: design.md:282-292 gates on `RepoNewer` OR `CheckoutNewer`, then says `--allow-downgrade` leaves the tracked stamp unchanged. Its verification row (design.md:454-456) explicitly includes local marker newer with tracked stamp absent. In that case a successful install rewrites the marker to B but leaves `installed-version` absent, so `RepoUnstamped` continues indefinitely and the commit hint cannot carry the team's stamp. The same bug leaves an older tracked R unchanged when only the local marker is newer.
+Specify the tracked write separately: preserve it only when tracked > B; otherwise write B after full success. Assert both absent and older tracked cases under a local-only downgrade.
+"""
+disposition = "design-wrong"
+response = """
+Agreed. Under --allow-downgrade the tracked stamp is preserved only when newer than B; absent or older is written as B like any successful install. E2e rows for absent / older / newer tracked under a local-only downgrade.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Agreed. Under --allow-downgrade the tracked stamp is preserved only when newer than B; absent or older is written as B like any successful install. E2e rows for absent / older / newer tracked under a local-only downgrade.
+"""
+
+[[finding]]
+id = "F-18"
+status = "open"
+severity = "major"
+title = "Pre-stamp customise is deleted by the one-time cleanup"
+detail = """
+Expected: the user-ruling gate is honored and an explicitly requested `prompt customise` starter remains user-owned through install (DEC-384; design.md:326-340).
+Observed: a pre-SL-282 installed repo has no tracked `installed-version`. With the new binary, `prompt customise role/worker` is available in that repo and writes the exact framework body plus default self-replaces sidecar (`project_starters`, src/install.rs:1149-1202). The next `doctrine install` still satisfies the user's absent-stamp cleanup gate (design.md:344-357), so `identical_starters` deletes both newly requested files. Design.md:410's claim that customise output is never a candidate is false. The added install → customise → install test starts after the first install has written a stamp, so it misses this sequence.
+Keep the absent-stamp gate, but distinguish explicit customisations created before migration or skip them by durable provenance. Add pre-stamp repo → customise → install coverage.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-19"
+status = "answered"
+severity = "minor"
+title = "Git common-dir does not locate every main worktree"
+detail = """
+Expected: the linked-worktree fallback finds the main worktree's `.doctrine/state/install.toml` as DEC-379's user-ruling requires (design.md:205-218).
+Observed: `git rev-parse --git-common-dir` names the shared Git metadata directory, not necessarily the main checkout root. I probed `git init --separate-git-dir <tmp>/metadata <tmp>/main`, then added a linked worktree: from the link, `--git-dir` was `<tmp>/metadata/worktrees/linked` and `--git-common-dir` was `<tmp>/metadata`, while the main marker would be under `<tmp>/main/.doctrine/state/`. Even `git worktree list --porcelain` identified `<tmp>/metadata` as the main worktree for this layout. Taking the common-dir parent would read the wrong marker and misclassify an installed linked checkout.
+Specify a reliable source for the main root in supported Git layouts, or explicitly detect this layout and disclose that fallback is unavailable. Add the separate-git-dir fixture to the linked-worktree e2e rows.
+"""
+disposition = "design-wrong"
+response = """
+Agreed (reproduced shape: separate-git-dir puts the common dir outside any checkout). Main root = common dir's parent, accepted only if its .git is the common dir or a gitfile to it; otherwise MarkerSource::Unlocated and CheckoutNotInstalled says "main worktree not located" (STD-003, no silent fallback). E2e row added.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Agreed (reproduced shape: separate-git-dir puts the common dir outside any checkout). Main root = common dir's parent, accepted only if its .git is the common dir or a gitfile to it; otherwise MarkerSource::Unlocated and CheckoutNotInstalled says "main worktree not located" (STD-003, no silent fallback). E2e row added.
 """
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
