@@ -39,6 +39,18 @@ means, and what it costs.
    disjunction-via-classification) is open and SPEC-023 governs the mechanism.
    ISS-491 is its concrete defect: an unknown trait value is silently ignored.
 
+5. **Key vocabulary — the caller has to guess.** (Raised by the user during
+   SL-282 design, 2026-10-17.) An agent follows the boot floor directive by
+   inferring what to pass to `prompt resolve --model` from its own model id, with
+   no way to know which terms are understood or carry content: `opus`,
+   `opus-5`, `opus-5.5`, `claude-opus-5-5`, `anthropic/claude-opus-5-5`, … — and
+   that is just the model facet. `prompt model-keys` lists labels, but nothing
+   maps a self-identified model id onto them (no aliasing or normalisation), and
+   ISS-491 makes a wrong guess indistinguishable from "nothing for you". The
+   remedy likely belongs with the selector algebra (RFC-013, SPEC-023): either
+   doctrine resolves a raw model id to keys itself, or the directive tells the
+   agent exactly what to pass.
+
 ## Ask
 
 A bounded review with findings filed as their own items, plus a decision on

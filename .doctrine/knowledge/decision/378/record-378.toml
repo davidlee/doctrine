@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 378
+slug = "install-version-stamp-tracked"
+title = "Install version stamp is tracked in doctrine.toml"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-16"
+updated = "2026-10-16"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-282 / IMP-514: doctrine must tell a checkout that is not installed, installed by an older binary, or installed by a newer binary than the one running. Framework-owned paths are gitignored since SL-281, so a fresh clone lacks them."
+choice = "Install writes `installed-version` into the `[install]` table of the tracked `.doctrine/doctrine.toml`, via a comment-preserving single-key edit (toml_edit). The stamp answers version skew only: compare it with the binary version using the `semver` crate (new direct dependency); a missing key reads as older (pre-stamp install). Whether *this checkout* is installed is a separate per-checkout signal from the presence of install-owned gitignored artefacts (SL-282 inq-1), not from the boot snapshot: tracked session hooks regenerate boot.md in an uninstalled clone. An unparseable stamp or doctrine.toml is disclosed as unreadable with a repair hint, never treated as absent (STD-003). Install run by a binary older than the stamp warns and asks interactively; under `-y` it refuses unless an explicit override flag (e.g. `--allow-downgrade`) is given."
+alternatives = ["Gitignored stamp under .doctrine/state/ — wipe is benign, but no cross-clone newer-binary detection and unusable as IMP-378 version key", "Separate tracked framework-written file (.doctrine/install.toml) — cleaner ownership, but a new tracked-but-framework-written category", "Hand-rolled x.y.z comparison — mishandles pre-release tags", "Under -y, warn and proceed on downgrade — silent rollback in CI"]
+rationale = "A tracked stamp warns a teammate whose binary is older than the repo install, and can later key IMP-378 migrations. doctrine.toml already carries [install] settings. Version skew (tracked stamp) and per-checkout installedness (gitignored artefacts) are different questions with different storage tiers; one signal each. Corrected 2026-10-16 the same session: the first draft used boot.md absence for not-installed, but `prompt resolve` (the session hook) regenerates boot.md whenever the binary runs (src/commands/prompt.rs:128-134), and .claude/settings.json is not in the gitignore contract (install/manifest.toml:74-95)."
+consequences = ["First programmatic write into user-edited doctrine.toml; must preserve comments and formatting", "Branches installing different versions conflict on one line", "Behaviour-changing slices need at least a patch release so the stamp distinguishes them (release discipline, user 2026-10-16)", "New install flag for downgrade override"]
+decided_by = "user"
+decided_on = "2026-10-16"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-282"

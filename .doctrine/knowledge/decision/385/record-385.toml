@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 385
+slug = "sl282-one-revision"
+title = "SL-282 lands one Revision as a slice output"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-16"
+updated = "2026-10-16"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-282 inq-8: changes touch SPEC-009, SPEC-011 REQ-185 and SPEC-023 REQ-322/329."
+choice = "One Revision, drafted at reconcile and landed as a slice output, covering SPEC-009 (interactive flow, tracked stamp, local marker, currency advisory, expose retirement; REQ-355 activation), SPEC-011 REQ-185 (guard content and in-place upgrade) and SPEC-023 REQ-322/329 (customise verb as self-replaces trigger)."
+alternatives = ["One Revision per spec: three review cycles for one coherent change"]
+rationale = "DEC-376 precedent from SL-281; one coherent change, one review."
+consequences = ["Reconcile drafts the REV from the locked design"]
+decided_by = "user"
+decided_on = "2026-10-17"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-282"

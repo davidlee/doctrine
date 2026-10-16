@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 380
+slug = "install-currency-advisory-sites"
+title = "Install currency advisory: comparisons and check sites"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-16"
+updated = "2026-10-16"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-282 inq-5, building on DEC-378 (tracked stamp) and the inq-1 decision (local marker, install_state classifier)."
+choice = "Comparisons: tracked stamp vs binary in both directions keeps the team on one version (stamp > binary: upgrade; stamp < binary: run install and commit to move the repo up, or use the repo version); local marker vs binary checks this checkout (absent: run install; older: re-run install); unreadable either way is disclosed (STD-003); otherwise silent. Advisory only — nothing refuses except the install downgrade gate (DEC-378). Sites: the unbanded `prompt resolve` (session hook) appends the line after the cascade, never inside the boot snapshot bytes, and only when not current; `doctrine boot` and `boot --check` print it; `status` carries it as a boot-section field plus the line. Not emitted on every command."
+alternatives = ["Hard version pin: commands refuse on mismatch — makes a host tool version load-bearing (POL-002)", "Only binary-older-than-stamp warnings — a teammate on a newer binary never learns the repo lags", "Check on every invocation — noise and per-command cost"]
+rationale = "The tracked stamp becomes an advisory team pin that moves forward when someone upgrades, installs and commits. The session hook reaches the agent every session; boot and status reach the operator. Keeping the line outside snapshot bytes preserves SPEC-011 determinism and the prefix cache."
+consequences = ["Whoever upgrades first sees the newer-than-repo line until they commit", "Session hook output gains a conditional trailing line"]
+decided_by = "user"
+decided_on = "2026-10-16"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-282"

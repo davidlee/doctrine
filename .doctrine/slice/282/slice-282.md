@@ -34,114 +34,108 @@ whether it's in place" should be shared.
 
 ## Scope & Objectives
 
-1. **Plain-English overview first.** Before anything is written, say what will
-   happen and why, in user terms, e.g.:
-   - a managed block in `.gitignore` keeps generated files out of git;
-   - `.doctrine/` is created; whatever in it isn't meant to be customised is
-     ignored;
-   - a short section at the top of `CLAUDE.md` / `AGENTS.md` makes the agent
-     load doctrine's context.
-   The raw step list stays available on request ("more detail").
-2. **One decision for required work.** A single proceed/abort covers every
-   required step (base plan, memory sync, boot wiring, framework convergence).
-   Separate prompts remain only for genuine choices: which harnesses, a skills
-   subset.
-3. **Hand over a commit.** On success, print the next step:
-   `git add <the paths install touched> && git commit -m "…"`, naming exactly
-   the tracked paths this run created or changed.
-4. **Drop the hymn-starter leg from install** (IMP-513). Install writes no
-   hymn files. Provide the replacement path: a `prompt` verb that materialises
-   the framework body of a named slot as a user-provenance starter on demand.
-   Resolves ISS-210 at the root.
-5. **Detect a missing or stale install and say how to fix it** (IMP-514).
-   - Install records the binary version that last ran it, in a derived,
-     gitignored stamp.
-   - Doctrine surfaces (boot, `status`, session hook — design picks which)
-     compare the stamp to their own version and print one line:
-     - absent → run `doctrine install`;
-     - stamp older than binary → re-run `doctrine install`;
-     - stamp newer than binary → this binary is older than the one that last
-       installed the checkout; upgrade it (or fix `PATH`). Re-installing would
-       downgrade framework-owned files, so the advice is *not* "re-run install".
-   - The no-binary state can only be served by a tracked surface: one short
-     line in the managed `CLAUDE.md` / `AGENTS.md` section pointing at the
-     install docs when `.doctrine/state/boot.md` is absent. One line at most;
-     it costs tokens every session.
-   - A library entry (install / recovery) carries the detail.
-6. **Shared model, separate renderings.** The install overview (2), the
-   commit hint (3) and the staleness line (5) draw on one description of what
-   install owns and whether it's present, rather than three ad-hoc lists.
-   Design decides its shape; ride the SL-281 harness registry and ownership
-   plan (`print_ownership_plan`) before adding anything new.
-7. `-y` and `--dry-run` behaviour unchanged except for 4 (no starters written)
-   and 5 (stamp written).
+Decisions settled in design: DEC-378 to DEC-385 (`doctrine show DEC-NNN`).
+
+1. **Plain-English overview, one prompt** (DEC-381). Install prints an
+   overview of what it will do and why, then `Proceed? [y/N/d]`; `d` shows the
+   existing step printers. That prompt covers every required step; the
+   memory-sync, boot-wire, hymn-starter and per-harness prompts go, with
+   `prompt_step` and the `a` answer. Real choices: harnesses via `--agent`
+   (asked once only when none is detected or given); skills via flags.
+2. **One harness resolver** (DEC-381). Boot wiring and convergence consume the
+   same set; boot detection's `AGENTS.md` rule moves into it.
+3. **Commit hint** (DEC-382). Print `git add <paths> && git commit -m "…"` for
+   exactly the tracked paths this run created, changed or removed.
+4. **Hymn starters on demand** (DEC-384). Remove the install starter leg and
+   `[hymns].expose`; add `doctrine prompt customise <slot>`; install removes
+   (and reports) legacy starters byte-identical to their framework body with
+   no sidecar or only the default self-replace. Resolves ISS-210, ISS-521.
+5. **Version currency** (DEC-378, DEC-379, DEC-380).
+   - Tracked `installed-version` in `doctrine.toml` `[install]`: the repo's
+     version, an advisory team pin.
+   - Gitignored `.doctrine/state/install.toml`: this checkout's install.
+   - Pure leaf `install_state` classifies and owns the advisory text; the
+     session hook (`prompt resolve`), `doctrine boot` / `boot --check` and
+     `status` print it when not current, never inside snapshot bytes.
+   - Install run by a binary older than the stamp warns and asks; under `-y`
+     it refuses without an override flag.
+6. **Not-installed clause** (DEC-383). One sentence added to the boot guard;
+   prior guard texts upgrade in place.
+7. **Shared install plan** (DEC-379). `InstallPlan` composes the existing
+   base plan, forward steps, ownership actions, gitignore change and stamp
+   writes; overview, detail view and commit hint render from it.
+8. **One Revision** (DEC-385) across SPEC-009, SPEC-011 REQ-185 and SPEC-023
+   REQ-322/329, landed at reconcile.
 
 ## Non-Goals
 
 - Automatic reinstall or reseat on staleness: this slice reports, it does not
   act.
+- A hard version pin: currency stays advisory (POL-002).
 - Refreshing stale reference docs in already-installed clients (IDE-030,
-  IMP-315, IMP-378).
-- Hymn model coverage and currency (IMP-489).
-- Removing already-projected starters from existing clients (needs the
-  migration primitive, IMP-378). Note the leftover; don't build it.
+  IMP-315, IMP-378, SL-242).
+- Hymn model coverage, currency and model-key vocabulary (IMP-489 incl.
+  concern 5, ISS-491).
 - Codex agent defs and the bake format (SL-283).
 
 ## Affected surface
 
-- `src/install.rs` — `run` (plan print, confirm, forward steps), `print_plan`,
-  `print_forward_summary`, `print_ownership_plan`, `prompt_step`, the
-  hymn-starter leg and `project_starters` / `embedded_expose_set`; stamp write.
-- `src/boot.rs` and the session hook / `status` path — stamp check and the
-  one-line recommendation.
-- `install/` — the managed `CLAUDE.md` / `AGENTS.md` section text; a library
-  entry for install recovery.
-- `install/manifest.toml` — `[hymns].expose`.
-- `src/hymns.rs`, `src/commands/prompt.rs` — on-demand starter verb.
-- `.doctrine/spec/tech/009` (SPEC-009, Install & distribution) — D8 and the
-  interactive-flow requirements; changes land via a Revision (REV).
-- `tests/` — install integration tests.
+- `src/install.rs` — `run`, `run_forward_steps`, the printers, `prompt_step`
+  (removed), the starter leg (removed), `project_starters` (reused by the verb),
+  `detect_agents` / `install_harnesses` (one resolver), stamp writes,
+  downgrade gate, legacy-starter removal, `InstallPlan`.
+- `src/install_state.rs` (new leaf) — `Currency`, `classify`, `advisory`;
+  registered in `.doctrine/adr/001/layering.toml`.
+- `src/boot.rs` — `BOOT_REF_GUARD`, `plan_boot_import` prior-text upgrade,
+  `boot` / `boot --check` advisory, harness detection rule.
+- `src/status.rs` — currency field and line.
+- `src/commands/prompt.rs` — `customise` verb; advisory after unbanded resolve.
+- `src/dtoml.rs`, `src/install_config.rs` — `installed-version` key;
+  comment-preserving write.
+- `install/manifest.toml` — `[hymns].expose` removed.
+- `Cargo.toml` — `semver` direct dependency.
+- `.doctrine/hymns/` (this repo) — identical starters removed by install.
+- SPEC-009, SPEC-011, SPEC-023 via one REV.
+- `tests/` — binary-driven install e2e.
 
 ## Risks, assumptions, open questions
 
-- **Bake ordering.** The starter leg runs early on purpose: the worker-def bake
-  reads the *disk* hymn corpus, and existing sidecars must be present before it
-  renders (the comment above the leg in `run`; ISS-206 double-emit). Removing
-  the leg must keep the bake idempotent. SL-283 also changes the bake; sequence
-  the two deliberately.
-- **Existing clients** keep their projected starters, including the suppressing
-  `role/worker` twin, until a migration exists. Decide whether install warns
-  about it.
-- **Which prompts are real choices?** Assumption: memory sync and boot wiring
-  are required; harness selection and skills subset are choices. Confirm in
-  design.
-- **Stamp location.** It must be derived and gitignored, yet survive long
-  enough to be compared; runtime state is `rm -rf`-able by contract, and a
-  wiped stamp reads as "not installed". Decide whether that false positive is
-  acceptable (it is at least correct advice: re-run install).
-- **Install by an older binary.** When install itself finds a newer stamp,
-  should it warn, require confirmation (and refuse under `-y`?), or proceed and
-  downgrade? Design decides; the downgrade must at least not be silent.
-- **Where the staleness check runs.** Every invocation costs latency; boot or
-  the session hook may be enough. Each surface that prints it costs tokens.
-- **Testing interactive output.** `prompt_step` already has stdin-driven tests;
-  the overview needs golden-style assertions on wording that won't be brittle.
+- **Bake ordering.** Legacy-starter removal runs where the starter leg ran,
+  before convergence bakes worker defs from the disk corpus. SL-283 also
+  changes the bake; land SL-282 first.
+- **First write into user-edited `doctrine.toml`.** Must preserve comments and
+  formatting exactly; test against this repo's heavily commented file.
+- **Install deletes tracked files** (identical starters). Identity check must be
+  exact; edited files and non-default sidecars are never touched.
+- **Rollout noise.** Whoever upgrades first sees the newer-than-repo line until
+  they commit the stamp.
+- **Same-version builds** are indistinguishable; behaviour-changing slices get
+  at least a patch release (release discipline).
+- **Message tests.** `wire()` writes stdout directly; assert messages in
+  binary-driven e2e tests.
 
 ## Verification / closure intent
 
-- Interactive install on a fresh repo: overview, one proceed prompt, harness
-  choice, commit hint; no hymn files written.
-- `-y` install produces the same tree minus `.doctrine/hymns/` starters.
+- Fresh repo, interactive: overview, one `Proceed?`, commit hint; no hymn
+  files written; tracked stamp and local marker written.
+- `-y` prints the overview and asks nothing; `--dry-run` prints overview and
+  details and writes nothing.
+- AGENTS.md-only repo: the codex boot import and codex skills come from one
+  harness set.
 - `prompt resolve --role worker` on a fresh install yields the framework worker
-  contract (ISS-210 closed).
-- On-demand starter verb writes a user-provenance starter for a named slot.
-- Stamp absent → boot/status prints the install line; stamp older than the
-  binary → prints the reinstall line; stamp newer than the binary → prints the
-  upgrade-binary line; current → silent.
-- Install run by a binary older than the stamp does not downgrade silently.
-- With no `.doctrine/state/boot.md`, the tracked managed section tells an agent
-  doctrine isn't installed for this checkout.
-- SPEC-009 reconciled via REV; IMP-516, IMP-513, ISS-210, IMP-514 resolved.
+  contract (ISS-210).
+- `prompt customise <slot>` writes a starter + self-replaces sidecar; refuses a
+  sealed slot; leaves an existing file alone.
+- Install in this repo removes the five identical starters, `preamble/core`
+  and `adherence/low`; `adherence/low` emits once (ISS-521).
+- Currency matrix: local marker absent / older, tracked stamp older / newer,
+  unreadable, current — each prints the DEC-380 line (or nothing) via session
+  hook, `boot`, `status`; snapshot bytes unchanged.
+- Downgrade: interactive warns and asks; `-y` refuses without the override.
+- Existing guard block upgrades to the new text; a current block is untouched.
+- `doctrine.toml` comments survive the stamp write byte-for-byte outside the
+  key.
+- One REV reconciled; IMP-516, IMP-513, IMP-514, ISS-210, ISS-521 resolved.
 
 ## Summary
 
@@ -149,4 +143,5 @@ whether it's in place" should be shared.
 
 - ISS-216-style reseat on stamp mismatch — the stamp gives a trigger; acting
   on it is out of scope.
-- IMP-378 — migration to remove legacy projected starters from existing clients.
+- IMP-378 — the tracked stamp can key once-per-repo migrations.
+- IMP-489 concern 5 — model-key vocabulary for `prompt resolve --model`.

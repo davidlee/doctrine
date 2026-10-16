@@ -38,6 +38,30 @@ intent = "scope-relevant"
 selector = "install/**"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "src/install_state.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/dtoml.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/install_config.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "Cargo.toml"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/hymns/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "scope-relevant"
+
 [[relation]]
 label = "fulfils"
 target = "IMP-516"
@@ -53,6 +77,10 @@ target = "ISS-210"
 [[relation]]
 label = "fulfils"
 target = "IMP-514"
+
+[[relation]]
+label = "fulfils"
+target = "ISS-521"
 
 [[relation]]
 label = "governed_by"

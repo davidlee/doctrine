@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 381
+slug = "install-one-overview-one-prompt"
+title = "Interactive install: one overview, one prompt"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-16"
+updated = "2026-10-16"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-282 inq-2 / IMP-516. Interactive install asks per-step questions in internal vocabulary; most are not real choices. Boot detection treats a standalone AGENTS.md as codex while the registry detects codex only by .codex/, so the boot-wired and converged harness sets diverge (src/boot.rs:774-779, install/manifest.toml:49)."
+choice = "One harness resolver: --agent if given, else registry detection, with the boot AGENTS.md rule (and its Claude-alias suppression) folded in; boot wiring and convergence both consume it; the install_harnesses union goes. Install prints a plain-English overview rendered from InstallPlan, then asks `Proceed? [y/N/d]`, where d shows the existing step printers and re-asks. That prompt covers every required step; the memory-sync, boot-wire, hymn-starter and per-harness prompts, prompt_step and the a/all-yes answer are deleted. Real choices: harnesses via --agent, asked once only when none detected and none given (listing registry harnesses); skills via -s/domain flags, no prompt. -y skips the prompt but still prints the overview (POL-003 disclosure); --dry-run prints overview plus details and stops. The DEC-378 downgrade gate shows as a warning above Proceed. Post-proceed progress output unchanged; message assertions live in binary-driven e2e tests."
+alternatives = ["Keep per-step prompts with reworded questions: still asks non-choices", "Per-harness confirmation prompts: redundant with --agent and detection", "Keep two harness resolvers: known divergence (AGENTS.md-only repo wires codex boot without codex skills)"]
+rationale = "Required steps are not decisions; asking them is a trap. A single resolver removes a known divergence. The overview satisfies PRD-006 plan disclosure and POL-003 per-step disclosure while asking once."
+consequences = ["Interactive install gets no per-harness opt-out; use --agent", "prompt_step and its tests are removed", "SPEC-009 gains interactive-flow requirements via REV"]
+decided_by = "user"
+decided_on = "2026-10-16"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-282"

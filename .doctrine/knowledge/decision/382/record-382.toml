@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 382
+slug = "install-commit-hint"
+title = "Install prints a commit hint for the tracked paths it changed"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-16"
+updated = "2026-10-16"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-282 inq-3 / IMP-516: install should hand over the next step."
+choice = 'After a successful run, install prints `Next: git add <paths> && git commit -m "chore: install doctrine X"` ("update doctrine to X" on upgrade), naming exactly the tracked paths this run created or changed, taken from InstallPlan write results with gitignored tiers excluded. Nothing tracked changed: prints "nothing to commit". Not a git repository: no hint. The hint is printed, never executed.'
+alternatives = ["Run the commit for the user: outward-facing, surprising", "Name a fixed path list: stale and wrong when nothing changed", "Query git status for changed paths: extra git dependency for what install already knows"]
+rationale = "Install already knows what it wrote; deriving the hint from InstallPlan keeps one source and stays exact."
+consequences = ["InstallPlan execution must report per-path written/changed outcomes"]
+decided_by = "user"
+decided_on = "2026-10-16"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-282"

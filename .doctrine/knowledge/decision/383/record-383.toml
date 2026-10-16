@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 383
+slug = "boot-guard-not-installed-clause"
+title = "Boot guard gains a not-installed clause and upgrades in place"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-16"
+updated = "2026-10-16"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-282 inq-6 / IMP-514: with no doctrine binary, nothing but a tracked file can tell an agent doctrine is missing. The managed CLAUDE.md/AGENTS.md block (BOOT_REF_LINE + BOOT_REF_GUARD, src/boot.rs:805-823) is that file. plan_boot_import treats any sentinel-bearing block as Present (src/boot.rs:849-850), so a changed guard never reaches existing clients."
+choice = 'Append one sentence to BOOT_REF_GUARD: "If that file does not exist, doctrine is not set up in this checkout: tell the user to install doctrine and run `doctrine install`." No URL (keeps the text config-independent and the comparison pure). plan_boot_import keeps a short list of prior guard texts: a block carrying a prior text is replaced with the current one; Present only when the current text is there. Same pattern as upgrade_bare_boot_ref.'
+alternatives = ["Delimiter comments around a managed block: robust but costs tokens every session", "Leave existing clients on the old guard: the clause never reaches them", "Include the repo URL from [install] repo: text depends on config, comparison no longer pure"]
+rationale = "About 30 tokens per session buys the only signal available without a binary. Since the session hook regenerates boot.md whenever the binary runs (DEC-379), absence now mostly means no binary or no hook, which the clause covers. Matching on emitted text keeps idempotency honest."
+consequences = ["Each future guard edit appends the outgoing text to the prior-texts list", "SPEC-011 REQ-185 revised to define the guard content and its in-place upgrade"]
+decided_by = "user"
+decided_on = "2026-10-17"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-282"
