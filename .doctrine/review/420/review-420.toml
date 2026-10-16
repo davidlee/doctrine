@@ -1,0 +1,240 @@
+id    = 420
+slug  = "reconciliation-review-of-sl-281"
+title = "reconciliation review of SL-281"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-281"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "minor"
+title = "Expected: canon writes follow a symlinked ancestor and refresh; observed: a symlinked canon container makes every member write 'skipped (changed since scan)' forever"
+detail = """
+Repro (temp project, copied binary): `.doctrine/agents/claude -> ../../../reloc`, edit a canon def under reloc/; `install -y --agent claude` reports `skipped … (changed since scan)` for all 4 defs; edit survives (user file reloc/my-notes.md also survives — safe direction).
+Cause: `Scan::canon_dir` descends only on lstat Dir (src/install.rs:2204-2208), so member canon paths under a symlinked container are never recorded; `scan.scanned()` = Absent, the apply re-proof (src/install.rs:2432-2434) sees File and skips.
+Governing: design §Safety boundaries ("Writes and relinks may follow a symlinked ancestor"); SPEC-010 REQ-178 (skip only on a real change). Undercuts PHASE-04 EX-3 for this case.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "Expected: PHASE-03..06 decisions harvested into durable notes.md; observed: harvest stops at PHASE-02, decisions live only in gitignored phase sheets"
+detail = """
+notes.md is fresh-as-of PHASE-02 (9d312ebc8); last harvest fbc675890. `.doctrine/slice/281/phases` symlinks into gitignored `.doctrine/state/`.
+Living only there: PHASE-04 D1–D6 (still "proposed — orchestrator to confirm"), PHASE-05 D1 (dry-run link prediction) / D2 (malformed block: report, exit 0), PHASE-06 OQ-1..7. PHASE-06 Findings unfilled despite T7 (orchestrator def gained "Never pass `name`"; dispatch-worker and .pi links relinked).
+No recorded user assent for PHASE-04 D1–D6, PHASE-05 D1/D2, PHASE-06 OQ-1 (changed live orchestrator def). Governing: notes.md contract, /harvest.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "minor"
+title = "Expected: design reports every foreign symlink; observed: code reports foreign symlinks only at member sites"
+detail = """
+Code: src/install_ownership.rs:201-204 reports ForeignSymlink only when the site maps to a member (test plan_keeps_foreign_symlink).
+Design: design.md flowchart lines 232-233 (`KF[keep, report 'foreign symlink']`) and §Links prose 196-212 say every foreign symlink is reported.
+Code follows PHASE-02 OQ-1, user-agreed 2026-10-16; the design was not updated.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "minor"
+title = "Expected: convergence behaviour rules recorded in design; observed: PHASE-04 D1/D3/D4 exist only in the phase sheet"
+detail = """
+D3 (src/install.rs:613-646): convergence runs only if ≥1 harness confirmed; none confirmed → no prune, gitignore block still written.
+D4 (execute, src/install.rs:2340-2370): abort on first I/O or bake error, reported `framework install failed`.
+D1: an already-correct link emits no report line (previously `relinked`) — user-visible output change.
+design.md §Shape / §Convergence / report vocabulary are silent on all three.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "minor"
+title = "Expected: framework-owned links are untracked so the managed block governs them; observed: .pi/agents/dispatch-worker.md is tracked, relinked by install, and listed in the block"
+detail = """
+`git ls-files .pi` lists `.pi/agents/dispatch-worker.md` (tracked symlink). 9dff138fa changed its target from `../../.doctrine/agents/codex/…` to `…/pi/…`. The block line `/.pi/agents/dispatch-worker.md` cannot ignore a tracked file, so every future layout change dirties the tree.
+Governing: scope objective 6 (dogfood), DEC-375. Client equivalent is IMP-378 (non-goal); for this repo it is a dogfood choice.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "minor"
+title = "Expected (scope, ISS-353): retired skills no longer invocable; observed: npx-written .agents/skills still carries retired and stale skills"
+detail = """
+`diff -rq plugins/doctrine/skills .agents/skills`: .agents/skills (rewritten by PHASE-06 install via npx from github davidlee/doctrine) still has dispatch-agent, dispatch-subprocess, next, notes; capsule-driver, plan, reconcile differ from the local build.
+Design §Risks accepts this ("npx-written skills … neither ignored nor pruned"; IMP-406). ISS-353 is therefore only closed for doctrine-linked harnesses. Install also needs network for this leg.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "nit"
+title = "Expected (design §Ownership): nothing but the manifest lists a framework path; observed: Rust canon_root() hardcodes the three roots"
+detail = """
+src/install.rs:1949-1955 lists the canon roots; pinned to manifest by test canon_roots_match_manifest_framework_roots. Manifest roots carry no kind, so a kind→root map is needed. Design text overstates; mirror the DERIVED_RUNTIME test-pinned precedent.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "minor"
+title = "Expected (DEC-372): full def set projected only on an explicit --agent; observed: the same leg runs for a detected harness confirmed at the prompt or under -y"
+detail = """
+DEC-372's lawfulness argument rests on "user-requested". run_forward_steps (src/install.rs:621-646) runs full-def-set convergence for any detect_agents hit confirmed at the prompt, or under -y. ADR-019 VA reads "no … agent, or integration file is projected by default". REV-071 D7 row (still proposed) carries the explicit-only wording.
+Either the decision text should read "explicit or detected-and-confirmed", or the code should restrict the leg.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-9"
+status = "open"
+severity = "nit"
+title = "Expected: install prompts disclose what confirmation mutates; observed: pi prompt says only 'skills … delegates to npx', claude line says 'agent def' (singular)"
+detail = """
+src/install.rs:623-627 `Install skills for {agent} (delegates to npx)?` — for pi, confirming also writes/links agent defs and triggers canon-wide prune. src/install.rs:441-446 prints "install skills + agent def for claude" though 4 defs now install. Governing: STD-003, design §What changes.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-10"
+status = "open"
+severity = "minor"
+title = "Expected: conformance clean; observed: 21 undeclared paths, plus off-registry paths from e523e95c0"
+detail = """
+Legitimate, selector missing: src/fsutil.rs (PHASE-02 path-algebra lift; symlinked_component), tests/e2e_install_ownership.rs (PHASE-04 EX-7), .doctrine/adr/001/layering.toml (layering gate requires the new module classified), .pi/agents/dispatch-worker.md (dogfood relink); scope-relevant: src/memory.rs (DRY removal of its lexical_normalise copy).
+Process byproducts: 15 observation records, slice-281.toml.
+Off-registry: e523e95c0 (GIT_GUARD fixture lift: src/{dispatch,ledger,slice}.rs, tests/e2e_dispatch_candidate.rs) is user-approved pre-phase work invisible to the default registry.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-11"
+status = "open"
+severity = "nit"
+title = 'Expected (STD-001): named constant; observed: literal "GIT_GUARD","off" repeated in 4 test git helpers'
+detail = """
+src/slice.rs:5570, src/ledger.rs:1026, src/dispatch.rs:7657, tests/e2e_dispatch_candidate.rs:36 (from e523e95c0). Host-jail specific (touches POL-002). notes.md already lists the four duplicated test git helpers as a candidate shared fixture.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-12"
+status = "open"
+severity = "nit"
+title = "Expected: each phase's EX 'gate green' at commit; observed: PHASE-03..05 gated by a scoped clippy+tests substitute on a red toolchain baseline"
+detail = """
+Commits 0fde6d4c6, 05e20f76d, 87503e595, b76a31511, 4242b63a8 record the cargo 1.100 red baseline and a symlink-shimmed substitute gate. CHR-178 fixed the baseline; `doctrine check gate` green at aec6fa420 (before PHASE-06) and at 9dff138fa covers them retroactively.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-13"
+status = "open"
+severity = "nit"
+title = "Expected: TDD red observed for PHASE-03; observed: none recorded"
+detail = """
+PHASE-03 worker wrote code before tests; sheet Findings/Decisions empty, commit makes no red claim. By reading, staging_never_reuses_preexisting_entry plants a squatter at the legacy .tmp-<id> name the old write_link deleted, so it would have been red on old code (inferred).
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-14"
+status = "open"
+severity = "nit"
+title = "Expected (design §Verification): real-binary e2e for 'only .pi/ wires the codex boot adapter'; observed: unit test only"
+detail = """
+design.md §Verification (lines ~502-525) lists it under real-binary e2e; only detection_and_boot_follow_registry (unit) covers it.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-15"
+status = "open"
+severity = "nit"
+title = "Expected (STD-003): unreadable link-dir entry disclosed accurately; observed: recorded as Real — reported as 'real file shadows' at a member site, silent elsewhere"
+detail = """
+src/install.rs:2171-2175. Inferred from code, not reproduced.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-16"
+status = "open"
+severity = "nit"
+title = "Expected: observation-records rationale stays visible in .gitignore; observed: the 3-line comment was dropped when the entry moved into the block"
+detail = """
+Rationale is preserved in install/manifest.toml [gitignore]; block lines cannot carry comments.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
