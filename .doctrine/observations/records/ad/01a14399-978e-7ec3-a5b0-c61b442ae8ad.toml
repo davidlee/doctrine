@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14399-978e-7ec3-a5b0-c61b442ae8ad"
+recorded_at = "2026-10-16T07:25:01.710209559Z"
+kind = "friction"
+summary = "capsule-orchestrator; SL-281 PHASE-03: worker wrote implementation before tests (no observed RED)"
+detail = "Sonnet capsule-worker self-reported skipping the red step; orchestrator confirmed by diff that the legacy .tmp-<id> squatter would have been deleted by the old code, so the test is red-on-old by inspection only. Also: planted-squatter band (0..48) vs process-global staging counter means collisions are not guaranteed exercised under parallel tests; stage_from_skips_taken_candidates covers the retry deterministically."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

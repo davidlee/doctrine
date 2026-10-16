@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14399-978b-7413-b159-17069f72f8bd"
+recorded_at = "2026-10-16T07:25:01.707262049Z"
+kind = "friction"
+summary = "capsule-orchestrator; SL-281: toolchain bump (uncommitted flake.lock, cargo/clippy 1.100 beta) breaks doctrine check gate repo-wide"
+detail = "cargo 1.100.0-beta.5 moves test exes to target/debug/build/<pkg>/<hash>/, so test_support::doctrine_bin (current_exe pop-pop) resolves a nonexistent path: every real-binary e2e fails NotFound. clippy 0.1.100 adds 41 new errors across ~30 files (map_unwrap_or, redundant_clone, unfulfilled expectation) none in slice code. Verified PHASE-03 by shimming a doctrine symlink into each build hash dir; e2e_surface_neutral_roundtrip then fails only on the shim (BIN_PATH mismatch). Fix candidate: doctrine_bin via env!(CARGO_BIN_EXE_doctrine) in integration crates."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

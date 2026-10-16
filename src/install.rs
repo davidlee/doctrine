@@ -1734,32 +1734,81 @@ fn classify_link(id: &str, dest: &Path, target: &Path) -> Link {
     }
 }
 
-/// A `.tmp-<name>` sibling of `path`, the staging name for an atomic swap.
-fn staging_path(path: &Path) -> anyhow::Result<PathBuf> {
+/// Candidate attempts before `stage_from` gives up. Bounded so a hostile
+/// directory cannot hang an install.
+const STAGING_ATTEMPTS: u64 = 64;
+
+/// The staging name for candidate `seq` beside `path`:
+/// `<parent>/.tmp-<name>.<pid>.<seq>`. Pure; uniqueness is enforced by the
+/// exclusive create in `stage_from`, not by the name.
+fn staging_path(path: &Path, seq: u64) -> anyhow::Result<PathBuf> {
     use crate::install_ownership::STAGING_PREFIX;
     let parent = path.parent().context("path has no parent directory")?;
     let name = path.file_name().context("path has no file name")?;
-    Ok(parent.join(format!("{STAGING_PREFIX}{}", name.to_string_lossy())))
+    Ok(parent.join(format!(
+        "{STAGING_PREFIX}{}.{}.{seq}",
+        name.to_string_lossy(),
+        std::process::id()
+    )))
 }
 
-/// Create the relative symlink `dest -> target` atomically: symlink at a temp
-/// name then `rename` over `dest`. `rename` DOES replace an existing symlink (only
+/// Create a fresh staging entry beside `path` via `create`, which must be an
+/// exclusive create (`symlink` / `create_dir`). Tries candidates `first_seq..`,
+/// moving on at `AlreadyExists` (a pre-existing entry is never reused or
+/// removed); any other error is returned. Returns the path it created.
+fn stage_from(
+    path: &Path,
+    first_seq: u64,
+    create: impl Fn(&Path) -> io::Result<()>,
+) -> anyhow::Result<PathBuf> {
+    for seq in first_seq..first_seq + STAGING_ATTEMPTS {
+        let tmp = staging_path(path, seq)?;
+        match create(&tmp) {
+            Ok(()) => return Ok(tmp),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(e) => {
+                return Err(e).with_context(|| format!("Failed to stage {}", tmp.display()));
+            }
+        }
+    }
+    bail!(
+        "no free staging name beside {} after {STAGING_ATTEMPTS} attempts",
+        path.display()
+    )
+}
+
+/// `stage_from` with the next process-global candidate number, so concurrent
+/// same-process stagers start apart.
+fn stage_exclusive(
+    path: &Path,
+    create: impl Fn(&Path) -> io::Result<()>,
+) -> anyhow::Result<PathBuf> {
+    static NEXT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let first = NEXT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    stage_from(path, first, create)
+}
+
+/// Create the relative symlink `dest -> target` atomically: symlink at a
+/// freshly-created unique staging name (exclusive; never a pre-existing entry)
+/// then `rename` over `dest`. `rename` DOES replace an existing symlink (only
 /// a non-empty *directory* is the exception), so an owned-link relink never leaves
 /// a half-state. Callers pass only Create/Relink dests (missing or proven ours).
+/// If the swap fails, the staging link we created is removed.
 fn write_link(dest: &Path, target: &Path) -> anyhow::Result<()> {
     use std::os::unix::fs::symlink;
-    let tmp = staging_path(dest)?;
-    // Clear any crashed leftover from a prior interrupted write (a stale symlink
-    // may dangle, so remove unconditionally and ignore a not-found error).
-    fs::remove_file(&tmp).ok();
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("Failed to create {}", parent.display()))?;
     }
-    symlink(target, &tmp).with_context(|| format!("Failed to stage link {}", tmp.display()))?;
-    fs::rename(&tmp, dest)
-        .with_context(|| format!("Failed to swap link {} → {}", tmp.display(), dest.display()))?;
-    Ok(())
+    let tmp = stage_exclusive(dest, |t| symlink(target, t))?;
+    fs::rename(&tmp, dest).map_err(|e| {
+        fs::remove_file(&tmp).ok();
+        anyhow::Error::new(e).context(format!(
+            "Failed to swap link {} → {}",
+            tmp.display(),
+            dest.display()
+        ))
+    })
 }
 
 /// Human-readable `kept` reason for an honest warning.
@@ -2099,40 +2148,39 @@ fn claude_skills_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
 }
 
 /// Materialise the canonical copy of `entry` at `dest` (`.doctrine/skills/<id>`),
-/// staged via a `.tmp-<id>` sibling then swapped in with a minimal-window
-/// remove+rename. Always overwrites — the canonical tree is derived (owns no
-/// authored data).
+/// staged in a unique, exclusively-created `.tmp-<id>.<pid>.<n>` sibling then
+/// swapped in with a minimal-window remove+rename. Always overwrites — the
+/// canonical tree is derived (owns no authored data). A pre-existing entry at a
+/// staging name is never reused; on failure only the directory we created is
+/// removed.
 ///
 /// Unix reality (design §5.1/§10 pass-2 F4): `rename` cannot replace a non-empty
 /// directory and std has no `renameat2(RENAME_EXCHANGE)`, so the swap is
 /// remove-then-rename — a one-syscall window where a crash leaves the agent link
 /// dangling, healed by the next idempotent install. A partial stage lives only
-/// under `.tmp-<id>`, never under `<id>`, so a live link never sees a half-tree.
+/// under the staging name, never under `<id>`, so a live link never sees a
+/// half-tree.
 fn materialise_canonical(entry: &Entry, dest: &Path) -> anyhow::Result<()> {
-    let tmp = staging_path(dest)?;
-
-    // Clear any crashed leftover from a prior interrupted stage. Use lexists
-    // (symlink_metadata, not exists()): a leftover is normally a partial dir, but
-    // an odd dangling symlink must also be cleared — exists() follows it and would
-    // miss it, then `copy_skill`'s create_dir_all would fail on the stale link.
-    match fs::symlink_metadata(&tmp) {
-        Ok(m) if m.file_type().is_dir() => fs::remove_dir_all(&tmp)
-            .with_context(|| format!("Failed to clear stale {}", tmp.display()))?,
-        Ok(_) => {
-            fs::remove_file(&tmp)
-                .with_context(|| format!("Failed to clear stale {}", tmp.display()))?;
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create {}", parent.display()))?;
+    }
+    let tmp = stage_exclusive(dest, |t| fs::create_dir(t))?;
+    // Fill and swap; any failure removes the staging dir we own (same filesystem
+    // → the rename is valid).
+    let swapped = copy_skill(entry, &tmp).and_then(|()| {
+        // Minimal-window swap: drop the prior canonical, then rename the temp in.
+        if dest.exists() {
+            fs::remove_dir_all(dest)
+                .with_context(|| format!("Failed to remove {}", dest.display()))?;
         }
-        Err(_) => {}
+        fs::rename(&tmp, dest)
+            .with_context(|| format!("Failed to swap {} → {}", tmp.display(), dest.display()))
+    });
+    if swapped.is_err() {
+        fs::remove_dir_all(&tmp).ok();
     }
-    // Stage the embed into the temp (same filesystem → the rename below is valid).
-    copy_skill(entry, &tmp)?;
-    // Minimal-window swap: drop the prior canonical, then rename the temp in.
-    if dest.exists() {
-        fs::remove_dir_all(dest).with_context(|| format!("Failed to remove {}", dest.display()))?;
-    }
-    fs::rename(&tmp, dest)
-        .with_context(|| format!("Failed to swap {} → {}", tmp.display(), dest.display()))?;
-    Ok(())
+    swapped
 }
 
 /// Copy an embedded skill's files into `dest`, stripping the source prefix.
@@ -2915,6 +2963,167 @@ mod tests_skills {
             PathBuf::from("../../.doctrine/skills/code-review"),
             "the link value IS the criterion, not mere resolvability"
         );
+    }
+
+    /// Plant a regular file, a dir holding a file, and a dangling symlink at
+    /// `names` under `dir`; returns each planted path with its identity probe.
+    fn plant_squatters(dir: &Path, names: &[String]) -> Vec<PathBuf> {
+        fs::create_dir_all(dir).unwrap();
+        let mut planted = Vec::new();
+        for (i, name) in names.iter().enumerate() {
+            let p = dir.join(name);
+            match i % 3 {
+                0 => fs::write(&p, "user file").unwrap(),
+                1 => {
+                    fs::create_dir(&p).unwrap();
+                    fs::write(p.join("inner"), "user inner").unwrap();
+                }
+                _ => std::os::unix::fs::symlink("/nonexistent/dangling", &p).unwrap(),
+            }
+            planted.push(p);
+        }
+        planted
+    }
+
+    /// Assert every squatter is still what `plant_squatters` made it.
+    fn assert_squatters_intact(planted: &[PathBuf]) {
+        for (i, p) in planted.iter().enumerate() {
+            match i % 3 {
+                0 => assert_eq!(fs::read_to_string(p).unwrap(), "user file", "{p:?}"),
+                1 => assert_eq!(
+                    fs::read_to_string(p.join("inner")).unwrap(),
+                    "user inner",
+                    "{p:?}"
+                ),
+                _ => assert_eq!(
+                    fs::read_link(p).unwrap(),
+                    PathBuf::from("/nonexistent/dangling"),
+                    "{p:?}"
+                ),
+            }
+        }
+    }
+
+    /// Legacy name plus the first candidate names `write_link`/`stage_exclusive`
+    /// might try (the counter is process-global, so plant a wide band).
+    fn squatter_names(id: &str) -> Vec<String> {
+        let pid = std::process::id();
+        let mut names = vec![format!(".tmp-{id}")];
+        names.extend((0..48).map(|n| format!(".tmp-{id}.{pid}.{n}")));
+        names
+    }
+
+    #[test]
+    fn staging_never_reuses_preexisting_entry() {
+        let cr = real_skill_entry();
+        for case in 0..3 {
+            let dir = tempfile::tempdir().unwrap();
+            let skills = dir.path().join(".doctrine/skills");
+            let names = squatter_names("code-review");
+            let planted = plant_squatters(&skills, &names);
+            assert!(planted.iter().all(|p| p.symlink_metadata().is_ok()));
+
+            // (a) link
+            let link_dir = dir.path().join(".claude/skills");
+            let squat_links = plant_squatters(&link_dir, &names);
+            let canon = skills.join("code-review");
+            let target = Path::new("../../.doctrine/skills/code-review");
+            // (b) canon, twice (second is a refresh)
+            for _ in 0..=case {
+                materialise_canonical(&cr, &canon).unwrap();
+            }
+            write_link(&link_dir.join("code-review"), target).unwrap();
+            write_link(&link_dir.join("code-review"), target).unwrap();
+
+            assert_squatters_intact(&planted);
+            assert_squatters_intact(&squat_links);
+            assert!(canon.join("SKILL.md").exists());
+            assert_eq!(fs::read_link(link_dir.join("code-review")).unwrap(), target);
+        }
+    }
+
+    #[test]
+    fn staging_failure_removes_only_the_dir_it_created() {
+        let dir = tempfile::tempdir().unwrap();
+        let skills = dir.path().join(".doctrine/skills");
+        let names = squatter_names("ghost");
+        let planted = plant_squatters(&skills, &names);
+        let before: BTreeSet<_> = fs::read_dir(&skills)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+
+        // Synthetic entry: its file is not embedded, so copy_skill fails.
+        let bad = entry("doctrine", "ghost");
+        assert!(materialise_canonical(&bad, &skills.join("ghost")).is_err());
+
+        let after: BTreeSet<_> = fs::read_dir(&skills)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(before, after, "nothing added, nothing but ours removed");
+        assert_squatters_intact(&planted);
+    }
+
+    #[test]
+    fn staging_never_reuses_preexisting_entry_under_symlinked_doctrine() {
+        let cr = real_skill_entry();
+        let project = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let real = other.path().join("real-doctrine");
+        fs::create_dir_all(real.join("skills/keep-me")).unwrap();
+        std::os::unix::fs::symlink(&real, project.path().join(".doctrine")).unwrap();
+
+        let planted = plant_squatters(&real.join("skills"), &squatter_names("code-review"));
+        assert!(planted.iter().all(|p| p.symlink_metadata().is_ok()));
+
+        let link_dir = project.path().join(".claude/skills");
+        let mut out = Vec::new();
+        for _ in 0..2 {
+            install_skills_direct(
+                project.path(),
+                &[&cr],
+                &[link_dir.clone()],
+                false,
+                false,
+                &mut out,
+            )
+            .unwrap();
+        }
+
+        assert_squatters_intact(&planted);
+        assert!(real.join("skills/keep-me").is_dir());
+        assert!(real.join("skills/code-review/SKILL.md").exists());
+        assert!(link_dir.join("code-review/SKILL.md").exists());
+    }
+
+    #[test]
+    fn stage_from_skips_taken_candidates_and_errors_when_exhausted() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("x");
+        let first = 1000;
+        for seq in [first, first + 1] {
+            fs::write(staging_path(&dest, seq).unwrap(), "taken").unwrap();
+        }
+        let got = stage_from(&dest, first, |t| fs::create_dir(t)).unwrap();
+        assert_eq!(got, staging_path(&dest, first + 2).unwrap());
+        assert!(got.is_dir());
+        assert_eq!(
+            fs::read_to_string(staging_path(&dest, first).unwrap()).unwrap(),
+            "taken"
+        );
+
+        let err = stage_from(&dest, first, |_| {
+            Err(io::Error::from(io::ErrorKind::AlreadyExists))
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains(&dir.path().display().to_string()));
+
+        let err = stage_from(&dest, first, |_| {
+            Err(io::Error::from(io::ErrorKind::PermissionDenied))
+        })
+        .unwrap_err();
+        assert!(format!("{err:#}").contains("Failed to stage"));
     }
 
     #[test]
