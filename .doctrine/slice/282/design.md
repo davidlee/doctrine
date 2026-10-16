@@ -166,7 +166,7 @@ Next: git add -- .gitignore .doctrine/doctrine.toml CLAUDE.md AGENTS.md .claude/
   work stays out. Paths are root-relative and shell-quoted; when the working
   directory is not the project root the hint is prefixed `cd <root> &&`.
 - Removed starters are listed; `git add -- <deleted path>` stages the deletion.
-- Scope: doctrine's own writes. The delegated `npx skills` leg (codex, pi;
+- Scope: doctrine's own writes (DEC-382 as amended, RV-421 F-11). The delegated `npx skills` leg (codex, pi;
   `skills_via = "universal"`) reports only success, so its copies under
   `.agents/skills/` cannot be listed; when that leg ran, the hint adds
   `also review .agents/skills/ (written by npx skills)` (same disclosure as
@@ -345,6 +345,9 @@ New `PromptCommand::Customise { slot, path }`, clap alias `customize` (DEC-384):
 - `slot` is a framework slot label, e.g. `role/worker`.
 - unknown slot → error listing framework slots; sealed slot (`[hymns].seal`) →
   refusal naming the seal.
+- no tracked `installed-version` → refusal: `run \`doctrine install\` first`
+  (DEC-384 as amended, RV-421 F-18). Nothing the verb writes can then precede
+  the one-time legacy cleanup, which would delete it as an unedited copy.
 - otherwise calls `project_starters` for that one slot: writes
   `.doctrine/hymns/<slot>.md` (framework body) and `<slot>.toml`
   (`replaces = "<slot>"`), each write-if-absent.
@@ -422,7 +425,7 @@ precedent):
 | risk | mitigation |
 |---|---|
 | Stamp write damages a hand-edited `doctrine.toml` | single-key `toml_edit`; test: this repo's commented file round-trips byte-identical outside the key |
-| Legacy removal deletes a customisation | runs only while `installed-version` is absent (one-time migration), so `prompt customise` output is never a candidate; exact byte identity on body and sidecar; non-snippet files never candidates; each removal reported and shown in the commit hint |
+| Legacy removal deletes a customisation | runs only while `installed-version` is absent (one-time migration), and `prompt customise` refuses while it is absent, so customise output is never a candidate; exact byte identity on body and sidecar; non-snippet files never candidates; each removal reported and shown in the commit hint |
 | Advisory sites miss projects rooted only by `pyproject.toml` / `justfile` | pre-existing marker divergence between install and readers; deferred to ISS-522 |
 | Bake reads a different disk corpus after removal | removal runs before convergence, where the starter leg ran; e2e asserts a second install is a no-op |
 | Rollout noise ("newer than repo") | intended; clears once the stamp is committed |
@@ -469,6 +472,8 @@ E2e (built binary, `tests/common`):
 - downgrade (stamp newer, and marker newer with stamp absent): interactive
   warns; `-y` refuses; `--allow-downgrade` proceeds and rewrites the local
   marker; the tracked stamp follows the rule above.
+- `prompt customise role/worker` in a pre-stamp repo refuses (`run doctrine
+  install first`) and writes nothing.
 - `prompt customise role/worker` writes starter + sidecar; sealed slot refused;
   existing file left alone.
 - legacy starters: identical copies removed and reported; edited copy kept;

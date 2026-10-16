@@ -323,7 +323,7 @@ role = "raiser"
 
 [[finding]]
 id = "F-11"
-status = "contested"
+status = "answered"
 severity = "major"
 title = "Delegated skills changes cannot enter the exact commit hint"
 detail = """
@@ -333,7 +333,7 @@ Fix: either narrow the hint's stated contract to Doctrine-owned writes and repor
 """
 disposition = "design-wrong"
 response = """
-Verified (Runner::run returns only success; NPX_SKILLS_NOTE src/install.rs:1334). Narrowed the contract to doctrine's own writes; when the delegated leg ran, the hint adds "also review .agents/skills/ (written by npx skills)". DEC-382's "exactly" now reads as exactly doctrine's writes — noted for the REV.
+Contest accepted: narrowing needed a governance change, not a REV note. User ruling 2026-10-17 ("1a — npx is likely going soon"): DEC-382 amended — the hint names exactly doctrine's own tracked writes, path-limited; delegated (npx) writes get a review line. Design cites the amended DEC.
 """
 
 [[finding.turn]]
@@ -353,6 +353,14 @@ act = "contest"
 role = "raiser"
 note = """
 The response narrows the promise to Doctrine-owned writes, but accepted DEC-382 still requires the hint to name exactly the tracked paths this install run created or changed. Revised design.md:165-169 still omits trackable `.agents/skills/` copies written by its delegated npx leg; a prose `also review` note is not a path-limited `git add`/`git commit` command for them. The proposed REV is only future reconciliation, not an amendment to DEC-382. Resolve the contract conflict with a user ruling and matching governance change, or obtain bounded delegated path outcomes and test a trackable codex/pi fixture.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Contest accepted: narrowing needed a governance change, not a REV note. User ruling 2026-10-17 ("1a — npx is likely going soon"): DEC-382 amended — the hint names exactly doctrine's own tracked writes, path-limited; delegated (npx) writes get a review line. Design cites the amended DEC.
 """
 
 [[finding]]
@@ -561,7 +569,7 @@ Agreed. Under --allow-downgrade the tracked stamp is preserved only when newer t
 
 [[finding]]
 id = "F-18"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Pre-stamp customise is deleted by the one-time cleanup"
 detail = """
@@ -569,10 +577,22 @@ Expected: the user-ruling gate is honored and an explicitly requested `prompt cu
 Observed: a pre-SL-282 installed repo has no tracked `installed-version`. With the new binary, `prompt customise role/worker` is available in that repo and writes the exact framework body plus default self-replaces sidecar (`project_starters`, src/install.rs:1149-1202). The next `doctrine install` still satisfies the user's absent-stamp cleanup gate (design.md:344-357), so `identical_starters` deletes both newly requested files. Design.md:410's claim that customise output is never a candidate is false. The added install → customise → install test starts after the first install has written a stamp, so it misses this sequence.
 Keep the absent-stamp gate, but distinguish explicit customisations created before migration or skip them by durable provenance. Add pre-stamp repo → customise → install coverage.
 """
+disposition = "design-wrong"
+response = """
+Agreed: a pre-stamp customise was still a cleanup candidate. User ruling 2026-10-17 ("2a"): DEC-384 amended — prompt customise refuses while the tracked installed-version is absent ("run `doctrine install` first"). Design sec-hymns, risks row and e2e row (pre-stamp customise refuses, writes nothing) updated.
+"""
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Agreed: a pre-stamp customise was still a cleanup candidate. User ruling 2026-10-17 ("2a"): DEC-384 amended — prompt customise refuses while the tracked installed-version is absent ("run `doctrine install` first"). Design sec-hymns, risks row and e2e row (pre-stamp customise refuses, writes nothing) updated.
+"""
 
 [[finding]]
 id = "F-19"
