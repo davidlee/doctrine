@@ -567,10 +567,6 @@ fn run_forward_steps(
     }
 
     // 2. Boot wire — skipped when no harnesses detected.
-    #[expect(
-        clippy::collapsible_if,
-        reason = "let-else chain is clearer than && let"
-    )]
     if !harnesses.is_empty()
         && prompt_step(
             "Wire @-import + session hooks for detected harnesses? [y/N/a]",

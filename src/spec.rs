@@ -1729,7 +1729,7 @@ pub(crate) fn build_registry(root: &Path) -> anyhow::Result<Registry> {
                     });
                 }
             } else {
-                reg.product_specs.insert(spec_ref.clone());
+                reg.product_specs.insert(spec_ref);
             }
         }
     }
@@ -2007,7 +2007,7 @@ pub(crate) fn list_rows(root: &Path, mut args: ListArgs) -> anyhow::Result<Strin
                         subtype: subtype.label(),
                         status: m.status,
                         slug: m.slug,
-                        tags: m.tags.clone(),
+                        tags: m.tags,
                         members: count,
                     });
                 }

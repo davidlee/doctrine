@@ -2,6 +2,7 @@
 name = "doctrine"
 version = "0.46.6"
 edition = "2024"
+rust-version.workspace = true
 description = "Project tooling CLI"
 license = "GPL-3.0-only"
 repository = "https://github.com/davidlee/doctrine"

@@ -784,7 +784,7 @@ fn write_fileset_tracked(
                 // symlink(2) is atomic; an existing target is a clobber → fail.
                 std::os::unix::fs::symlink(target, &abs)
                     .with_context(|| format!("Failed to symlink {}", abs.display()))?;
-                created_paths.push(abs.clone());
+                created_paths.push(abs);
             }
         }
     }

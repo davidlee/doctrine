@@ -669,7 +669,7 @@ pub(crate) fn inspect_from(
             .push(RelationTargetView {
                 target: edge.target,
                 degree: edge.degree,
-                descriptor: edge.descriptor.clone(),
+                descriptor: edge.descriptor,
             });
     }
     let outbound: Vec<RelationGroup> = outbound_by_key.into_iter().collect();

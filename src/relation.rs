@@ -1052,7 +1052,7 @@ pub(crate) fn read_block(
             let (_pos, edge) = legal.remove(i);
             illegal.push(IllegalRow {
                 label: edge.label.name().to_string(),
-                target: edge.target.clone(),
+                target: edge.target,
                 reason: IllegalReason::DuplicateEdge,
             });
         }

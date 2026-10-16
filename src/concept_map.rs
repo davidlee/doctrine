@@ -633,9 +633,9 @@ pub(crate) fn parse_dsl(dsl: &str) -> ParsedConceptMap {
             diagnostics.push(ConceptMapDiagnostic::DuplicateEdge {
                 line,
                 existing_line,
-                from_key: from_key.clone(),
+                from_key,
                 rel: rel.to_string(),
-                to_key: to_key.clone(),
+                to_key,
             });
             continue;
         }
@@ -651,11 +651,11 @@ pub(crate) fn parse_dsl(dsl: &str) -> ParsedConceptMap {
 
         // Record edge.
         edges.push(ConceptMapEdge {
-            from_key: from_key.clone(),
-            from_label: from_label.clone(),
+            from_key,
+            from_label,
             rel: rel.to_string(),
-            to_key: to_key.clone(),
-            to_label: to_label.clone(),
+            to_key,
+            to_label,
             line,
         });
     }

@@ -46,12 +46,23 @@ pub(crate) fn repo_root() -> PathBuf {
 /// SL-162 / CHR-014: never bake the path via `env!("CARGO_BIN_EXE_doctrine")` —
 /// a shared target serves one artifact across namespaces/profiles, so the baked
 /// path NotFounds in the namespace that did not compile it.
+///
+/// The nearest ancestor of the test exe holding a `doctrine` file is the profile
+/// dir. Layout-independent (CHR-178): cargo <=1.99 puts test exes in
+/// `<profile>/deps/`, cargo 1.100 in `<profile>/build/<pkg>/<hash>/`.
 pub(crate) fn doctrine_bin() -> PathBuf {
-    let mut p = std::env::current_exe().expect("resolve current_exe for doctrine_bin");
-    p.pop(); // drop test-exe name → …/deps/
-    p.pop(); // drop deps/          → …/<profile>/
-    p.push(format!("doctrine{}", std::env::consts::EXE_SUFFIX));
-    p
+    let exe = std::env::current_exe().expect("resolve current_exe for doctrine_bin");
+    let name = format!("doctrine{}", std::env::consts::EXE_SUFFIX);
+    exe.ancestors()
+        .skip(1)
+        .map(|dir| dir.join(&name))
+        .find(|candidate| candidate.is_file())
+        .unwrap_or_else(|| {
+            panic!(
+                "doctrine_bin: no `{name}` beside any ancestor of {}",
+                exe.display()
+            )
+        })
 }
 
 /// True when running inside a dispatch worker — the `DOCTRINE_WORKER` env leg, which

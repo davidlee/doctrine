@@ -654,11 +654,7 @@ fn paint_cell<R>(
     // Alternating zebra stripe: applies to the cell directly (String-returning),
     // so it needs its own early return before the `Option<DynColors>` hue match.
     if let ColumnPaint::Alternate([even, odd]) = paint {
-        let hue = if row_index.is_multiple_of(2) {
-            *even
-        } else {
-            *odd
-        };
+        let hue = if row_index % 2 == 0 { *even } else { *odd };
         return cell.color(hue).to_string();
     }
     let hue = match paint {
@@ -943,7 +939,7 @@ pub(crate) fn format_truncation_notice(
     if next >= total {
         return format!("{shown} of {total}; end of results\n");
     }
-    let cont = if offset.is_multiple_of(page_size) {
+    let cont = if offset % page_size == 0 {
         #[expect(
             clippy::integer_division,
             reason = "aligned offset: exact division for the 1-based page"

@@ -625,7 +625,7 @@ fn collect_agent_def_findings(dir: &Path, root: &Path, findings: &mut Vec<Findin
             Some(role) => {
                 findings.push(Finding {
                     category: Category::AgentConformance,
-                    entity: Some(rel.clone()),
+                    entity: Some(rel),
                     message: format!(
                         "invalid `{ROLE_MARKER_KEY}: {role}` (expected `{ROLE_WORKER}`, `{ROLE_ORCHESTRATOR}`, or `{ROLE_PROBE}`)"
                     ),
@@ -635,7 +635,7 @@ fn collect_agent_def_findings(dir: &Path, root: &Path, findings: &mut Vec<Findin
             None => {
                 findings.push(Finding {
                     category: Category::AgentConformance,
-                    entity: Some(rel.clone()),
+                    entity: Some(rel),
                     message: format!("missing mandatory `{ROLE_MARKER_KEY}` marker"),
                 });
                 continue;

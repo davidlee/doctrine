@@ -64,7 +64,7 @@ impl Unresolved {
 }
 
 /// Characters that end a citation's run (design 3.1).
-const fn ends_run(c: char) -> bool {
+fn ends_run(c: char) -> bool {
     c.is_whitespace() || matches!(c, '`' | '"' | '\'' | '<' | '>' | '(' | ')' | '[' | ']')
 }
 

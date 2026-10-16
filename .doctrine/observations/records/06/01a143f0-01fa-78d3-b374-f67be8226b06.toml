@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a143f0-01fa-78d3-b374-f67be8226b06"
+recorded_at = "2026-10-16T08:59:25.050352151Z"
+kind = "friction"
+summary = "<CHR-178> root [package] lacked rust-version inheritance, so clippy assumed MSRV=toolchain and pushed post-1.85 APIs"
+detail = "Cargo.toml declared rust-version only under [workspace.package]; root package never inherited it (cordage/doctrine-control did). Clippy msrv-gated lints (map_unwrap_or -> map_or_default, stable 1.98) therefore fired on every beta bump; 4 sites already used post-1.85 APIs (is_multiple_of, const Vec::is_empty/char::is_whitespace, 1.87) unnoticed. Also: a previous agent masked the cargo 1.100 test-exe layout change with 464 symlink shims in target/debug/build, hiding the real failure."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

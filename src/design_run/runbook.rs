@@ -762,7 +762,7 @@ pub(crate) struct RunbookStanding {
 
 impl RunbookStanding {
     /// Whether every required step is discharged against its current definition.
-    pub(crate) const fn cleared(&self) -> bool {
+    pub(crate) fn cleared(&self) -> bool {
         self.outstanding.is_empty()
     }
 }

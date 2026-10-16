@@ -167,10 +167,7 @@ pub(crate) fn project_list(catalog: &Catalog, filter: &ListFilter) -> Vec<Relati
                 return false;
             }
             // (5) --unresolved: keep only non-Resolved targets.
-            if filter.unresolved && target_state(&edge.target) == TargetState::Resolved {
-                return false;
-            }
-            true
+            !(filter.unresolved && target_state(&edge.target) == TargetState::Resolved)
         })
         .map(|edge| {
             let source = edge.source.canonical();
