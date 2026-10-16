@@ -27,10 +27,16 @@ design read:
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-10-17 · ready · 46d68889d
 
 ### Produced
+- design locked after RV-421 (19 findings, all verified; commits 4e2387bc3..b2669cf3e)
+- amended on user rulings: DEC-379 — linked-worktree marker fallback; DEC-382 — hint covers doctrine's own writes; DEC-384 — one-time cleanup, customise refuses pre-stamp
+- plan: PHASE-01..06 authored and materialised (b19bd71ab, d015f38c3)
+- minted: ISS-522 — root-marker divergence install vs readers; ISS-523 — `--only-memory` unwired; ISS-524 — `--global` runs the project install
 
 ### Learned
+- mem.pattern.design-run.review-disposition-route-and-vocab — severe design-review findings need `--route` at dispose or the lock refuses (hit here; existing memory not retrieved beforehand)
 
 ### Open
+- none — DEC-378..385 settled; deferred work is on ISS-522..524
