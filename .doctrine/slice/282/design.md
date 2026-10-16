@@ -65,8 +65,10 @@ One resolver, `resolve_install_harnesses(explicit, root, registry)`, replaces
 
 - `--agent` given → exactly those names.
 - otherwise → each registry harness whose `detect` path exists, plus codex when
-  a standalone `AGENTS.md` is present and is not an alias of `CLAUDE.md` (the
-  rule moved out of `boot::resolve_harnesses`, `src/boot.rs:774-779`).
+  `AGENTS.md` is present, unless claude is detected *and* `AGENTS.md` resolves
+  to `CLAUDE.md` (the predicate moves verbatim out of `boot::resolve_harnesses`,
+  `src/boot.rs:763-779`; a lone symlinked pair with no `.claude/` stays codex,
+  and its test, `src/boot.rs:4884`, runs through both `install` and `boot install`).
 - none found and interactive → ask once, listing registry harness names; none
   found under `-y` → skip harness legs and say so.
 
@@ -81,15 +83,32 @@ parallel model (DEC-379):
 |---|---|
 | base steps | `build_plan` → `Plan` |
 | memory sync | `corpus::sync_corpus` (planned, reported) |
-| boot wiring | harness set → `boot::wire` |
+| boot wiring | harness set → `boot::plan_wire` (split out of `boot::wire`, below) |
 | harness convergence | `with_wanted` / `survey` → ownership `Action`s |
 | legacy starter removal | identity scan (§ Hymn starters) |
 | gitignore block | `write_gitignore_block` |
 | stamps | tracked key + local marker |
 | currency | `install_state::classify` (downgrade gate) |
 
-Executing it returns `Vec<Touched { path, change: Created | Changed | Removed, tier }>`;
-each writer reports its own outcome. The commit hint reads that.
+`boot::wire(root, exec, harnesses, dry_run) -> Result<()>` (`src/boot.rs:3102`)
+prints and returns nothing, so it is split into `plan_wire` (pure: the per-file
+edits it would make) and `apply_wire` (writes, reports); `wire` becomes their
+composition, so `boot install` is unchanged and its suites are the
+behaviour-preservation proof.
+
+Executing the plan returns a `LegOutcome` per leg (`Done(Vec<Touched>)`,
+`Refused(reason)` or `Failed(error)`), with
+`Touched { path, change: Created | Changed | Removed }`. Today's runner catches
+and prints leg errors and returns `Ok(())` (`src/install.rs:593-714`), and the
+gitignore writer reports malformed markers as `Ok(())` (`src/install.rs:1366-1404`);
+both now return their outcome instead, still printing the same progress and
+error lines (POL-003).
+
+Stamps are the last step and are written only when every leg is `Done`. A
+leg with nothing to do, or deliberately skipped (no harness found under `-y`),
+is `Done` with no `Touched` entries.
+Otherwise install prints `install incomplete: <legs>; version not recorded` and
+leaves both stamps as they were, so currency keeps reporting the old state.
 
 ### Output
 
@@ -111,15 +130,18 @@ Proceed? [y/N/d] (d = show every step)
 - `render_overview(&InstallPlan)` produces the bullets; lines appear only for
   parts with work to do (e.g. no gitignore line when the block is current).
 - `d` prints `print_plan`, `print_forward_summary`, `print_ownership_plan`, then
-  asks again.
+  asks again. A new `prompt_choice` reads one answer into
+  `Choice { Proceed, Abort, Details }`; only install loops on `Details`.
+  `prompt_confirm` becomes `prompt_choice(..) == Proceed`, so its other callers
+  (`boot install`, `src/boot.rs:2956`; memory sync, `src/corpus.rs:447,491`)
+  keep their yes/no behaviour.
 - A legacy-starter removal adds a bullet: `• .doctrine/hymns/  remove N unedited
   starter copies so their slots follow framework updates`.
 - A downgrade adds a warning line above `Proceed?` (§ Version currency).
 - `-y` prints the overview and proceeds; `--dry-run` prints overview and details
   and stops.
 - The memory-sync, boot-wire, hymn-starter and per-harness prompts are removed,
-  with `prompt_step` and the `a` answer. `prompt_confirm` remains the single
-  primitive (still shared with `claude install`, SPEC-010).
+  with `prompt_step` and the `a` answer.
 - Progress lines after proceeding are unchanged (each leg still reports, POL-003).
 
 ### Commit hint
@@ -127,11 +149,24 @@ Proceed? [y/N/d] (d = show every step)
 After a successful run (DEC-382):
 
 ```
-Next: git add .gitignore .doctrine/doctrine.toml CLAUDE.md AGENTS.md .claude/settings.json \
-        && git commit -m "chore: install doctrine 0.47.0"
+Next: git add -- .gitignore .doctrine/doctrine.toml CLAUDE.md AGENTS.md .claude/settings.json \
+        && git commit -m "chore: install doctrine 0.47.0" -- .gitignore .doctrine/doctrine.toml \
+        CLAUDE.md AGENTS.md .claude/settings.json
 ```
 
-- Paths: `Touched` entries whose tier is tracked, deduplicated, in plan order.
+- Paths: `Touched` paths not covered by the ignore contract install itself
+  maintains (the managed block entries plus `.doctrine/state/`), deduplicated,
+  in plan order. No git query (DEC-382); a path the user ignores by their own
+  rules may still be listed, and `git add` then refuses it visibly.
+- The commit is path-limited with the same list, so already-staged unrelated
+  work stays out. Paths are root-relative and shell-quoted; when the working
+  directory is not the project root the hint is prefixed `cd <root> &&`.
+- Removed starters are listed; `git add -- <deleted path>` stages the deletion.
+- Scope: doctrine's own writes. The delegated `npx skills` leg (codex, pi;
+  `skills_via = "universal"`) reports only success, so its copies under
+  `.agents/skills/` cannot be listed; when that leg ran, the hint adds
+  `also review .agents/skills/ (written by npx skills)` (same disclosure as
+  `NPX_SKILLS_NOTE`, `src/install.rs:1334`).
 - Message: "install doctrine X" when no tracked stamp existed before; "update
   doctrine to X" when it changes.
 - No tracked change → `Nothing to commit.` Not a git work tree → no hint.
@@ -139,9 +174,11 @@ Next: git add .gitignore .doctrine/doctrine.toml CLAUDE.md AGENTS.md .claude/set
 
 ### Scope variants
 
-- `--global`: no project `doctrine.toml` or checkout marker; no stamps, no
-  currency gate, no commit hint.
-- `--only-memory`: a partial install; writes neither stamp.
+`--global` and `--only-memory` keep today's leg set; this slice does not
+re-scope them. Today `--global` still runs the base plan (including the project
+`doctrine.toml`) and redirects convergence, and `--only-memory` is parsed but
+unwired (`src/install.rs:189-201`). Both: no stamps, no currency gate, no
+commit hint; the overview renders whatever legs the plan holds.
 
 <!-- doctrine:section sec-currency -->
 ## Version currency
@@ -165,6 +202,21 @@ harnesses = ["claude", "codex"]
 Path constant `INSTALL_MARKER_REL` (precedent: `BOOT_REL`). Covered by the
 existing `.doctrine/state/` gitignore entry.
 
+Marker lookup (DEC-379 as amended, RV-421 F-1) is one command-tier helper,
+`read_install_marker(root) -> (StampRead, MarkerSource)`:
+
+1. `<root>/INSTALL_MARKER_REL`, when present (`MarkerSource::Checkout`);
+2. otherwise, when `root` is a linked git worktree (`git rev-parse
+   --git-common-dir` differs from `--git-dir`), the main worktree's marker
+   (`MarkerSource::Main(path)`); linked worktrees and dispatch forks never
+   receive `.doctrine/state/` (fork provisioning withholds the state tier);
+3. otherwise `Absent`.
+
+Outside git, or when git is unavailable, only step 1 applies (POL-002). When
+the source is `Main`, the checkout advisories name that root
+(`… run \`doctrine install\` in <main root>`); `advisory` takes the source as an
+argument, so the text stays in the leaf.
+
 ### Classifier
 
 ```rust
@@ -175,19 +227,26 @@ pub(crate) enum Currency {
   Current,
   CheckoutNotInstalled,                       // local Absent
   CheckoutOlder { checkout: Version },        // local < binary
+  CheckoutNewer { checkout: Version },        // local > binary
+  RepoUnstamped,                              // tracked Absent (pre-stamp install)
   RepoOlder { repo: Version },                // tracked < binary
   RepoNewer { repo: Version },                // tracked > binary
   Unreadable { path: PathBuf, reason: String },
 }
 
 pub(crate) fn classify(tracked: &StampRead, local: &StampRead, binary: &Version) -> Vec<Currency>;
-pub(crate) fn advisory(c: &Currency, binary: &Version) -> String;
+pub(crate) fn advisory(c: &Currency, binary: &Version, marker: &MarkerSource) -> String;
 ```
 
 - `classify` returns every finding (a checkout can be both older and on a
   lagging repo); empty means current. Order: unreadable, checkout, repo.
-- Tracked `Absent` (pre-stamp install) classifies as `RepoOlder` against any
-  binary, so the advice is to install and commit.
+- Tracked `Absent` (pre-stamp install) classifies as `RepoUnstamped`: it reads
+  as older (DEC-378) but has no version to quote. When `CheckoutNotInstalled`
+  is also found, `RepoUnstamped` is dropped: installing writes the stamp and the
+  commit hint carries it.
+- `CheckoutNewer` covers the stale-`PATH` case (an older binary shadowing the
+  one that installed this checkout) whether or not the tracked stamp is
+  committed.
 - `Unreadable` is never folded into `Absent` (STD-003); it carries the path and
   parse error.
 - Version comparison is `semver` (new direct dependency); the binary version is
@@ -199,6 +258,8 @@ pub(crate) fn advisory(c: &Currency, binary: &Version) -> String;
 |---|---|
 | `CheckoutNotInstalled` | `doctrine isn't installed in this checkout: run \`doctrine install\`` |
 | `CheckoutOlder` | `this checkout was installed by doctrine C (you have B): re-run \`doctrine install\`` |
+| `CheckoutNewer` | `this checkout was installed by doctrine C, newer than yours (B): upgrade doctrine or check which one is on PATH` |
+| `RepoUnstamped` | `this repo has no recorded doctrine version: run \`doctrine install\` and commit` |
 | `RepoNewer` | `this repo is on doctrine R and yours is B: upgrade doctrine` |
 | `RepoOlder` | `your doctrine B is newer than this repo's R: run \`doctrine install\` and commit to move the repo up, or use R` |
 | `Unreadable` | `cannot read <path> (<reason>): fix or remove it, then run \`doctrine install\`` |
@@ -211,21 +272,24 @@ pub(crate) fn advisory(c: &Currency, binary: &Version) -> String;
   `session_start_hook_json`).
 - **`doctrine boot` / `boot --check`.** Print the lines after their own output.
   `--check` exit status is unchanged (currency is advisory).
-- **`status`.** `BootSection` gains `currency: Vec<String>` (the advisory lines;
-  empty when current) and the text view prints them under the boot line.
+- **`status`.** `BootSection` gains `currency: Vec<Currency>` (serialised as
+  structured findings: kind plus versions or path; empty when current). Only the
+  text view renders them, via `advisory`, under the boot line.
 - Nowhere else.
 
 ### Downgrade gate (DEC-378)
 
-Install classifies before executing. If the tracked stamp is newer than the
-binary:
+Install classifies before executing. If the tracked stamp or the local marker
+is newer than the binary (`RepoNewer` or `CheckoutNewer`; R below is the newer
+of the two):
 
-- interactive: the overview shows `! this repo is on doctrine R; you are running
-  B. Proceeding will downgrade generated files.` and `Proceed?` defaults to N as
-  usual;
+- interactive: the overview shows `! this project was installed by doctrine R;
+  you are running B. Proceeding will downgrade generated files.` and `Proceed?`
+  defaults to N as usual;
 - `-y`: refuse with that line plus `pass --allow-downgrade to proceed`;
-- `--allow-downgrade`: proceed; the tracked stamp is rewritten to B and the
-  commit hint names it.
+- `--allow-downgrade`: proceed; the local marker records B, the tracked stamp is
+  left at R (one stale binary does not lower the team's recorded version), so
+  `RepoNewer` keeps reporting until the binary is upgraded.
 
 <!-- doctrine:section sec-guard -->
 ## Boot guard
@@ -277,7 +341,13 @@ New `PromptCommand::Customise { slot, path }`, clap alias `customize` (DEC-384):
 
 ### Legacy starter removal
 
-During install, where the starter leg ran (before convergence bakes worker defs
+A one-time migration (DEC-384 as amended): it runs only while the tracked
+`installed-version` is absent, i.e. on the first install after an install that
+predates the stamp. Once the stamp exists nothing is removed, so a starter
+written by `prompt customise`, byte-identical by construction, survives every
+later install (RV-421 F-16).
+
+During that install, where the starter leg ran (before convergence bakes worker defs
 from the disk corpus), `identical_starters(disk_root, embedded, seal)` finds each
 `.doctrine/hymns/<slot>.md` snippet file (the band/label paths the corpus loader reads; `README.md` and other non-snippet files are never candidates) such that:
 
@@ -289,7 +359,7 @@ from the disk corpus), `identical_starters(disk_root, embedded, seal)` finds eac
 Each match (and its sidecar) is removed and reported:
 `removed unedited starter .doctrine/hymns/<slot>.md (framework text applies again)`.
 Anything else under `.doctrine/hymns/` is untouched. Removals are `Touched`
-entries with tier tracked, so they appear in the commit hint.
+entries outside the ignore contract, so they appear in the commit hint.
 
 In this repo that removes `harness/claude`, `harness/cursor`,
 `model/anthropic/claude-sonnet-4`, `model/deepseek/_default`, `role/worker`,
@@ -303,11 +373,11 @@ In this repo that removes `harness/claude`, `harness/cursor`,
 |---|---|
 | `src/install_state.rs` (new, leaf) | `StampRead`, `Currency`, `classify`, `advisory`; unit-tested exhaustively |
 | `.doctrine/adr/001/layering.toml` | register `install_state = "leaf"` |
-| `src/install.rs` | `InstallPlan` + `Touched`; `render_overview`; single `Proceed? [y/N/d]`; delete `prompt_step`, the per-step prompts and the starter leg; `resolve_install_harnesses` replaces `detect_agents` + `install_harnesses`; `identical_starters` removal; stamp writes; downgrade gate; commit hint |
+| `src/install.rs` | `InstallPlan`, `LegOutcome` + `Touched` (leg runner and gitignore writer return outcomes); `render_overview`; `prompt_choice` + single `Proceed? [y/N/d]` (`prompt_confirm` an adapter); delete `prompt_step`, the per-step prompts and the starter leg; `resolve_install_harnesses` replaces `detect_agents` + `install_harnesses`; `identical_starters` removal (gated on absent stamp); `read_install_marker` (linked-worktree fallback); stamp writes last, only on full success; downgrade gate; path-limited commit hint |
 | `src/install_config.rs` | `installed_version: Option<String>` |
 | `src/dtoml.rs` (or `install_config.rs`) | `write_installed_version` — comment-preserving `toml_edit` single-key write |
-| `src/boot.rs` | `BOOT_REF_GUARD` sentence; `PRIOR_BOOT_REF_GUARDS` + `plan_boot_import` upgrade; AGENTS.md detection rule moved to the shared resolver (boot keeps calling it for `boot install`); currency lines in `boot` / `boot --check` |
-| `src/status.rs` | `BootSection.currency`; text view lines |
+| `src/boot.rs` | `BOOT_REF_GUARD` sentence; `PRIOR_BOOT_REF_GUARDS` + `plan_boot_import` upgrade; `wire` split into `plan_wire` + `apply_wire`; AGENTS.md detection rule moved to the shared resolver (boot keeps calling it for `boot install`); currency lines in `boot` / `boot --check` |
+| `src/status.rs` | `BootSection.currency` (structured in JSON); text view lines |
 | `src/commands/prompt.rs` | `Customise { slot, path }` (alias `customize`); currency lines after unbanded `resolve` |
 | `src/commands/cli.rs` | `--allow-downgrade` on `install` |
 | `install/manifest.toml` | remove `[hymns].expose` |
@@ -337,7 +407,8 @@ precedent):
 | risk | mitigation |
 |---|---|
 | Stamp write damages a hand-edited `doctrine.toml` | single-key `toml_edit`; test: this repo's commented file round-trips byte-identical outside the key |
-| Legacy removal deletes a customisation | exact byte identity on body and sidecar; non-snippet files never candidates; each removal reported and shown in the commit hint |
+| Legacy removal deletes a customisation | runs only while `installed-version` is absent (one-time migration), so `prompt customise` output is never a candidate; exact byte identity on body and sidecar; non-snippet files never candidates; each removal reported and shown in the commit hint |
+| Advisory sites miss projects rooted only by `pyproject.toml` / `justfile` | pre-existing marker divergence between install and readers; deferred to ISS-522 |
 | Bake reads a different disk corpus after removal | removal runs before convergence, where the starter leg ran; e2e asserts a second install is a no-op |
 | Rollout noise ("newer than repo") | intended; clears once the stamp is committed |
 | Same-version builds indistinguishable | release discipline: behaviour-changing slices get at least a patch release |
@@ -351,8 +422,11 @@ Unit (pure):
 
 - `install_state::classify` — every combination of tracked / local in
   {Absent, Unreadable, older, equal, newer} against a fixed binary; order of
-  findings; Unreadable never reported as Absent.
+  findings; Unreadable never reported as Absent; tracked Absent → `RepoUnstamped`,
+  dropped beside `CheckoutNotInstalled`; local newer → `CheckoutNewer`.
 - `advisory` — one line per finding, constants only.
+- `prompt_choice` — `y` / `n` / `d` / empty map to Proceed / Abort / Details /
+  Abort; `prompt_confirm` keeps its yes/no results.
 - `plan_boot_import` — current guard → Present; prior guard → replaced; bare
   line → upgraded; no block → created.
 - `identical_starters` — identical + default sidecar → match; identical + no
@@ -364,21 +438,33 @@ E2e (built binary, `tests/common`):
 
 - fresh repo, interactive with `y`: overview, one prompt, commit hint naming
   exactly the tracked paths; no hymn files; both stamps written.
-- `d` shows details then re-prompts; `N` writes nothing.
+- `d` then `y` proceeds; `d` then `N` writes nothing; `N` writes nothing.
+- commit hint: an unrelated staged file stays out of the printed commit's
+  pathspec; run from a nested directory → `cd <root> &&` prefix.
+- forced leg failure (boot-wire error, malformed gitignore markers): progress
+  shows the error, `install incomplete` printed, neither stamp written.
 - `-y` prints overview, no prompt; `--dry-run` writes nothing (digest check).
 - AGENTS.md-only repo: codex boot import and codex skills from one harness set.
+- lone `CLAUDE.md`↔`AGENTS.md` symlink pair, no `.claude/`: codex, via both
+  `install` and `boot install`.
 - second install: `Nothing to commit.`
-- currency: marker absent / older, stamp older / newer / missing / unreadable →
-  expected line from `prompt resolve` (after the snapshot; snapshot bytes
-  unchanged), `boot`, `status --json`.
-- downgrade: interactive warns; `-y` refuses; `--allow-downgrade` proceeds and
-  rewrites the stamp.
+- currency: marker absent / older / newer, stamp older / newer / missing /
+  unreadable → expected line from `prompt resolve` (after the snapshot; snapshot
+  bytes unchanged) and `boot`; structured finding in `status --json`.
+- downgrade (stamp newer, and marker newer with stamp absent): interactive
+  warns; `-y` refuses; `--allow-downgrade` proceeds, rewrites the local marker
+  and leaves the tracked stamp.
 - `prompt customise role/worker` writes starter + sidecar; sealed slot refused;
   existing file left alone.
 - legacy starters: identical copies removed and reported; edited copy kept;
   `adherence/low` emits once afterwards.
 - `prompt resolve --role worker` after a fresh install contains the framework
   worker contract.
+- linked worktree of an installed checkout: no checkout advisory; of an
+  uninstalled one: the advisory names the main root; a worktree with its own
+  marker uses it.
+- install → `prompt customise role/worker` → install: both files remain.
+- legacy removal does not run once `installed-version` exists.
 
 Dogfood: run install in this repo; the seven copies go; commit the result.
 

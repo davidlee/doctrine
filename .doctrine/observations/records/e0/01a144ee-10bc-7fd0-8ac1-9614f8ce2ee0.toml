@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a144ee-10bc-7fd0-8ac1-9614f8ce2ee0"
+recorded_at = "2026-10-16T13:36:54.972596356Z"
+kind = "friction"
+summary = "code-review: review raise --title parsed a leading '--' title as a flag"
+detail = "Title '--allow-downgrade moves...' rejected by clap as an unexpected argument; had to reword. Values starting with -- need '=' or rewording."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
