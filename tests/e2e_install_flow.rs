@@ -34,6 +34,7 @@ const ABORTED: &str = "Proceed? [y/N/d] (d = show every step) Aborted.";
 const HEADER: &str = "Doctrine will set this project up for: claude";
 const DETAILS: &str = "Project root:";
 const NOTHING: &str = "Nothing to commit.";
+const HINT: &str = "Next:";
 const NPX_REVIEW: &str = "also review .agents/skills/ (written by npx skills)";
 const HARNESS_QUESTION: &str = "No agent harness found here. Set up for which?";
 
@@ -65,37 +66,44 @@ fn install_yes(cwd: &Path, extra: &[&str], env: &[(&str, &OsStr)]) -> String {
     stdout_ok(cmd.output().expect("spawn doctrine"))
 }
 
-/// The printed `Next:` line.
-fn hint_line(out: &str) -> &str {
-    out.lines()
-        .find(|l| l.starts_with("Next: "))
-        .unwrap_or_else(|| panic!("no commit hint: {out}"))
+/// The printed hint: the commands indented under the `Next:` line.
+fn hint(out: &str) -> Vec<&str> {
+    let mut lines = out.lines().skip_while(|l| *l != HINT);
+    assert!(lines.next().is_some(), "no commit hint: {out}");
+    lines.map_while(|l| l.strip_prefix("  ")).collect()
 }
 
 /// The hint's `git add` and `git commit` pathspecs (no fixture path needs
 /// quoting).
-fn pathspecs(hint: &str) -> (BTreeSet<String>, BTreeSet<String>) {
+fn pathspecs(hint: &[&str]) -> (BTreeSet<String>, BTreeSet<String>) {
     let words = |s: &str| s.split_whitespace().map(str::to_string).collect();
-    let (add, commit) = hint
-        .split_once(" && git commit ")
-        .unwrap_or_else(|| panic!("{hint}"));
-    let add = add.split_once("git add -- ").unwrap().1;
-    let commit = commit.rsplit_once(" -- ").map_or("", |(_, p)| p);
+    let line = |head: &str| {
+        *hint
+            .iter()
+            .find(|l| l.starts_with(head))
+            .unwrap_or_else(|| panic!("{head}: {hint:?}"))
+    };
+    let add = line("git add -- ").strip_prefix("git add -- ").unwrap();
+    let commit = line("git commit ")
+        .rsplit_once(" -- ")
+        .map_or("", |(_, p)| p);
     (words(add), words(commit))
 }
 
-/// Run the hint's command line with `sh` in `dir`, asserting success.
-fn execute(hint: &str, dir: &Path) {
-    let cmd = hint.strip_prefix("Next: ").unwrap();
+/// Run the hint's commands in order as one `sh` script in `dir`, asserting
+/// success. One command per line, no shell operator (RV-422 F-10).
+fn execute(hint: &[&str], dir: &Path) {
+    assert!(hint.iter().all(|l| !l.contains("&&")), "{hint:?}");
+    let script = hint.join("\n");
     let out = std::process::Command::new("sh")
         .arg("-c")
-        .arg(cmd)
+        .arg(&script)
         .current_dir(dir)
         .output()
         .expect("spawn sh");
     assert!(
         out.status.success(),
-        "{cmd}: {}{}",
+        "{script}: {}{}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
@@ -153,14 +161,16 @@ fn interactive_y_shows_overview_one_prompt_and_hint() {
     assert_stamped(root, &out);
 
     // The real assertion: the hint lists exactly the tracked writes.
-    let (add, commit) = pathspecs(hint_line(&out));
+    let (add, commit) = pathspecs(&hint(&out));
     assert_eq!(add, commit, "the commit is limited to what it adds");
     assert_eq!(add, git_changes(root), "{out}");
     for path in ["CLAUDE.md", ".gitignore", ".doctrine/doctrine.toml"] {
         assert!(add.contains(path), "{path}: {add:?}");
     }
     assert!(
-        hint_line(&out).contains(&format!("git commit -m 'chore: install doctrine {B}' -- ")),
+        hint(&out)
+            .iter()
+            .any(|l| l.starts_with(&format!("git commit -m 'chore: install doctrine {B}' -- "))),
         "{out}"
     );
 }
@@ -187,6 +197,8 @@ fn details_then_yes_proceeds() {
             "{marker} between the prompts: {out}"
         );
     }
+    // RV-422 F-9: a real run's details carry no --dry-run headings.
+    assert!(!out.contains("--dry-run"), "{out}");
     assert_stamped(root, &out);
 }
 
@@ -248,7 +260,7 @@ fn dry_run_prints_overview_and_details_and_writes_nothing() {
         assert!(out.contains(marker), "{marker}: {out}");
     }
     assert!(!out.contains("Proceed?"), "{out}");
-    assert!(!out.contains("Next:"), "{out}");
+    assert!(!out.contains(HINT), "{out}");
     assert_eq!(tree_digest(root), before, "dry-run writes nothing");
 }
 
@@ -265,12 +277,12 @@ fn hint_commit_excludes_unrelated_staged_work() {
     git(root, &["add", "notes.txt"]);
 
     let out = install_yes(root, &[], &[]);
-    let hint = hint_line(&out);
-    let (add, commit) = pathspecs(hint);
-    assert!(!add.contains("notes.txt") && !add.is_empty(), "{hint}");
-    assert_eq!(add, commit, "{hint}");
+    let hint = hint(&out);
+    let (add, commit) = pathspecs(&hint);
+    assert!(!add.contains("notes.txt") && !add.is_empty(), "{hint:?}");
+    assert_eq!(add, commit, "{hint:?}");
 
-    execute(hint, root);
+    execute(&hint, root);
     let committed = git(root, &["show", "--name-only", "--format=", "HEAD"]);
     assert!(committed.contains("CLAUDE.md"), "control: {committed}");
     assert!(!committed.contains("notes.txt"), "{committed}");
@@ -289,13 +301,13 @@ fn hint_from_a_nested_directory_is_prefixed_with_cd_root() {
 
     let out = install_yes(&sub, &[], &[]);
 
-    let hint = hint_line(&out);
-    let prefix = format!("Next: cd {} && git add -- ", root.display());
-    assert!(hint.starts_with(&prefix), "{hint}");
-    execute(hint, &sub);
+    let hint = hint(&out);
+    assert_eq!(hint[0], format!("cd {}", root.display()), "{hint:?}");
+    assert!(hint[1].starts_with("git add -- "), "{hint:?}");
+    execute(&hint, &sub);
     assert!(
         git_changes(&root).is_empty(),
-        "every tracked write committed: {hint}"
+        "every tracked write committed: {hint:?}"
     );
 }
 
@@ -307,14 +319,14 @@ fn second_install_says_nothing_to_commit() {
     let dir = repo();
     let root = dir.path();
     let first = install_yes(root, &[], &[]);
-    let hint = hint_line(&first);
-    assert!(!pathspecs(hint).0.is_empty(), "control: {hint}");
-    execute(hint, root);
+    let hint = hint(&first);
+    assert!(!pathspecs(&hint).0.is_empty(), "control: {hint:?}");
+    execute(&hint, root);
 
     let out = install_yes(root, &[], &[]);
 
     assert!(out.lines().any(|l| l == NOTHING), "{out}");
-    assert!(!out.contains("Next:"), "{out}");
+    assert!(!out.contains(HINT), "{out}");
 }
 
 #[test]
@@ -338,14 +350,14 @@ fn removed_starter_appears_in_the_hint() {
         out.contains("remove 1 unedited starter copy so their slots follow framework updates"),
         "{out}"
     );
-    let (add, _) = pathspecs(hint_line(&out));
+    let (add, _) = pathspecs(&hint(&out));
     for path in [
         ".doctrine/hymns/role/worker.md",
         ".doctrine/hymns/role/worker.toml",
     ] {
         assert!(add.contains(path), "{path}: {out}");
     }
-    execute(hint_line(&out), root);
+    execute(&hint(&out), root);
     let committed = git(root, &["show", "--name-status", "--format=", "HEAD"]);
     assert!(
         committed.contains("D\t.doctrine/hymns/role/worker.md"),
@@ -384,7 +396,7 @@ fn npx_leg_adds_the_review_line() {
     .env("PATH", &path);
     let out = stdout_ok(cmd.output().unwrap());
 
-    assert!(out.contains("Next: "), "control: the hint printed: {out}");
+    assert!(!hint(&out).is_empty(), "control: the hint printed: {out}");
     assert!(out.lines().any(|l| l == NPX_REVIEW), "{out}");
 }
 
@@ -401,14 +413,14 @@ fn global_and_only_memory_print_no_hint() {
         &[("HOME", home.path().as_os_str())],
     );
     assert!(out.contains("Done."), "control: the run proceeded: {out}");
-    assert!(!out.contains("Next:") && !out.contains(NOTHING), "{out}");
+    assert!(!out.contains(HINT) && !out.contains(NOTHING), "{out}");
 
     let dir = repo();
     let mut cmd = doctrine_cmd(dir.path());
     cmd.args(["install", "--agent", "claude", "--only-memory", "--yes"]);
     let out = stdout_ok(cmd.output().unwrap());
     assert!(out.contains("corpus sync:"), "control: legs ran: {out}");
-    assert!(!out.contains("Next:") && !out.contains(NOTHING), "{out}");
+    assert!(!out.contains(HINT) && !out.contains(NOTHING), "{out}");
 }
 
 #[test]
@@ -423,7 +435,7 @@ fn no_git_no_hint() {
     cmd.args(ARGS).args(["--yes", "-p"]).arg(root);
     let out = stdout_ok(cmd.output().unwrap());
     assert_stamped(root, &out);
-    assert!(!out.contains("Next:") && !out.contains(NOTHING), "{out}");
+    assert!(!out.contains(HINT) && !out.contains(NOTHING), "{out}");
 }
 
 #[test]
@@ -461,10 +473,10 @@ fn hint_omits_untracked_paths_the_projects_own_gitignore_ignores() {
 
     let out = install_yes(root, &[], &[]);
 
-    let (add, commit) = pathspecs(hint_line(&out));
+    let (add, commit) = pathspecs(&hint(&out));
     assert!(!add.contains("CLAUDE.md") && !add.is_empty(), "{out}");
     assert_eq!(add, commit, "{out}");
-    execute(hint_line(&out), root);
+    execute(&hint(&out), root);
     assert!(
         root.join("CLAUDE.md").is_file(),
         "control: install wrote it"
@@ -484,7 +496,7 @@ fn hint_keeps_a_tracked_path_even_when_gitignore_matches_it() {
 
     let out = install_yes(root, &[], &[]);
 
-    let (add, _) = pathspecs(hint_line(&out));
+    let (add, _) = pathspecs(&hint(&out));
     assert!(add.contains("CLAUDE.md"), "{out}");
-    execute(hint_line(&out), root);
+    execute(&hint(&out), root);
 }

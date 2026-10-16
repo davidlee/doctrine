@@ -219,7 +219,7 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
         stdout_line(&line)?;
     }
     if args.dry_run {
-        return print_details(&plan, args, &manifest, FORWARD_DRY_RUN);
+        return print_details(&plan, args, &manifest, Preview::DryRun);
     }
     if plan.downgrade_warning().is_some() && args.yes && !args.allow_downgrade {
         bail!(ALLOW_DOWNGRADE_HINT);
@@ -239,7 +239,7 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     outcomes.extend(run_forward_steps(&plan, &exec, args, &manifest)?);
     // Last: the block reflects what is now on disk, whatever the steps did.
     if plan.write_gitignore {
-        let gitignore = write_gitignore_block(root, &manifest, &[], false)?;
+        let gitignore = write_gitignore_block(root, &manifest, &[], None)?;
         outcomes.push((Leg::Gitignore, gitignore));
     }
     if let Some(stamp) = record_version(&plan, &outcomes)? {
@@ -267,28 +267,65 @@ fn confirm_install(
         match prompt_choice(PROCEED_PROMPT)? {
             Choice::Proceed => return Ok(true),
             Choice::Abort => return Ok(false),
-            Choice::Details => print_details(plan, args, manifest, FORWARD_DETAILS)?,
+            Choice::Details => print_details(plan, args, manifest, Preview::Prompt)?,
         }
     }
 }
 
-/// Every step the install will run: the base plan, the forward steps under
-/// `forward_header`, the ownership plan and the gitignore block. Writes nothing.
+/// Every step the install will run: the base plan, the forward steps, the
+/// ownership plan and the gitignore block, under `preview`'s headings. Writes
+/// nothing.
 fn print_details(
     plan: &InstallPlan,
     args: &InstallArgs<'_>,
     manifest: &Manifest,
-    forward_header: &str,
+    preview: Preview,
 ) -> anyhow::Result<()> {
     stdout_line("")?;
     print_plan(&plan.base)?;
     stdout_line("")?;
-    print_forward_summary(plan, args, &manifest.harness, forward_header)?;
-    let planned = print_ownership_plan(plan, args, manifest)?;
+    print_forward_summary(plan, args, &manifest.harness, preview.forward())?;
+    let planned = print_ownership_plan(plan, args, manifest, preview.ownership())?;
     if plan.write_gitignore {
-        write_gitignore_block(&plan.base.project_root, manifest, &planned, true)?;
+        write_gitignore_block(&plan.base.project_root, manifest, &planned, Some(preview))?;
     }
     Ok(())
+}
+
+/// Where the details are shown: under `--dry-run`, or at `d` on the one prompt
+/// of a real run (nothing written yet). Each picks its section headings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Preview {
+    DryRun,
+    Prompt,
+}
+
+const OWNERSHIP_DRY_RUN: &str = "Ownership plan (not executed under --dry-run):";
+const OWNERSHIP_DETAILS: &str = "Ownership plan:";
+const GITIGNORE_DRY_RUN: &str = "Gitignore block (not written under --dry-run):";
+const GITIGNORE_DETAILS: &str = "Gitignore block:";
+
+impl Preview {
+    const fn forward(self) -> &'static str {
+        match self {
+            Self::DryRun => FORWARD_DRY_RUN,
+            Self::Prompt => FORWARD_DETAILS,
+        }
+    }
+
+    const fn ownership(self) -> &'static str {
+        match self {
+            Self::DryRun => OWNERSHIP_DRY_RUN,
+            Self::Prompt => OWNERSHIP_DETAILS,
+        }
+    }
+
+    const fn gitignore(self) -> &'static str {
+        match self {
+            Self::DryRun => GITIGNORE_DRY_RUN,
+            Self::Prompt => GITIGNORE_DETAILS,
+        }
+    }
 }
 
 /// How the install's harness set was chosen; the overview header says so.
@@ -900,12 +937,13 @@ fn with_wanted<R>(
     f(&cx, &wanted)
 }
 
-/// Details (`--dry-run`, `d`): survey the disk and print the ownership plan,
-/// returning its actions. Mutates nothing.
+/// Details (`--dry-run`, `d`): survey the disk and print the ownership plan
+/// under `header`, returning its actions. Mutates nothing.
 fn print_ownership_plan(
     plan: &InstallPlan,
     args: &InstallArgs<'_>,
     manifest: &Manifest,
+    header: &str,
 ) -> anyhow::Result<Vec<Action>> {
     if plan.harnesses.is_empty() {
         return Ok(Vec::new());
@@ -923,7 +961,7 @@ fn print_ownership_plan(
             let (scanned, actions) =
                 survey(cx, &manifest.framework.roots, &manifest.harness, wanted)?;
             let mut out = io::stdout();
-            writeln!(out, "\n{}", report_header(cx.scope, true))?;
+            writeln!(out, "\n{header}")?;
             for a in &actions {
                 writeln!(out, "{}", action_line(a, &scanned, wanted, true))?;
             }
@@ -994,7 +1032,13 @@ fn run_forward_steps(
     // resolves the worker role body from the *disk* hymn corpus — the corpus
     // must be settled before anything renders from it, or install is
     // non-idempotent. Non-fatal on error (matches sibling steps).
-    let starters = remove_legacy_starters(root, &plan.legacy_starters, &mut io::stdout())?;
+    let starters = remove_legacy_starters(
+        root,
+        &plan.legacy_starters,
+        &embedded_hymns(),
+        &embedded_seal_set()?,
+        &mut io::stdout(),
+    )?;
     outcomes.push((Leg::LegacyStarters, starters));
 
     // 3. Framework artefacts for the harness set, then npx delegation. One
@@ -1060,21 +1104,41 @@ fn legacy_removed_line(rel: &Path) -> String {
     )
 }
 
-/// Remove each unedited legacy starter (its `.md`, then its sidecar), printing
-/// one line per slot. The first error fails the leg.
+/// The progress line for one planned starter edited since planning: kept.
+fn legacy_kept_line(rel: &Path) -> String {
+    format!(
+        "  kept edited starter {} (changed since the install was planned)",
+        rel.display()
+    )
+}
+
+/// Remove each planned legacy starter (its `.md`, then its sidecar), printing
+/// one line per slot. Each is re-verified unedited against `embedded` just
+/// before removal: one edited since planning is kept and reported (RV-422 F-1).
+/// The first error fails the leg.
 fn remove_legacy_starters(
     root: &Path,
-    starters: &[StarterCopy],
+    planned: &[StarterCopy],
+    embedded: &[(String, Vec<u8>)],
+    sealed: &crate::hymns::SealSet,
     out: &mut impl Write,
 ) -> io::Result<LegOutcome> {
+    let bodies = framework_bodies(embedded);
     let mut touched = Vec::new();
-    for starter in starters {
+    for plan in planned {
+        let starter = match unedited_starter(plan.slot.clone(), plan.md.clone(), &bodies, sealed) {
+            Ok(Some(starter)) => starter,
+            Ok(None) => {
+                writeln!(out, "{}", legacy_kept_line(&root_relative(root, &plan.md)))?;
+                continue;
+            }
+            Err(e) => return removal_failed(&e, out),
+        };
         let files = std::iter::once(&starter.md).chain(&starter.sidecar);
         for path in files {
             if let Err(e) = fs::remove_file(path) {
                 let e = anyhow::Error::new(e).context(format!("remove {}", path.display()));
-                writeln!(out, "  legacy starter removal failed: {e:#}")?;
-                return Ok(LegOutcome::failed(&e));
+                return removal_failed(&e, out);
             }
             touched.push(Touched::under(root, path, Change::Removed));
         }
@@ -1086,6 +1150,12 @@ fn remove_legacy_starters(
         )?;
     }
     Ok(LegOutcome::Done(touched))
+}
+
+/// Report a legacy starter removal error; it fails the leg.
+fn removal_failed(e: &anyhow::Error, out: &mut impl Write) -> io::Result<LegOutcome> {
+    writeln!(out, "  legacy starter removal failed: {e:#}")?;
+    Ok(LegOutcome::failed(e))
 }
 
 /// Remove the directories `removed` leaves empty, innermost first, stopping at
@@ -1241,6 +1311,10 @@ const NOTHING_TO_COMMIT: &str = "Nothing to commit.";
 const NPX_REVIEW: &str = "also review .agents/skills/ (written by npx skills)";
 /// Runtime state: always outside the hint, whatever the manifest lists.
 const STATE_IGNORE: &str = ".doctrine/state/";
+/// The line above the hint's commands, one per line below it.
+const HINT_HEADER: &str = "Next:";
+/// A failed `git check-ignore` is disclosed; the hint then lists every path.
+const IGNORE_QUERY_FAILED: &str = "could not ask git which paths it ignores";
 
 /// After a recorded install, print the git commands that commit doctrine's own
 /// tracked writes — printed, never run. Not a git work tree: no hint (POL-002).
@@ -1254,19 +1328,25 @@ fn print_commit_hint(
         return Ok(());
     }
     let contract = ignore_contract(&gitignore_block(root, manifest, &[])?);
-    let mut paths = hint_paths(&touched(outcomes), &|p| {
+    let paths = hint_paths(&touched(outcomes), &|p| {
         contract.matched_path_or_any_parents(p, false).is_ignore()
     });
     // Asked after the gitignore leg ran: git must see the block this run wrote.
-    let git_ignored = git::ignored_among(root, &paths)?;
-    paths.retain(|p| !git_ignored.contains(p));
+    let ignored = git::ignored_among(root, &paths);
+    let (paths, disclosed) = drop_git_ignored(paths, ignored);
     stdout_line("")?;
+    if let Some(line) = disclosed {
+        stdout_line(&line)?;
+    }
     if paths.is_empty() {
         stdout_line(NOTHING_TO_COMMIT)?;
     } else {
         let cd = hint_cd(root);
         let msg = commit_message(&plan.tracked, &plan.binary);
-        stdout_line(&commit_hint(&paths, &msg, cd.as_deref()))?;
+        stdout_line(HINT_HEADER)?;
+        for command in commit_hint(&paths, &msg, cd.as_deref()) {
+            stdout_line(&format!("  {command}"))?;
+        }
     }
     if !delegate_targets(&plan.harnesses, &manifest.harness)
         .targets
@@ -1310,6 +1390,27 @@ fn hint_paths(touched: &[&Touched], ignored: &dyn Fn(&Path) -> bool) -> Vec<Path
     paths
 }
 
+/// PURE. `paths` less those git ignores (`ignored`, the `check-ignore`
+/// answer). A failed query never fails the recorded install: every path is
+/// kept and the returned line discloses it (RV-422 F-5).
+fn drop_git_ignored(
+    mut paths: Vec<PathBuf>,
+    ignored: Result<BTreeSet<PathBuf>, git::CaptureError>,
+) -> (Vec<PathBuf>, Option<String>) {
+    match ignored {
+        Ok(ignored) => {
+            paths.retain(|p| !ignored.contains(p));
+            (paths, None)
+        }
+        Err(e) => (
+            paths,
+            Some(format!(
+                "{IGNORE_QUERY_FAILED} ({e}); the hint lists every path"
+            )),
+        ),
+    }
+}
+
 /// PURE. The commit message: install when no tracked stamp existed before.
 fn commit_message(prior: &StampRead, binary: &semver::Version) -> String {
     match prior {
@@ -1320,31 +1421,40 @@ fn commit_message(prior: &StampRead, binary: &semver::Version) -> String {
     }
 }
 
-/// PURE. `s` quoted for a POSIX shell, unchanged when it needs no quoting.
+/// PURE. `s` quoted for both POSIX shells and nushell (RV-422 F-10), unchanged
+/// when it needs no quoting. Single quotes are literal in both; a `'` needs
+/// double quotes, literal in both only without `"`, `$`, `` ` ``, `\` or `!`.
+/// Text with both has no shared form and falls back to POSIX quoting.
 fn shell_quote(s: &str) -> std::borrow::Cow<'_, str> {
     let plain = |c: char| c.is_ascii_alphanumeric() || "_./@%+=:,-".contains(c);
     if !s.is_empty() && s.chars().all(plain) {
         std::borrow::Cow::Borrowed(s)
+    } else if !s.contains('\'') {
+        std::borrow::Cow::Owned(format!("'{s}'"))
+    } else if !s.contains(['"', '$', '`', '\\', '!']) {
+        std::borrow::Cow::Owned(format!("\"{s}\""))
     } else {
         std::borrow::Cow::Owned(format!("'{}'", s.replace('\'', "'\\''")))
     }
 }
 
-/// PURE. One line staging and committing exactly `paths`; the commit is
-/// path-limited, so work already staged elsewhere stays out (RV-421 F-10).
-fn commit_hint(paths: &[PathBuf], msg: &str, cd: Option<&Path>) -> String {
+/// PURE. The commands staging and committing exactly `paths`, one per line
+/// with no shell operator, so they paste into any shell (RV-422 F-10): `cd`
+/// first when the root is elsewhere. The commit is path-limited, so work
+/// already staged elsewhere stays out (RV-421 F-10).
+fn commit_hint(paths: &[PathBuf], msg: &str, cd: Option<&Path>) -> Vec<String> {
     let quoted: Vec<String> = paths
         .iter()
         .map(|p| shell_quote(&p.to_string_lossy()).into_owned())
         .collect();
     let pathspec = quoted.join(" ");
-    let cd = cd.map_or_else(String::new, |root| {
-        format!("cd {} && ", shell_quote(&root.to_string_lossy()))
-    });
-    format!(
-        "Next: {cd}git add -- {pathspec} && git commit -m {} -- {pathspec}",
-        shell_quote(msg)
-    )
+    cd.map(|root| format!("cd {}", shell_quote(&root.to_string_lossy())))
+        .into_iter()
+        .chain([
+            format!("git add -- {pathspec}"),
+            format!("git commit -m {} -- {pathspec}", shell_quote(msg)),
+        ])
+        .collect()
 }
 
 /// The line an incomplete install prints instead of recording its version.
@@ -1412,19 +1522,38 @@ fn write_stamps(
         Some(old) if old != stamped => Some(Change::Changed),
         Some(_) => None,
     };
-    if change.is_some() {
-        crate::fsutil::write_atomic(&tracked_path, stamped.as_bytes())?;
-    }
+    // The marker first, then the tracked stamp; a failed tracked write puts
+    // the marker back, so neither stamp advances alone (RV-422 F-2).
     let marker_path = root.join(INSTALL_MARKER_REL);
+    let prior_marker = fs::read(&marker_path).ok();
     if let Some(parent) = marker_path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("Failed to create {}", parent.display()))?;
     }
     crate::fsutil::write_atomic(&marker_path, marker.as_bytes())?;
+    if change.is_some()
+        && let Err(e) = crate::fsutil::write_atomic(&tracked_path, stamped.as_bytes())
+    {
+        return Err(
+            match restore_marker(&marker_path, prior_marker.as_deref()) {
+                Ok(()) => e,
+                Err(restore) => e.context(format!("restoring the marker also failed: {restore:#}")),
+            },
+        );
+    }
     Ok(change
         .map(|c| Touched::under(root, &tracked_path, c))
         .into_iter()
         .collect())
+}
+
+/// Put the local marker back as it was: `prior` bytes, or no file.
+fn restore_marker(marker_path: &Path, prior: Option<&[u8]>) -> anyhow::Result<()> {
+    match prior {
+        Some(bytes) => crate::fsutil::write_atomic(marker_path, bytes),
+        None => fs::remove_file(marker_path)
+            .with_context(|| format!("Failed to remove {}", marker_path.display())),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1834,14 +1963,13 @@ fn bake_worker_def(
 /// present file is preserved byte-for-byte — so a user-edited starter survives and
 /// a sidecar-less twin is completed. `create_dir_all(parent)` runs before
 /// every `write_atomic` because `write_atomic` (`fsutil.rs`) does not mkdir (F2).
-/// `dry_run` writes nothing. The user twin's self-`replaces` suppresses its
+/// The user twin's self-`replaces` suppresses its
 /// framework origin at resolve, so the slot single-emits (REV-019 REQ-322).
 pub(crate) fn project_starters(
     disk_root: &Path,
     embedded: &[(String, Vec<u8>)],
     sealed: &crate::hymns::SealSet,
     slots: &BTreeSet<crate::hymns::Slot>,
-    dry_run: bool,
 ) -> anyhow::Result<Vec<PathBuf>> {
     let embedded_by_slot = framework_bodies(embedded);
     let mut written = Vec::new();
@@ -1861,12 +1989,12 @@ pub(crate) fn project_starters(
         // separately: an absent `.md` is written and a present one preserved;
         // likewise the sidecar `.toml`, which backfills the legacy orphan twins.
         if !md.exists() {
-            project_write_if_absent(&md, body, dry_run)?;
+            project_write_if_absent(&md, body)?;
             written.push(md);
         }
 
         if !toml.exists() {
-            project_write_if_absent(&toml, starter_sidecar(slot).as_bytes(), dry_run)?;
+            project_write_if_absent(&toml, starter_sidecar(slot).as_bytes())?;
             written.push(toml);
         }
     }
@@ -1931,33 +2059,46 @@ pub(crate) fn identical_starters(
     sealed: &crate::hymns::SealSet,
 ) -> anyhow::Result<Vec<StarterCopy>> {
     let bodies = framework_bodies(embedded);
-    let read = |path: &Path| fs::read(path).with_context(|| format!("read {}", path.display()));
     let mut copies = Vec::new();
     for rel in disk_snippet_paths(disk_root) {
         let Ok(slot) = path_to_slot(&rel) else {
             continue;
         };
-        let Some(body) = bodies.get(&slot) else {
-            continue;
-        };
-        let md = disk_root.join(&rel);
-        if read(&md)? != *body {
-            continue;
+        if let Some(copy) = unedited_starter(slot, disk_root.join(&rel), &bodies, sealed)? {
+            copies.push(copy);
         }
-        let toml = md.with_extension("toml");
-        let sidecar = if toml.is_file() {
-            let default =
-                !sealed.0.contains(&slot) && read(&toml)? == starter_sidecar(&slot).as_bytes();
-            if !default {
-                continue;
-            }
-            Some(toml)
-        } else {
-            None
-        };
-        copies.push(StarterCopy { slot, md, sidecar });
     }
     Ok(copies)
+}
+
+/// The starter copy at `md` for `slot` when it still carries exactly what the
+/// retired starter leg projected (the predicate `identical_starters` documents);
+/// `None` when it was edited or `slot` has no framework body.
+fn unedited_starter(
+    slot: crate::hymns::Slot,
+    md: PathBuf,
+    bodies: &BTreeMap<crate::hymns::Slot, &[u8]>,
+    sealed: &crate::hymns::SealSet,
+) -> anyhow::Result<Option<StarterCopy>> {
+    let read = |path: &Path| fs::read(path).with_context(|| format!("read {}", path.display()));
+    let Some(body) = bodies.get(&slot) else {
+        return Ok(None);
+    };
+    if read(&md)? != *body {
+        return Ok(None);
+    }
+    let toml = md.with_extension("toml");
+    let sidecar = if toml.is_file() {
+        let default =
+            !sealed.0.contains(&slot) && read(&toml)? == starter_sidecar(&slot).as_bytes();
+        if !default {
+            return Ok(None);
+        }
+        Some(toml)
+    } else {
+        None
+    };
+    Ok(Some(StarterCopy { slot, md, sidecar }))
 }
 
 /// A slot's starter files under `disk_root`: `<band>/<label>.md` and its sidecar
@@ -2014,13 +2155,7 @@ pub(crate) fn customise_slot(root: &Path, slot_ref: &str) -> anyhow::Result<Cust
         .into_iter()
         .filter(|p| p.exists())
         .collect();
-    let written = project_starters(
-        &disk,
-        &embedded,
-        &sealed,
-        &BTreeSet::from([slot.clone()]),
-        false,
-    )?;
+    let written = project_starters(&disk, &embedded, &sealed, &BTreeSet::from([slot.clone()]))?;
     let relative = |paths: Vec<PathBuf>| paths.iter().map(|p| root_relative(root, p)).collect();
     Ok(Customised {
         slot,
@@ -2059,12 +2194,9 @@ fn customisable_slot(
     Ok(slot)
 }
 
-/// Write `bytes` to `dest` unless `dry_run`, first ensuring the parent dir exists
+/// Write `bytes` to `dest`, first ensuring the parent dir exists
 /// (`write_atomic` does not mkdir — F2). Errors are surfaced with per-file context.
-fn project_write_if_absent(dest: &Path, bytes: &[u8], dry_run: bool) -> anyhow::Result<()> {
-    if dry_run {
-        return Ok(());
-    }
+fn project_write_if_absent(dest: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("create parent dir {}", parent.display()))?;
@@ -2231,15 +2363,15 @@ fn read_gitignore(path: &Path) -> anyhow::Result<Option<String>> {
     }
 }
 
-/// Splice the managed block into the project `.gitignore` (or, under
-/// `dry_run`, print it and write nothing). A malformed file is left untouched
+/// Splice the managed block into the project `.gitignore` (or, as a
+/// `preview`, print it under that preview's heading and write nothing). A malformed file is left untouched
 /// and reported — the install still exits 0 (D2), but the leg is `Refused`, so
 /// the version is not recorded (RV-421 F-14).
 fn write_gitignore_block(
     root: &Path,
     manifest: &Manifest,
     planned: &[Action],
-    dry_run: bool,
+    preview: Option<Preview>,
 ) -> anyhow::Result<LegOutcome> {
     let block = gitignore_block(root, manifest, planned)?;
     let path = root.join(GITIGNORE);
@@ -2249,8 +2381,8 @@ fn write_gitignore_block(
         existing.as_deref().unwrap_or(""),
         &block,
     ) {
-        Ok(_) if dry_run => {
-            writeln!(out, "\nGitignore block (not written under --dry-run):")?;
+        Ok(_) if let Some(preview) = preview => {
+            writeln!(out, "\n{}", preview.gitignore())?;
             for line in &block {
                 writeln!(out, "  {line}")?;
             }
@@ -3165,11 +3297,10 @@ impl Scan {
 }
 
 /// The header above the convergence report block.
-fn report_header(scope: Scope, dry_run: bool) -> String {
-    match (dry_run, scope) {
-        (true, _) => "Ownership plan (not executed under --dry-run):".to_string(),
-        (false, Scope::Project) => "framework artefacts (project):".to_string(),
-        (false, Scope::Global) => "framework artefacts (global):".to_string(),
+const fn report_header(scope: Scope) -> &'static str {
+    match scope {
+        Scope::Project => "framework artefacts (project):",
+        Scope::Global => "framework artefacts (global):",
     }
 }
 
@@ -3329,7 +3460,7 @@ fn converge(
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
     let (scanned, actions) = survey(cx, roots, registry, wanted)?;
-    writeln!(out, "{}", report_header(cx.scope, false))?;
+    writeln!(out, "{}", report_header(cx.scope))?;
     execute(cx, wanted, &scanned, &actions, out)
 }
 
@@ -3479,38 +3610,55 @@ fn owns_common_dir(candidate: &Path, common: &Path) -> bool {
 }
 
 /// Where the main worktree's doctrine root is, when `root` is a linked worktree
-/// (`git rev-parse --git-dir` differs from `--git-common-dir`): `None` for an
-/// ordinary checkout, outside git, or when git is unavailable (POL-002);
-/// otherwise [`MarkerSource::Main`] or, when the main root cannot be located
-/// (e.g. `git init --separate-git-dir`), [`MarkerSource::Unlocated`].
+/// (`git rev-parse --git-dir` differs from `--git-common-dir`). See
+/// [`locate_main`], which reads the git answers this asks for.
+fn linked_main_root(root: &Path) -> Option<MarkerSource> {
+    let dirs = git::git_opt(root, &["rev-parse", "--git-dir", "--git-common-dir"]);
+    locate_main(root, dirs, || git::toplevel_and_prefix(root))
+}
+
+/// `None` for a confirmed ordinary checkout or a directory outside git;
+/// otherwise [`MarkerSource::Main`], or [`MarkerSource::Unlocated`] when the
+/// main root cannot be located — a layout such as `git init
+/// --separate-git-dir`, or a lookup that could not finish (a failed git query,
+/// canonicalisation or prefix query), which is disclosed rather than read as
+/// "not installed" (STD-003, RV-422 F-3). `dirs` is the `rev-parse --git-dir
+/// --git-common-dir` answer; `prefix` asks for the doctrine root's offset.
 ///
 /// The main root is the common dir's parent, accepted only when its `.git`
 /// really is the common dir. `git::primary_worktree` is deliberately not used:
 /// under a separate git dir it can name a path that is not a checkout. The
 /// doctrine root's offset inside the repo (`--show-prefix`) is carried over.
-fn linked_main_root(root: &Path) -> Option<MarkerSource> {
-    let dirs = git::git_opt(root, &["rev-parse", "--git-dir", "--git-common-dir"]).ok()??;
+fn locate_main(
+    root: &Path,
+    dirs: Result<Option<String>, git::CaptureError>,
+    prefix: impl FnOnce() -> Result<Option<(PathBuf, PathBuf)>, git::CaptureError>,
+) -> Option<MarkerSource> {
+    let dirs = match dirs {
+        Ok(None) => return None,
+        Ok(Some(dirs)) => dirs,
+        Err(_) => return Some(MarkerSource::Unlocated),
+    };
     let mut lines = dirs.lines();
-    let git_dir = crate::worktree::resolve_common_dir(root, lines.next()?).ok()?;
-    let common = crate::worktree::resolve_common_dir(root, lines.next()?).ok()?;
+    let resolve =
+        |line: Option<&str>| line.and_then(|l| crate::worktree::resolve_common_dir(root, l).ok());
+    let (Some(git_dir), Some(common)) = (resolve(lines.next()), resolve(lines.next())) else {
+        return Some(MarkerSource::Unlocated);
+    };
     if git_dir == common {
         return None;
     }
     let main = common
         .parent()
         .filter(|candidate| owns_common_dir(candidate, &common));
-    Some(match main {
-        Some(main) => {
-            let prefix = git::toplevel_and_prefix(root)
-                .ok()
-                .flatten()
-                .map(|(_top, prefix)| prefix)
-                .unwrap_or_default();
-            // Re-collect components: joining an empty (or `/`-terminated)
-            // prefix leaves a trailing separator the advisory would print.
-            MarkerSource::Main(main.join(prefix).components().collect())
-        }
-        None => MarkerSource::Unlocated,
+    let Some(main) = main else {
+        return Some(MarkerSource::Unlocated);
+    };
+    Some(match prefix() {
+        // Re-collect components: joining an empty (or `/`-terminated) prefix
+        // leaves a trailing separator the advisory would print.
+        Ok(Some((_top, prefix))) => MarkerSource::Main(main.join(prefix).components().collect()),
+        Ok(None) | Err(_) => MarkerSource::Unlocated,
     })
 }
 
@@ -4035,18 +4183,14 @@ mod tests_converge {
     }
 
     #[test]
-    fn report_header_names_scope_or_dry_run() {
+    fn report_header_names_scope() {
         assert_eq!(
-            report_header(Scope::Project, false),
+            report_header(Scope::Project),
             "framework artefacts (project):"
         );
         assert_eq!(
-            report_header(Scope::Global, false),
+            report_header(Scope::Global),
             "framework artefacts (global):"
-        );
-        assert_eq!(
-            report_header(Scope::Project, true),
-            "Ownership plan (not executed under --dry-run):"
         );
     }
 
@@ -4952,7 +5096,6 @@ mod tests_hymns {
             &worker_embedded(),
             &no_seal(),
             &slot_set(worker_slot()),
-            false,
         )
         .unwrap();
         let sidecar = fs::read_to_string(root.join("role").join("worker.toml")).unwrap();
@@ -4977,7 +5120,6 @@ mod tests_hymns {
             &worker_embedded(),
             &no_seal(),
             &slot_set(worker_slot()),
-            false,
         )
         .unwrap();
 
@@ -5006,7 +5148,6 @@ mod tests_hymns {
             &worker_embedded(),
             &no_seal(),
             &slot_set(worker_slot()),
-            false,
         )
         .unwrap();
 
@@ -5034,7 +5175,6 @@ mod tests_hymns {
             &worker_embedded(),
             &no_seal(),
             &slot_set(worker_slot()),
-            false,
         )
         .unwrap();
 
@@ -5056,14 +5196,8 @@ mod tests_hymns {
         let root = dir.path();
         let seal = crate::hymns::SealSet(BTreeSet::from([worker_slot()]));
 
-        let written = project_starters(
-            root,
-            &worker_embedded(),
-            &seal,
-            &slot_set(worker_slot()),
-            false,
-        )
-        .unwrap();
+        let written =
+            project_starters(root, &worker_embedded(), &seal, &slot_set(worker_slot())).unwrap();
 
         assert!(written.is_empty(), "sealed slot ⇒ nothing written");
         assert!(!root.join("role").join("worker.md").exists());
@@ -5071,24 +5205,6 @@ mod tests_hymns {
     }
 
     // VT-6: dry_run ⇒ nothing written for either file.
-    #[test]
-    fn project_starters_dry_run_writes_nothing() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-
-        project_starters(
-            root,
-            &worker_embedded(),
-            &no_seal(),
-            &slot_set(worker_slot()),
-            true,
-        )
-        .unwrap();
-
-        assert!(!root.join("role").join("worker.md").exists());
-        assert!(!root.join("role").join("worker.toml").exists());
-    }
-
     // VT-7: projecting into an EMPTY disk root (band dir absent) writes `.md` +
     // sidecar, creating the parent — the create_dir_all guard against
     // write_atomic's no-mkdir failure (F2). Fails without the create_dir_all.
@@ -5103,7 +5219,6 @@ mod tests_hymns {
             &worker_embedded(),
             &no_seal(),
             &slot_set(worker_slot()),
-            false,
         )
         .unwrap();
 
@@ -6547,7 +6662,7 @@ mod tests {
         );
         // The third base member, .gitignore, lands at the project root as the
         // managed block (written after the forward steps, not by the plan).
-        write_gitignore_block(dir.path(), &manifest, &[], false).unwrap();
+        write_gitignore_block(dir.path(), &manifest, &[], None).unwrap();
         assert!(dir.path().join(".gitignore").is_file());
         // The seed gate: no memory entity was created on a base install.
         assert!(
@@ -6908,8 +7023,14 @@ mod tests {
             sidecar: None,
         };
         let mut out = Vec::new();
-        let outcome =
-            remove_legacy_starters(root, std::slice::from_ref(&worker), &mut out).unwrap();
+        let outcome = remove_legacy_starters(
+            root,
+            std::slice::from_ref(&worker),
+            &embedded_hymns(),
+            &embedded_seal_set().unwrap(),
+            &mut out,
+        )
+        .unwrap();
         assert_eq!(
             outcome,
             LegOutcome::Done(vec![Touched::new(
@@ -6928,13 +7049,48 @@ mod tests {
 
         // Already gone: the leg fails and says so.
         let mut out = Vec::new();
-        let outcome = remove_legacy_starters(root, &[worker], &mut out).unwrap();
+        let outcome = remove_legacy_starters(
+            root,
+            &[worker],
+            &embedded_hymns(),
+            &embedded_seal_set().unwrap(),
+            &mut out,
+        )
+        .unwrap();
         assert!(matches!(outcome, LegOutcome::Failed(_)), "{outcome:?}");
         assert!(
             String::from_utf8(out)
                 .unwrap()
                 .contains("legacy starter removal failed")
         );
+    }
+
+    #[test]
+    fn legacy_removal_keeps_a_starter_edited_after_planning() {
+        let dir = legacy_project(None);
+        let root = dir.path();
+        let manifest = load_manifest().unwrap();
+        let planned = test_plan(&manifest, root, &project_args()).legacy_starters;
+        assert_eq!(planned.len(), 1, "{planned:?}");
+        let md = hymns_disk_root(root).join("role/worker.md");
+        let mut edited = fs::read(&md).unwrap();
+        edited.extend_from_slice(b"\nUSER EDIT\n");
+        fs::write(&md, &edited).unwrap();
+
+        let mut out = Vec::new();
+        let outcome = remove_legacy_starters(
+            root,
+            &planned,
+            &embedded_hymns(),
+            &embedded_seal_set().unwrap(),
+            &mut out,
+        )
+        .unwrap();
+        assert_eq!(outcome, LegOutcome::done());
+        assert_eq!(fs::read(&md).unwrap(), edited, "edited starter kept");
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains("kept edited starter"), "{out}");
+        assert!(!out.contains("removed unedited starter"), "{out}");
     }
 
     // --- leg outcomes and stamps (SL-282 PHASE-03) ---
@@ -7068,6 +7224,46 @@ mod tests {
             tracked.contains("installed-version = \"9.8.7\""),
             "{tracked}"
         );
+    }
+
+    /// A stamp project with `doctrine.toml` at `toml` and an older marker.
+    fn stamped_project(toml: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let toml_path = dir.path().join(crate::config_file::DOCTRINE_TOML);
+        let marker_path = dir.path().join(INSTALL_MARKER_REL);
+        fs::create_dir_all(marker_path.parent().unwrap()).unwrap();
+        fs::write(&toml_path, toml).unwrap();
+        (dir, toml_path, marker_path)
+    }
+
+    #[test]
+    fn a_failed_marker_write_leaves_the_tracked_stamp_alone() {
+        let before = "[install]\ninstalled-version = \"1.0.0\"\n";
+        let (dir, toml_path, marker_path) = stamped_project(before);
+        fs::create_dir_all(&marker_path).unwrap(); // a directory: the write fails
+        assert!(write_stamps(dir.path(), &semver::Version::new(9, 8, 7), &[]).is_err());
+        assert_eq!(fs::read_to_string(&toml_path).unwrap(), before);
+    }
+
+    #[test]
+    fn a_failed_tracked_write_restores_the_marker() {
+        use std::os::unix::fs::PermissionsExt;
+        let before = "[install]\ninstalled-version = \"1.0.0\"\n";
+        for prior in [Some("version = \"1.0.0\"\nharnesses = []\n"), None] {
+            let (dir, toml_path, marker_path) = stamped_project(before);
+            if let Some(text) = prior {
+                fs::write(&marker_path, text).unwrap();
+            }
+            // `.doctrine/` read-only: the tracked stamp's atomic write fails,
+            // while the marker's own directory stays writable.
+            let doctrine = toml_path.parent().unwrap();
+            fs::set_permissions(doctrine, fs::Permissions::from_mode(0o555)).unwrap();
+            let result = write_stamps(dir.path(), &semver::Version::new(9, 8, 7), &[]);
+            fs::set_permissions(doctrine, fs::Permissions::from_mode(0o755)).unwrap();
+            assert!(result.is_err(), "{result:?}");
+            assert_eq!(fs::read_to_string(&toml_path).unwrap(), before);
+            assert_eq!(fs::read_to_string(&marker_path).ok().as_deref(), prior);
+        }
     }
 
     // --- the one prompt (SL-282 PHASE-05) ---
@@ -7361,6 +7557,7 @@ mod tests {
         assert_eq!(paths, vec![PathBuf::from("b"), PathBuf::from("a")]);
     }
 
+    /// RV-422 F-10: every quoting is valid in POSIX shells and nushell.
     #[test]
     fn shell_quote_leaves_plain_words_and_quotes_the_rest() {
         assert_eq!(
@@ -7368,21 +7565,44 @@ mod tests {
             ".doctrine/doctrine.toml"
         );
         assert_eq!(shell_quote("my notes.md"), "'my notes.md'");
-        assert_eq!(shell_quote("it's"), r"'it'\''s'");
+        assert_eq!(shell_quote("it's"), "\"it's\"");
+        assert_eq!(shell_quote("$it's"), r"'$it'\''s'", "no shared form: POSIX");
         assert_eq!(shell_quote(""), "''");
     }
 
+    /// RV-422 F-10: one command per line, no shell operator; the commit is
+    /// limited to the paths it adds (RV-421 F-10).
     #[test]
     fn the_commit_is_limited_to_the_paths_it_adds() {
         let paths = vec![PathBuf::from("CLAUDE.md"), PathBuf::from("a b")];
         assert_eq!(
             commit_hint(&paths, "chore: install doctrine 1.2.3", None),
-            "Next: git add -- CLAUDE.md 'a b' && git commit -m 'chore: install doctrine 1.2.3' -- CLAUDE.md 'a b'"
+            vec![
+                "git add -- CLAUDE.md 'a b'",
+                "git commit -m 'chore: install doctrine 1.2.3' -- CLAUDE.md 'a b'",
+            ]
         );
-        assert!(
-            commit_hint(&paths, "m", Some(Path::new("/my root")))
-                .starts_with("Next: cd '/my root' && git add -- ")
+        assert_eq!(
+            commit_hint(&paths, "m", Some(Path::new("/my root")))[0],
+            "cd '/my root'"
         );
+    }
+
+    /// RV-422 F-5: a failed ignore query is disclosed and the hint unfiltered.
+    #[test]
+    fn a_failed_ignore_query_lists_every_path_and_says_so() {
+        let paths = vec![PathBuf::from("CLAUDE.md"), PathBuf::from("x")];
+        let ignored = BTreeSet::from([PathBuf::from("x")]);
+        assert_eq!(
+            drop_git_ignored(paths.clone(), Ok(ignored)),
+            (vec![PathBuf::from("CLAUDE.md")], None)
+        );
+        let (kept, disclosed) =
+            drop_git_ignored(paths.clone(), Err(git::CaptureError::Git("boom".into())));
+        assert_eq!(kept, paths);
+        let disclosed = disclosed.unwrap();
+        assert!(disclosed.starts_with(IGNORE_QUERY_FAILED), "{disclosed}");
+        assert!(disclosed.contains("boom"), "{disclosed}");
     }
 
     #[test]
@@ -7744,6 +7964,36 @@ mod tests_marker {
         assert_eq!(
             read_install_marker(&linked),
             (StampRead::Absent, MarkerSource::Unlocated)
+        );
+    }
+
+    /// RV-422 F-3 (STD-003): a lookup that could not finish is disclosed as
+    /// `Unlocated`, never read as a confirmed ordinary checkout.
+    #[test]
+    fn a_failed_linked_worktree_lookup_is_unlocated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let failed = || git::CaptureError::Git("spawn".into());
+        let no_prefix = || Ok(None);
+        for dirs in [
+            Err(failed()),
+            Ok(Some("only-one-line".to_string())),
+            Ok(Some("/no/such/git-dir\n/no/such/common".to_string())),
+        ] {
+            assert_eq!(
+                locate_main(root, dirs, no_prefix),
+                Some(MarkerSource::Unlocated)
+            );
+        }
+        // A confirmed non-git directory keeps its plain reading.
+        assert_eq!(locate_main(root, Ok(None), no_prefix), None);
+
+        // A real linked worktree whose prefix query fails.
+        let (_tmp, _primary, linked) = primary_and_linked();
+        let dirs = git::git_opt(&linked, &["rev-parse", "--git-dir", "--git-common-dir"]);
+        assert_eq!(
+            locate_main(&linked, dirs, || Err(failed())),
+            Some(MarkerSource::Unlocated)
         );
     }
 

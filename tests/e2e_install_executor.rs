@@ -158,6 +158,34 @@ fn a_failed_boot_refresh_blocks_both_stamps() {
     assert_unstamped(root, &out);
 }
 
+/// RV-422 F-7 control: malformed settings leave the hooks unwritten (the
+/// manual-repair fallback prints); that refused wiring blocks both stamps.
+#[test]
+fn malformed_claude_settings_block_both_stamps() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let settings = root.join(".claude/settings.json");
+    fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    fs::write(&settings, "{ not json").unwrap();
+
+    let out = install(root, &[]);
+
+    assert!(out.contains("add this hook manually"), "{out}");
+    assert!(
+        out.contains("install incomplete: boot wiring; version not recorded"),
+        "{out}"
+    );
+    assert_eq!(fs::read_to_string(&settings).unwrap(), "{ not json");
+    assert!(
+        root.join("CLAUDE.md").is_file(),
+        "control: the boot leg ran and wired the import"
+    );
+    assert_unstamped(root, &out);
+}
+
 #[test]
 fn malformed_gitignore_markers_block_both_stamps_and_exit_zero() {
     if common::under_worker_marker() {

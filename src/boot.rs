@@ -3189,7 +3189,41 @@ pub(crate) struct WireReport {
     pub(crate) harnesses: Vec<HarnessWire>,
 }
 
-/// One harness's refresh: the files it wrote, or the error it printed.
+/// Why a harness's wiring did not finish though its refresh ran: the files it
+/// refused to touch (each fallback already printed its manual repair).
+const WIRING_REFUSED: &str = "left untouched";
+
+/// PURE. The files `report` refused to wire: a settings or MCP file it could
+/// not interpret (the manual-repair fallback), or a foreign file squatting a
+/// generated extension. In report order, de-duplicated (RV-422 F-7).
+fn refused_wiring(report: &RefreshReport) -> Vec<String> {
+    let fallbacks = report
+        .hooks
+        .iter()
+        .chain([&report.mcp])
+        .filter_map(|o| match o {
+            RefreshOutcome::PrintedFallback { hook_file, .. } => Some((*hook_file).to_string()),
+            _ => None,
+        });
+    let foreign = [
+        (&report.extension, PI_EXT_INDEX.file_name),
+        (&report.mcp_extension, PI_EXT_MCP.file_name),
+        (&report.surface_extension, PI_EXT_SURFACE.file_name),
+    ]
+    .into_iter()
+    .filter(|(o, _)| **o == ExtOutcome::SkippedForeign)
+    .map(|(_, name)| format!("{PI_EXT_DIR_REL}/{name}"));
+    let mut refused = Vec::new();
+    for file in fallbacks.chain(foreign) {
+        if !refused.contains(&file) {
+            refused.push(file);
+        }
+    }
+    refused
+}
+
+/// One harness's refresh: the files it wrote, or why it did not finish (the
+/// error it printed, or the files it refused to touch).
 pub(crate) struct HarnessWire {
     pub(crate) harness: Harness,
     pub(crate) result: Result<Vec<Touched>, String>,
@@ -3257,6 +3291,7 @@ pub(crate) fn apply_wire(
                 } else {
                     refresh_touched(h, &report)
                 };
+                let refused = refused_wiring(&report);
                 // The scope announcement and the sweep rider come FIRST (EX-7):
                 // an operator reading "evicted 2 stale entries" needs to already
                 // know which file doctrine chose and which key changes it.
@@ -3433,7 +3468,11 @@ pub(crate) fn apply_wire(
                 )?;
                 wired.harnesses.push(HarnessWire {
                     harness: h.clone(),
-                    result: Ok(touched),
+                    result: if refused.is_empty() {
+                        Ok(touched)
+                    } else {
+                        Err(format!("{WIRING_REFUSED} {}", refused.join(", ")))
+                    },
                 });
             }
             Err(e) => {
@@ -7687,6 +7726,26 @@ env_vars = ["DOCTRINE_BIN"]
         }
         let failed = report.touched().unwrap_err();
         assert!(failed.starts_with("claude: "), "{failed}");
+    }
+
+    /// RV-422 F-7: a malformed settings file prints its manual repair, and the
+    /// harness's wiring reads as unfinished — never as done.
+    #[test]
+    fn apply_wire_reports_a_malformed_settings_fallback_as_unfinished() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let settings = root.join(SETTINGS_PROJECT_REL);
+        fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        fs::write(&settings, "{ not json").unwrap();
+
+        let report = apply_wire(root, Path::new(FAKE_EXEC), &[Harness::Claude], false).unwrap();
+
+        let unfinished = report.touched().unwrap_err();
+        assert_eq!(
+            unfinished,
+            format!("claude: {WIRING_REFUSED} {SETTINGS_PROJECT_REL}")
+        );
+        assert_eq!(fs::read_to_string(&settings).unwrap(), "{ not json");
     }
 
     #[test]
