@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a143f8-d47d-78e0-8d9b-eee77bc3bba3"
+recorded_at = "2026-10-16T09:09:03.229917687Z"
+kind = "friction"
+summary = "<capsule-worker; SL-281> managed block lists a tracked path"
+detail = "/.pi/agents/dispatch-worker.md is tracked in this repo but the block gitignores it; harmless but inconsistent."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

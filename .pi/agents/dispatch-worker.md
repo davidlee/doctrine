@@ -1,1 +1,1 @@
-../../.doctrine/agents/codex/dispatch-worker.md
+../../.doctrine/agents/pi/dispatch-worker.md

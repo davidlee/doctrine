@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a143f3-5826-77b3-80eb-a2446b959847"
+recorded_at = "2026-10-16T09:03:03.718575005Z"
+kind = "friction"
+summary = "<capsule-phase-planner; SL-281> slice phases printed only Phases up to date; show SL-281 omits phase criteria, so the planner read plan.toml raw"
+detail = "Reported by the PHASE-06 planner hand-back: slice phases printed only Phases up to date; show SL-281 omits phase criteria, so the planner read plan.toml raw"
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

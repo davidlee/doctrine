@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a143f3-5829-7cf0-8e54-c95d071d240f"
+recorded_at = "2026-10-16T09:03:03.72102285Z"
+kind = "friction"
+summary = "<capsule-phase-planner; SL-281> phase-06.md skeleton carries a Reading list HTML comment that adds no value"
+detail = "Reported by the PHASE-06 planner hand-back: phase-06.md skeleton carries a Reading list HTML comment that adds no value"
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

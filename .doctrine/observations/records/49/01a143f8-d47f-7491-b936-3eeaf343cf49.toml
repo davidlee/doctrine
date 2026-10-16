@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a143f8-d47f-7491-b936-3eeaf343cf49"
+recorded_at = "2026-10-16T09:09:03.231925087Z"
+kind = "friction"
+summary = "<capsule-worker; SL-281> phase sheet asks worker to fill Findings in runtime state the capsule contract forbids it to write"
+detail = "Worker put findings in the hand-back instead."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

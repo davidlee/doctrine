@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a143f8-d47b-7522-a676-9da212e292ad"
+recorded_at = "2026-10-16T09:09:03.227711426Z"
+kind = "friction"
+summary = "<capsule-worker; SL-281> install universal-skills step clones from GitHub via npx"
+detail = "npx skills add davidlee/doctrine cloned the remote repo and overwrote .agents/skills/*, so those copies come from GitHub rather than the local build and need network."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

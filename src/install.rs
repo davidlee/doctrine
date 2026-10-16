@@ -4905,6 +4905,30 @@ mod tests {
         );
     }
 
+    /// SL-281 PHASE-06 (VT-1): this repo dogfoods the managed block. Its
+    /// `.gitignore` carries every static block line — markers, runtime entries
+    /// and root globs — as `render_block` produces them. Per-link lines depend
+    /// on what is installed, so they are left out (empty `links`).
+    #[test]
+    fn repo_gitignore_contains_static_block_entries() {
+        let manifest = load_manifest().unwrap();
+        let gitignore =
+            fs::read_to_string(crate::test_support::repo_root().join(".gitignore")).unwrap();
+        let present: BTreeSet<&str> = gitignore.lines().collect();
+        let missing: Vec<String> = crate::install_ownership::render_block(
+            &manifest.gitignore.entries,
+            &manifest.framework.roots,
+            &[],
+        )
+        .into_iter()
+        .filter(|line| !present.contains(line.as_str()))
+        .collect();
+        assert!(
+            missing.is_empty(),
+            "repo .gitignore lacks static managed-block lines (run `doctrine install`): {missing:#?}"
+        );
+    }
+
     // ---------------------------------------------------------------
     // execution
     // ---------------------------------------------------------------

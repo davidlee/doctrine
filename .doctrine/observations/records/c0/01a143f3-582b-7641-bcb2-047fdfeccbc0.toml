@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a143f3-582b-7641-bcb2-047fdfeccbc0"
+recorded_at = "2026-10-16T09:03:03.723277302Z"
+kind = "friction"
+summary = "<capsule-phase-planner; SL-281> slice research drift advisory flags deliberately authored plan.toml and design.md"
+detail = "Reported by the PHASE-06 planner hand-back: slice research drift advisory flags deliberately authored plan.toml and design.md"
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
