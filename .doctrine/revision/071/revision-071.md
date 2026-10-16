@@ -80,9 +80,14 @@ unchanged.
 
 ### D7
 
-**After.** append: "An explicit `--agent` harness leg is integration, not
-default projection: it installs that harness's full agent-def set and links,
-which the base projection never does (DEC-372)."
+**After.** append: "An explicit `--agent` harness leg, or a detected harness
+the user confirms (at the prompt or under `-y`), is integration, not default
+projection: it installs that harness's full agent-def set and links, which the
+base projection never does (DEC-372)."
+
+*Amended at reconcile (RV-420 F-8): "or a detected harness the user confirms"
+added, on the user's 2026-10-16 choice; DEC-372 carries the matching
+amendment.*
 
 ### Manifest section — `[gitignore].entries`
 

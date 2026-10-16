@@ -1,7 +1,7 @@
 id      = 71
 slug    = "install-converges-framework-owned-artefacts"
 title   = "Install converges framework-owned artefacts"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
+status = "started"
 approval = "approved"
 updated = "2026-10-16"
 tags    = []
