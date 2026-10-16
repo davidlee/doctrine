@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a145c4-6e71-7562-8d59-1c47e010c353"
+recorded_at = "2026-10-16T17:31:03.665408174Z"
+kind = "friction"
+summary = "capsule-worker SL-282 PHASE-06: test reading the live .doctrine/doctrine.toml via include_str! broke once dogfood stamped it"
+detail = "install_config::stamping_the_live_file_only_appends assumed any [install] in the live file was its own test stamp; the dogfood commit 2caef5980 made the gate red until the test was loosened. Also: doctrine check gate exceeds the 2-minute default Bash timeout; git_stdin treated check-ignore exit 1 as error, forcing a split."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

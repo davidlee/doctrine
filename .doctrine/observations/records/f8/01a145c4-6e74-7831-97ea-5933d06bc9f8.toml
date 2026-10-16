@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a145c4-6e74-7831-97ea-5933d06bc9f8"
+recorded_at = "2026-10-16T17:31:03.668588524Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-282 PHASE-06: slice phase completed warns boundary spans 3 commits though all are the phase's own"
+detail = "A multi-commit phase (sweep, dogfood install, defect fix) triggers the foreign-commit attribution warning with no foreign commit present."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
