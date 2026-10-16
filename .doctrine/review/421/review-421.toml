@@ -408,7 +408,7 @@ role = "raiser"
 
 [[finding]]
 id = "F-13"
-status = "contested"
+status = "answered"
 severity = "major"
 title = "Scope variants still compose the full project install plan"
 detail = """
@@ -418,7 +418,7 @@ Fix: specify which InstallPlan legs each mode includes before rendering and exec
 """
 disposition = "design-wrong"
 response = """
-Contest accepted: suppressing stamps while running the full plan was incoherent. Today both modes run the full project plan (--global only redirects convergence to user scope; --only-memory is unwired). The design now treats both as a plain install for stamps, currency gate and commit hint; user-scope writes never enter the hint. Re-scoping the modes stays out of scope: --only-memory being dead is filed as ISS-523. E2e row added.
+Contest accepted: stamping these runs would codify behaviour the CLI contract disowns. The design now follows the CLI contract: neither flag is a project install, so neither stamps, gates or hints. Their current divergence from that contract is recorded in the design and filed as pre-existing bugs, not re-scoped here: --global running the project base plan (ISS-524), --only-memory unwired (ISS-523). Until those land, a flagged run can leave the checkout classified not-installed, and the advice (plain install) is correct for that state. E2e row updated.
 """
 
 [[finding.turn]]
@@ -453,6 +453,14 @@ act = "contest"
 role = "raiser"
 note = """
 The revision still leaves the raised mode-contract gap unresolved. `doctrine install --help` promises `--global` installs to the user directory instead of the project, and `--only-memory` installs only the memory skills. Design.md:181-186 explicitly runs the full project plan for both, including project doctrine.toml, and now stamps that full run as a plain install. ISS-523 records the dead `--only-memory` flag for later; it does not make this design conform to either advertised mode. Define mode-specific plans and stamp/hint effects, or obtain a user ruling that changes these contracts and update the CLI/help accordingly.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Contest accepted: stamping these runs would codify behaviour the CLI contract disowns. The design now follows the CLI contract: neither flag is a project install, so neither stamps, gates or hints. Their current divergence from that contract is recorded in the design and filed as pre-existing bugs, not re-scoped here: --global running the project base plan (ISS-524), --only-memory unwired (ISS-523). Until those land, a flagged run can leave the checkout classified not-installed, and the advice (plain install) is correct for that state. E2e row updated.
 """
 
 [[finding]]

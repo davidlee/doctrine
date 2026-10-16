@@ -178,14 +178,17 @@ Next: git add -- .gitignore .doctrine/doctrine.toml CLAUDE.md AGENTS.md .claude/
 
 ### Scope variants
 
-`--global` and `--only-memory` keep today's leg set; this slice does not
-re-scope them. Today both run the full project plan: `--global` still runs the
-base plan (including the project `doctrine.toml`) and only redirects
-convergence to the user scope, and `--only-memory` is parsed but unwired
-(`src/install.rs:189-201`; ISS-523). Since the project is installed either way,
-both get the same stamps, currency gate and commit hint as a plain install.
-User-scope writes under `--global` are outside the project and never enter the
-commit hint.
+The CLI contract says `--global` installs to the user directory instead of the
+project and `--only-memory` installs only the memory skills. Neither is a
+project install, so neither writes stamps, runs the currency gate or prints a
+commit hint; the overview renders whatever legs the plan holds.
+
+Today both diverge from that contract: `--global` still runs the project base
+plan (`src/install.rs:207-236`; ISS-524) and `--only-memory` is unwired, so it
+runs a full install (`src/install.rs:189-201`; ISS-523). This slice does not
+re-scope either mode. Until they are fixed, a run under either flag can write
+project files and leave the checkout classified as not installed; the advice
+(run a plain `doctrine install`) is correct for that state.
 
 <!-- doctrine:section sec-currency -->
 ## Version currency
@@ -488,7 +491,7 @@ E2e (built binary, `tests/common`):
   no stamps.
 - `--allow-downgrade` with only the local marker newer: tracked stamp absent →
   written as B; tracked older → rewritten to B; tracked newer → kept.
-- `--global` and `--only-memory`: stamps and commit hint as a plain install.
+- `--global` and `--only-memory`: no stamps, no currency gate, no commit hint.
 - install → `prompt customise role/worker` → install: both files remain.
 - legacy removal does not run once `installed-version` exists.
 
