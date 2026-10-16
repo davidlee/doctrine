@@ -51,3 +51,13 @@ PHASE-01 model + stores ──► PHASE-02 sites + guard
   reconcile, not in a phase.
 - Shared files: `src/install.rs` is touched by PHASE-01 (marker reader),
   03, 04, 05; serial order avoids conflicts.
+- Revision 1 (plan self-review): PHASE-02 gains EX-6 (golden suites that run
+  `prompt resolve` on marker-less fixtures will gain an advisory line; adjust
+  them deliberately) and EX-7 (status calls the reader from `run_status`, the
+  command-tier entry, so no new layering violation). PHASE-04 gains EX-7
+  (tests seeded through `[hymns].expose` move to `prompt customise`).
+- Watch: PHASE-03 is the largest phase (resolver, `wire` split, leg outcomes,
+  stamps, downgrade gate). If its phase sheet exceeds one sitting, split the
+  downgrade gate into an appended phase rather than renumbering.
+- Interactive e2e drives the binary through piped stdin; `prompt_confirm`
+  reads a plain line, so no TTY is required.

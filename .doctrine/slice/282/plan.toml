@@ -65,6 +65,8 @@ exit_criteria = [
   { id = "EX-3", text = "RV-421 F-1 (control): in a linked worktree of an installed checkout, prompt resolve emits no checkout advisory; the candidate that reports CheckoutNotInstalled for a marker-less fork fails the e2e." },
   { id = "EX-4", text = "plan_boot_import: current guard → Present (no write); a prior guard → replaced; bare `@` line → upgraded; no block → created." },
   { id = "EX-5", text = "`doctrine check gate` green." },
+  { id = "EX-6", text = "Existing suites that run prompt resolve / boot / status on uninstalled fixtures (e.g. tests/e2e_prompt_resolve_golden.rs) are adjusted deliberately: fixtures modelling an installed checkout write a marker; exact-output assertions are updated, never loosened to `contains`." },
+  { id = "EX-7", text = "The currency reader is called from command-tier code only (status from `status::run_status`); `doctrine check` layering passes with no new accepted_violation." },
 ]
 verification = [
   { id = "VT-1", expects = "currency matrix e2e across prompt resolve / boot / status --json, incl. linked-worktree rows (RV-421 F-1)", test_file = "tests/e2e_install_currency.rs", keywords = ["prompt", "resolve", "status", "--json", "linked_fork", "CheckoutNotInstalled"], waived = false },
@@ -110,6 +112,7 @@ exit_criteria = [
   { id = "EX-4", text = "Legacy removal (stamp absent only) removes identical body + absent-or-default sidecar, reports each, keeps edited bodies, edited sidecars and non-snippet files; adherence/low emits once afterwards (ISS-521)." },
   { id = "EX-5", text = "RV-421 F-16 (control): install → prompt customise role/worker → install leaves both files; the candidate that deletes them fails the e2e." },
   { id = "EX-6", text = "`doctrine check gate` green." },
+  { id = "EX-7", text = "Tests that seeded slots through `[hymns].expose` (tests/e2e_prompt_resolve_golden.rs `project_exposed` and its callers) seed them with `prompt customise` instead, keeping what they assert." },
 ]
 verification = [
   { id = "VT-1", expects = "customise and legacy-removal e2e incl. RV-421 F-16 and F-18 rows", test_file = "tests/e2e_install_hymns.rs", keywords = ["customise", "role/worker", "run `doctrine install` first", "removed unedited starter"], waived = false },
