@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1441d-079c-7c81-b2c0-5eab88e71f47"
+recorded_at = "2026-10-16T09:48:35.612236333Z"
+kind = "friction"
+summary = "audit; SL-281: pathspec commit cannot record a git rm --cached"
+detail = "git commit <paths> takes the worktree state of each path, so committing a 'git rm --cached' file with the path-limited commit rule silently re-adds it (the file still exists on disk). Needed a verified-index pathless commit. Also: slice status started→reconcile refused; must step through audit first — the /audit skill's step 7 names only the reconcile move."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
