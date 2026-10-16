@@ -1,0 +1,513 @@
+id    = 418
+slug  = "design-review-of-sl-281"
+title = "design review of SL-281"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Adversarial review of SL-281 design.md against scope, DEC-372–DEC-376, research, ADR-019, POL-003, STD-001, SPEC-009, REQ-170, current install/manifest/worktree code, and the named e2e tests. Checked destructive convergence, global/shared paths, symlink ownership, selection and catalog membership, managed gitignore post-state and splice behavior, harness routing, Revision completeness, and verification coverage. Twelve findings raised; responder disposition remains outstanding.
+"""
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Verification round for RV-418 against the amended SL-281 design, DEC-377, DEC-376, DEC-373, ISS-520, SPEC-009, SPEC-010 REQ-176 and REQ-178, and current install and worktree code. Nine findings verified; F-1, F-11 and F-12 contested with specific counterevidence; new F-13 records contradictory global convergence prose."
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Third verification round on F-1, F-11, F-12, and F-13 only. Compared responder answers with SL-281 design.md Ownership declaration, What changes, Code impact, Convergence/Safety boundaries, and Verification; checked SL-281 scope via doctrine show and the cited install/boot implementation paths. Verified F-11, F-12, and F-13. Contested F-1 on a concrete staging-sibling deletion through a symlinked harness ancestor. F-2 through F-10 were left untouched. No new finding raised.
+"""
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Rechecked F-1 against SL-281 Convergence/Safety boundaries, the added write_link staging test, and retained install.rs staging behavior. Link staging's blind sibling deletion is addressed; canon staging still allows an occupied non-member stage under a symlinked ancestor to be overwritten by WriteCanon, so F-1 remains contested.
+"""
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Reviewed F-1 against SL-281 design Convergence safety boundaries and Verification staging cases after uniform exclusive staging was added; verified the remaining symlinked-ancestor staging collision is closed."
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-281"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Canon and link directory symlinks can redirect prune outside owned trees"
+detail = """
+Expected: destructive convergence is confined to directories doctrine actually owns. Observed: SL-281 design.md:10-12 and :178-199 classify by declared/lexical paths; :225-228 scans and prunes, with no lstat boundary for the canon root or a harness link directory. If `.doctrine/skills` or `.doctrine` is a symlink to another tree, a scan and recursive prune through that path removes files outside the declared tree. If `.claude/skills` is itself a symlink, scanning/relinking children can mutate the target directory. Current `src/install.rs:1588-1621` checks only the individual destination, and `:1996-2019` follows its canonical parent. A lexical `..` normalizer does not establish physical containment through symlinked ancestors; absolute link values also need a defined anchor and component-safe containment test. The design needs an explicit no-follow boundary or a verified physical-root policy before it can authorize deletion, plus tests for symlinked `.doctrine`, canon roots, link dirs, `..`, and absolute link values.
+"""
+disposition = "fix-now"
+response = """
+Accepted. sec-convergence "Safety boundaries" now makes staging uniform: link and canon staging both create a unique name (.tmp-<name>.<pid>.<n>) by exclusive create (symlink() / create_dir, not create_dir_all), retry on EEXIST, write only inside what they just created, and remove only that on failure; the writer no longer clears or reuses any pre-existing staging-named entry. Staging-prefixed entries are never pruned (a crashed leftover is reported as stale staging for the user). Tests: staging_never_reuses_preexisting_entry (user file/dir at a staging name survives relink and canon refresh, including under a symlinked .doctrine), plan_never_prunes_staging_entries_and_reports_them.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. sec-convergence "Safety boundaries": before planning removals for a root or link dir, the shell lstats every component from the base to that dir; any symlink means writes and relinks only, no removals, reported as 'prune blocked'. Absolute link values count as doctrine's only when component-wise under <base>/<root>; relative values are joined and normalised lexically. Tests: plan_blocks_removals_under_symlinked_dir, plan_treats_absolute_link_under_root_as_doctrine_and_elsewhere_as_foreign, plan_normalises_dotdot_link_values_lexically.
+"""
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "The lstat guard in SL-281 design.md lines 235-240 blocks only removals and explicitly permits writes and relinks through symlinked ancestors. WriteCanon retains materialise_canonical staged swap, whose src/install.rs lines 2013-2019 remove and replace a canon destination. With a symlinked .doctrine ancestor, that destructive refresh acts outside the declared tree; a symlinked harness link dir likewise redirects relink writes. Re-proving the entry at lines 247-249 does not re-prove its ancestor chain. Define an effective no-follow boundary for all destructive mutations, or a safe physical-root policy, and test redirected writes as well as prune."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Partly accepted, partly held. Held: writes and relinks may follow a symlinked ancestor. A symlinked .doctrine or .claude is a relocation the user chose (dotfile managers do it routinely), and install follows it today. They touch only a member's own path: WriteCanon replaces <root>/<member> and nothing beside it; Relink replaces an entry already re-proven a doctrine link. Neither enumerates or removes a non-member name. Removing non-members is the one new destructive power, and the guard gates exactly that; refusing all writes under a symlinked ancestor would break working relocated setups for no safety gain. Accepted: the ancestor chain is now re-lstat'ed at removal time (REQ-178 extension), the rationale is stated in sec-convergence "Safety boundaries", and an e2e test plants a non-member beside members under a symlinked .doctrine and asserts it survives while members refresh and 'prune blocked' is reported.
+"""
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+The held write/relink rule has a concrete non-member casualty under a symlinked ancestor. Let project/.claude be a symlink to /external/config, with /external/config/skills/code-review a proven doctrine symlink and /external/config/skills/.tmp-code-review an unrelated regular user file. Relink calls the retained write_link path: src/install.rs:1634-1645 computes the .tmp-code-review sibling and unconditionally remove_file's it before staging the link. That deletes a foreign, non-member path even though the destination link was re-proven. SL-281 design.md:248-260 asserts relinks touch only the member's own path and staging names are merely skipped by prune; its symlinked-directory e2e at :502-504 plants no staging-name collision. Specify ownership/collision handling for staging siblings under relocated link dirs, and test this case before claiming redirected relinks cannot damage non-members.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted; confirmed in src/install.rs write_link (fs::remove_file(&tmp).ok() on the deterministic .tmp-<name> sibling). sec-convergence "Safety boundaries": link staging now creates a unique name (.tmp-<name>.<pid>.<n>) via the exclusive symlink() call, retrying on EEXIST, and never deletes an entry it did not just create. Canon staging keeps clearing its own .tmp-<id> leftover, since canon roots are wholly framework-owned and that clear is gated like any removal. Test: write_link_never_removes_preexisting_staging_named_entry. The held part stands: writes and relinks touch only member paths and re-proven doctrine links.
+"""
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+The link-staging change closes the prior .tmp-<name> deletion, but canon staging still permits a non-member casualty under a symlinked ancestor. Let project/.doctrine be a symlink to /external/config, and let /external/config/skills/.tmp-code-review/SKILL.md be an unrelated user file. On a selected code-review WriteCanon, the amended rule gates clearing .tmp-code-review because the .doctrine ancestor is symlinked, but does not require the whole write to stop or require exclusive creation of its stage. The retained materialise_canonical path then calls copy_skill(entry, &tmp), whose create_dir_all accepts the existing stage directory and fs::write truncates that user's SKILL.md (src/install.rs:1996-2013, 2023-2039). A later rename may also move the user directory into the member slot. Thus the claim that writes touch only member paths is still false. Specify that an occupied canon stage under a blocked-removal path causes the WriteCanon action to skip safely (or use exclusively owned staging), and test this symlinked-ancestor collision with a pre-existing non-member file inside .tmp-code-review.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. sec-convergence "Safety boundaries" now makes staging uniform: link and canon staging both create a unique name (.tmp-<name>.<pid>.<n>) by exclusive create (symlink() / create_dir, not create_dir_all), retry on EEXIST, write only inside what they just created, and remove only that on failure; the writer no longer clears or reuses any pre-existing staging-named entry. Staging-prefixed entries are never pruned (a crashed leftover is reported as stale staging for the user). Tests: staging_never_reuses_preexisting_entry (user file/dir at a staging name survives relink and canon refresh, including under a symlinked .doctrine), plan_never_prunes_staging_entries_and_reports_them.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "SL-281 Convergence safety boundaries require exclusive creation for both link and canon staging, retry on EEXIST, writes only inside the newly created stage, and cleanup only of that stage. Pre-existing staging entries are excluded from prune and the Verification section covers collision survival under a symlinked ancestor. This closes the non-member staging casualty in F-1."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Unselected harness links dangle when legacy canon paths are pruned"
+detail = """
+Expected: a first install preserves usable links for harnesses not selected in that run. Observed: SL-281 design.md:158-172 keeps only namespaced canon members from every registered harness; :178-191 prunes nonmembers, while :201-203 and :225-228 inspect links only for installed harnesses. A pi-only run therefore prunes the existing flat `.doctrine/agents/dispatch-worker.md` but leaves `.claude/agents/dispatch-worker.md` pointing at it. A codex-only run similarly prunes legacy `.doctrine/agents/codex/dispatch-worker.md` while `.pi/agents/dispatch-worker.md` can remain untouched. Current code creates those layouts at `src/install.rs:470-503` and `:1833-1844`; the design itself acknowledges them at :99-101. This contradicts the design's 'claude links never dangle' claim at :170-172. Migration must repair or retain all recognized links before removing their targets, including harnesses outside the current selection; test first-run transitions for each legacy layout and subset selection.
+"""
+disposition = "fix-now"
+response = """
+Accepted. sec-convergence "Links": every registered harness link dir that exists is scanned, not just this run's. A doctrine link that maps to a shipped member pulls that member into the write set and is relinked to the current layout before any canon prune; only new links are limited to selected harnesses. Test: plan_repairs_unselected_harness_link_before_pruning_its_old_target.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. sec-convergence "Links": every registered harness link dir that exists is scanned, not just this run's. A doctrine link that maps to a shipped member pulls that member into the write set and is relinked to the current layout before any canon prune; only new links are limited to selected harnesses. Test: plan_repairs_unselected_harness_link_before_pruning_its_old_target.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "All existing registered link dirs are scanned; an unselected live link pulls its mapped member into the write set and is relinked before old canon is pruned. The legacy layouts and subset test are named in SL-281 design."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "blocker"
+title = "Global convergence treats multiple projects as one owner"
+detail = """
+Expected: `--global` cannot erase or replace a global asset still needed by a different project. Observed: SL-281 design.md:238 applies the same exact-convergence plan at `$HOME`, while :233-235 retains the per-project agent-def bake. Current `src/install.rs:1486-1492` maps every project's global canon to the same `$HOME/.doctrine/*`, and `:1857-1865` bakes the def from that project's on-disk hymn corpus. Installing project B globally can replace project A's baked definition; a different binary/catalog can prune A's still-used agent or skill canon and links. An `--agent` subset only narrows writes, not the shared prune set (`design.md:158-172`). DEC-373 explicitly includes global installs, so this needs an explicit cross-project ownership/version rule or a safe global exception before lock, with two-project and two-version verification.
+"""
+disposition = "fix-now"
+response = """
+Accepted; user ruled 2026-10-16, recorded as DEC-377 (amends DEC-373). Global installs write and relink but never prune; orphans are reported. The shared global agent-def bake (last installing project wins) is pre-existing and filed as ISS-520. Tests: plan_global_scope_reports_orphans_and_prunes_nothing; e2e --global under a temp HOME with a planted orphan.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted; user ruled 2026-10-16, recorded as DEC-377 (amends DEC-373). Global installs write and relink but never prune; orphans are reported. The shared global agent-def bake (last installing project wins) is pre-existing and filed as ISS-520. Tests: plan_global_scope_reports_orphans_and_prunes_nothing; e2e --global under a temp HOME with a planted orphan.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "DEC-377 governs global scope: writes and relinks continue, while canon and link orphans are reported without removal. The pre-existing shared agent bake is tracked in ISS-520."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "blocker"
+title = "Gitignore block is scheduled before the post-state it must describe"
+detail = """
+Expected: the managed block lists exactly the doctrine links left after the run, including older installs of other harnesses. Observed: SL-281 design.md:266-271 requires post-state links in every registered harness dir, but :225-228 scans only installed harness link dirs and :283 says the block replaces `Step::Gitignore` in `build_plan`. Current `src/install.rs:180-205` builds/executes the base plan before forward steps; `:450-526` creates selected links later and delegates npx after prompting, with non-fatal leg failures. Current `build_plan` emits gitignore steps at `:1101-1111`. A block emitted at that point cannot know newly created, failed, skipped, or previously installed other-harness links. A fresh install can finish with unignored links, and an older link can lose its ignore line. The design needs a post-forward rescan and write point, with explicit behavior for dry-run, skipped/failed legs, and other-harness links; the named tests at :352-361 cover only the Claude happy path.
+"""
+disposition = "fix-now"
+response = """
+Accepted. sec-gitignore "When it is written": the block is written last, after every forward leg, from a re-scan of all registered link dirs, so failed/skipped legs and other-harness links are reflected as they are on disk. --dry-run prints the would-be block; --global writes none. Step::Gitignore leaves build_plan. Test: e2e --agent pi with a failing runner.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. sec-gitignore "When it is written": the block is written last, after every forward leg, from a re-scan of all registered link dirs, so failed/skipped legs and other-harness links are reflected as they are on disk. --dry-run prints the would-be block; --global writes none. Step::Gitignore leaves build_plan. Test: e2e --agent pi with a failing runner.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "The managed block is written after forward legs from a fresh scan of all registered link dirs; skipped and failed legs are reflected by disk state, with dry-run and global behavior specified."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "blocker"
+title = "Delegated skill ignore lines have no doctrine-owned predicate"
+detail = """
+Expected: only framework-owned generated paths are ignored; pre-existing user-owned copies in shared skill dirs stay visible. Observed: SL-281 design.md:45-46 defaults paths outside canon and doctrine links to user-owned, yet :266-271 and :315-317 add `/.agents/skills/<id>` lines for npx-delegated real copies without a write record or ownership test. `src/install.rs:1683-1705` only constructs npx argv and `:1746-1767` only observes command success; it does not learn which paths npx created or replaced. A user-owned `.agents/skills/audit` predating install, or an existing copy after npx is skipped/fails, would be newly ignored merely because its name matches the catalog. That violates ADR-019's explicit owner/mutation-policy requirement and POL-003's doctrine-owned predicate. Define and test an ownership rule for delegated real copies, or do not claim/ignore them as generated paths.
+"""
+disposition = "fix-now"
+response = """
+Accepted. npx-written copies under .agents/skills are no longer listed in the block (no doctrine-owned predicate); disclosed in sec-gitignore and sec-risks. IMP-406 moves those harnesses to doctrine links, which the block then covers. Test: render_block_omits_npx_written_skill_copies.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. npx-written copies under .agents/skills are no longer listed in the block (no doctrine-owned predicate); disclosed in sec-gitignore and sec-risks. IMP-406 moves those harnesses to doctrine links, which the block then covers. Test: render_block_omits_npx_written_skill_copies.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "The amended block omits npx-written real copies because ownership cannot be proven; only runtime entries, canon roots and recognized links are generated."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "blocker"
+title = "Managed block splice has undefined malformed-file behavior"
+detail = """
+Expected: install preserves all user-authored `.gitignore` lines and either safely repairs or refuses malformed managed markers. Observed: SL-281 design.md:272-275 specifies a `String`-returning splice that replaces between markers or appends only when no markers exist; it does not define one missing end marker, duplicate/nested markers, CRLF, or an existing file without a trailing newline. Selecting the wrong end can delete user rules; appending to an unterminated line can merge the start marker into a pattern, leaving the generated rules ineffective. Current `src/install.rs:1140-1145` reads linewise and `:1152-1164` appends directly with no newline guard; :280-281 leaves that seam unchanged. A fallible, marker-counted splice and newline/CRLF contract are needed before lock. Named tests at :339-340 only cover well-formed replacement, absent markers, and negation preservation; add malformed and unterminated-file cases.
+"""
+disposition = "fix-now"
+response = """
+Accepted. sec-gitignore "Splice": splice_block returns Result; exactly one start then one end marker means replace; none means append, adding a final newline to an unterminated file first; anything else is refused and .gitignore is left untouched with marker counts reported. The block follows the file's line endings (CRLF if the first line has one). ensure_gitignored gains the same final-newline guard. Tests: splice_block_refuses_lone_or_duplicate_markers, splice_block_adds_newline_to_unterminated_file, splice_block_keeps_crlf, ensure_gitignored_adds_newline_before_append.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. sec-gitignore "Splice": splice_block returns Result; exactly one start then one end marker means replace; none means append, adding a final newline to an unterminated file first; anything else is refused and .gitignore is left untouched with marker counts reported. The block follows the file's line endings (CRLF if the first line has one). ensure_gitignored gains the same final-newline guard. Tests: splice_block_refuses_lone_or_duplicate_markers, splice_block_adds_newline_to_unterminated_file, splice_block_keeps_crlf, ensure_gitignored_adds_newline_before_append.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "The splice is fallible, refuses unmatched or duplicate markers, preserves lines outside the block, handles missing final newline and CRLF, and names focused tests."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "blocker"
+title = "Revision omits live SPEC-009 claims contradicted by install ownership"
+detail = """
+Expected: the planned REV leaves SPEC-009 and REQ-170 internally coherent with the new ownership behavior. Observed: SL-281 design.md:298-305 lists D2/D4/D5/D7, three never-overwrite sentences, and REQ-170, but SPEC-009:39-47 says install does not own the skill symlink tree and only ensures its gitignore negation; :49-56 repeats the sibling-container boundary; :79-81 says entries are appended; :94-103 says the plan only installs/skips and re-install is a no-op; :134-136 requires additive entries; :151-154 says new distribution requires only a manifest edit. The design moves skills canon/links into install (`design.md:88-93,233-236`) and rewrites the block, so these assertions also become false. A D5 restatement alone does not revise the surrounding normative prose. Expand the REV row's before/after excerpts to cover every contradictory clause before the design locks; preserve the sibling SPEC-010 mechanism distinction explicitly if intended.
+"""
+disposition = "fix-now"
+response = """
+Accepted, and widened: sec-revision now carries rows for the SPEC-009 skills-boundary paragraph (with D5), the manifest section ([gitignore] no longer appended), 'Plan then execute', Concerns and Hypotheses, plus a SPEC-010 REQ-176 row (link ownership by target inside a framework root), which the finding did not name. REQ-178 (re-prove at mutation time) is honoured as written and now stated in sec-convergence. DEC-376 annotated.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted, and widened: sec-revision now carries rows for the SPEC-009 skills-boundary paragraph (with D5), the manifest section ([gitignore] no longer appended), 'Plan then execute', Concerns and Hypotheses, plus a SPEC-010 REQ-176 row (link ownership by target inside a framework root), which the finding did not name. REQ-178 (re-prove at mutation time) is honoured as written and now stated in sec-convergence. DEC-376 annotated.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "The Revision table now covers SPEC-009 D2, D4, D5 and its boundary prose, manifest, plan, concerns, hypotheses, REQ-170 and SPEC-010 REQ-176; REQ-178 is preserved by mutation-time reproof."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "Desired skill catalog is not defined against marketplace-only domains"
+detail = """
+Expected: the membership rule uses the same installable skill universe as forward selection and delegation. Observed: SL-281 design.md:158-166 says every embedded catalog entry is a desired `.doctrine/skills/<id>` member, while :168-172 says selection only limits writes. Current `src/install.rs:1400-1445` builds the install catalog by deliberately excluding `MARKETPLACE_ONLY_DOMAINS` (`:25-27`, `:1409-1411`), and `:1452-1479` validates selection against that filtered set. The design never says whether excluded embedded skills are members. Including them would preserve or materialize canon paths that `doctrine install --skill` can never select; excluding them means 'every embedded catalog entry' is false unless catalog is explicitly the filtered `discover()` result. Specify the exact catalog seam and add a synthetic marketplace-only-domain membership test; the named verification list at :331-350 has none.
+"""
+disposition = "fix-now"
+response = """
+Accepted. sec-convergence "Desired set": skill membership is the install catalog (the discover() result, which excludes MARKETPLACE_ONLY_DOMAINS); marketplace-only skills are never members. Test: plan_excludes_marketplace_only_skills_from_members.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. sec-convergence "Desired set": skill membership is the install catalog (the discover() result, which excludes MARKETPLACE_ONLY_DOMAINS); marketplace-only skills are never members. Test: plan_excludes_marketplace_only_skills_from_members.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "The desired skill set is explicitly the discover result, which filters marketplace-only domains in src/install.rs, with a named membership test."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "major"
+title = "Dogfood parity cannot establish the promised ownership coverage"
+detail = """
+Expected: this repo's `.gitignore` exercises the same per-link contract as clients and does not hide user-owned paths in shared harness dirs. Observed: SL-281 design.md:139-141, :266-278 and :285-288 propose a generated block but only test static runtime/root entries. This repo's `.gitignore:4-10` already ignores whole `/.claude/*`, `/.agents`, and `/.pi/*`; those loose rules remain under the stated preserve-outside-block policy and override the intended per-link granularity for dogfood. `src/worktree/mod.rs:734-750` examines only `.doctrine/`-prefixed lines, and the proposed static-entry test at design.md:349-350 cannot catch missing per-link lines, extra broad ignores, or a stale block. Either narrow the repo's broad rules as an explicit dogfood migration or state that dogfood cannot verify the no-user-path-ignored invariant; add an exact block/content test using installed link state.
+"""
+disposition = "fix-now"
+response = """
+Accepted as a clarification, no dogfood migration. sec-gitignore "Dogfood": this repo's broad /.claude/*, /.agents, /.pi/* rules are its own deliberate choices outside the block, so this repo cannot demonstrate the no-user-path-ignored invariant; that is proven by render_block unit tests and the temp-project e2e tests. The static parity test stays as a drift check only.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted as a clarification, no dogfood migration. sec-gitignore "Dogfood": this repo's broad /.claude/*, /.agents, /.pi/* rules are its own deliberate choices outside the block, so this repo cannot demonstrate the no-user-path-ignored invariant; that is proven by render_block unit tests and the temp-project e2e tests. The static parity test stays as a drift check only.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "The design limits dogfood parity to static drift and explicitly assigns the no-user-path-ignored proof to render tests and temp-project end-to-end checks."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "major"
+title = "Convergence can prune another install run staging directory"
+detail = """
+Expected: a prune pass cannot destroy a live writer's staging area or leave canon absent. Observed: SL-281 design.md:10-12 and :178-181 removes every nonmember inside canon roots, with writes then prunes at :225-228. Current skills refresh uses deterministic `.tmp-<id>` siblings (`src/install.rs:1623-1628`, `:1996-2019`), and link writes use `.tmp-<name>` (`:1630-1646`). A second install scanning during the first one's stage will classify `.doctrine/skills/.tmp-<id>` as nonmember and may remove it after the first run has populated it, before rename; the first run has already removed its prior canon at :2014-2019 and can leave a dangling link. The design accepts interrupted leftovers but has no concurrency or stage-exclusion rule. Define serialization or a safe temp ownership rule and test overlap/leftover behavior, especially for worktrees sharing `$HOME`.
+"""
+disposition = "fix-now"
+response = """
+Accepted. The .tmp- staging prefix becomes a named constant and the plan never prunes entries carrying it (plan_skips_staging_entries); their writer clears crashed leftovers as today. Concurrent installs in one tree are declared unsupported and disclosed in sec-risks. Global prune, the shared-HOME case, is gone per DEC-377.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. The .tmp- staging prefix becomes a named constant and the plan never prunes entries carrying it (plan_skips_staging_entries); their writer clears crashed leftovers as today. Concurrent installs in one tree are declared unsupported and disclosed in sec-risks. Global prune, the shared-HOME case, is gone per DEC-377.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "The plan excludes the named staging prefix, including a live writers stage; same-tree concurrent installs are disclosed as unsupported and global prune is removed by DEC-377."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "major"
+title = "Harness registry does not specify detection and boot routing"
+detail = """
+Expected: every detected or explicitly named harness follows one coherent registry decision, including unsupported-harness disclosure and the correct boot adapter. Observed: SL-281 design.md:29-49 and :68-71 makes `[harness.*]` the harness vocabulary, but code impact at :130-147 does not address current `src/install.rs:265-300` (`pi` and `codex` both boot through codex), `:1226-1243` (hardcoded `.claude`, `.codex`, `.pi`, `.agents` auto-detection), or `:456-526` (any non-Claude name is queued for npx). Without an explicit adapter mapping/guard, an unregistered explicit name can still reach npx despite the 'installs nothing' rule, and a registered name cannot be auto-detected by its table. The registry also needs to state that `universal` has no boot leg while pi uses codex boot; test explicit unsupported, detected pi/codex/universal, and mixed selections end to end, beyond the `delegate_argv` unit test named at :348.
+"""
+disposition = "fix-now"
+response = """
+Accepted; verified against src/boot.rs resolve_harnesses (detects .claude, .codex and non-alias AGENTS.md, not .pi). sec-ownership and sec-code-impact: install_harnesses derives the boot set from the registry in both the flagged and the unflagged path; with no --agent it no longer delegates to boot::resolve_harnesses(&[]), but unions in that detector's AGENTS.md rule so its behaviour is kept. The standalone doctrine boot verb is unchanged. Tests: detection_and_boot_follow_registry (with and without --agent, AGENTS.md case) and an e2e .pi-only no-flags install wiring the codex adapter.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted; user ruled 2026-10-16, recorded as DEC-377. Registry tables gain detect and boot (pi and codex boot via codex, universal none), replacing detect_agents' hardcoded list and boot_harness_names. An unregistered explicit name gets no defs or links but keeps npx skills delegation under its own name, disclosed (preserves cursor). Tests: detection_and_boot_follow_registry, unregistered_harness_delegates_skills_and_reports_unregistered.
+"""
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "The registry change does not close the no-flags boot path. src/install.rs lines 292-300 calls boot::resolve_harnesses with an empty explicit set when no --agent is given; src/boot.rs lines 759-787 independently detects only .claude, .codex and AGENTS.md, not .pi. Thus a .pi-only install is detected for skills but still has no boot adapter, contrary to SL-281 design.md lines 33-44 and the proposed detection_and_boot_follow_registry test. Specify that install_harnesses uses the registry-derived detected names for boot, while preserving the existing AGENTS.md auto-detection behavior or explicitly revising it."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted; verified against src/boot.rs resolve_harnesses (detects .claude, .codex and non-alias AGENTS.md, not .pi). sec-ownership and sec-code-impact: install_harnesses derives the boot set from the registry in both the flagged and the unflagged path; with no --agent it no longer delegates to boot::resolve_harnesses(&[]), but unions in that detector's AGENTS.md rule so its behaviour is kept. The standalone doctrine boot verb is unchanged. Tests: detection_and_boot_follow_registry (with and without --agent, AGENTS.md case) and an e2e .pi-only no-flags install wiring the codex adapter.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. SL-281 design.md:34-43 now requires install_harnesses to derive boot adapters from registry detection in both explicit and no-flags paths, while retaining the non-alias AGENTS.md codex rule; :153 names the install.rs change and :475-477/:505 name wiring and .pi-only command tests. This addresses the current mismatch: src/install.rs:292-300 delegates no-flags detection to src/boot.rs:759-787, which detects .claude/.codex/AGENTS.md but not .pi. Standalone boot remains unchanged as specified.
+"""
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "major"
+title = "Verification omits destructive and non-Claude promises"
+detail = """
+Expected: named verification exercises the design's consequential behavior at the real command boundary. Observed: SL-281 design.md:225-238 promises dry-run without effects, global exact convergence, and workflow and skill pruning; :168-203 promises cross-harness preservation and dead-link removal; :266-281 promises post-state ignore lines after npx delegation and compatibility with `ensure_gitignored`. The test list at :331-364 names only a Claude fresh/reinstall e2e, plus pure plan and argv tests. It names no real-command test for `--global` across two projects, dry-run with would-prune entries, a removed skill or workflow, pi/codex/universal autodetection, failed/skipped npx, orphan link removal, or `ensure_gitignored` after a managed block. Current workflow embed is empty (`src/install.rs:1901-1915`), so a production-path workflow prune needs a synthetic fixture or explicit seam. Add tests for these observable claims; otherwise the planned verification cannot establish prune safety or registry behavior.
+"""
+disposition = "fix-now"
+response = """
+Accepted. sec-verification reshaped. Real-binary controls need no new injection seam: a removed skill is a planted orphan (.doctrine/skills/retired-skill plus its .claude/skills link), since orphan means not-in-catalog; delegate failure is a PATH with no npx/bunx, which makes the existing spawn fail non-fatally (src/install.rs install_for_other error arm). Synthetic-catalog and removed-workflow cases stay at the pure plan level, fake-Runner detail at install_for_other, and the section says which tests are in-process and which are command-boundary controls.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. sec-verification adds named tests for each listed behaviour: dry-run with would-prune, removed skill (synthetic catalog seam), pi/codex/universal detection, failed npx via the Runner seam, orphan link removal, ensure_gitignored after the block, global orphan reporting. The workflow embed is empty, so workflow prune is proven at the pure plan level only (plan_prunes_workflow_not_shipped), and the section says so.
+"""
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "The amended real-binary end-to-end list promises a removed-skill case via a synthetic catalog seam and a failed-npx case via Runner, but the declared code impact adds neither injection path to the command boundary. src/install.rs run_forward_steps calls discover on the compile-time embed and resolve_runner for a concrete ProcessRunner; tests/e2e_claude_install.rs runs the built binary. A real binary cannot receive a synthetic catalog or a trait Runner through this surface. Specify an executable command-level fixture/injection route, or move these checks to a harness that calls the seam and name a separate real-command negative control."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. sec-verification reshaped. Real-binary controls need no new injection seam: a removed skill is a planted orphan (.doctrine/skills/retired-skill plus its .claude/skills link), since orphan means not-in-catalog; delegate failure is a PATH with no npx/bunx, which makes the existing spawn fail non-fatally (src/install.rs install_for_other error arm). Synthetic-catalog and removed-workflow cases stay at the pure plan level, fake-Runner detail at install_for_other, and the section says which tests are in-process and which are command-boundary controls.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. SL-281 design.md:483-514 now separates executable real-binary controls from pure/in-process seams: a planted retired skill and link are actual on-disk orphans (:495-498), and a PATH without npx/bunx drives the real delegate spawn failure (:499-501). In current src/install.rs:1313-1324, unavailable npx selects bunx; ProcessRunner::run at :1724-1730 returns the failed spawn as an error; run_forward_steps at :510-525 reports that error and continues. The pure plan covers synthetic catalogs and the empty workflow embed. Dry-run, global report-only, orphan links, symlinked-root behavior, and no-flags pi are also named at the command boundary.
+"""
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "blocker"
+title = "Global no-prune ruling contradicts ownership and change summaries"
+detail = "Amendment DEC-377 makes global installs report orphans and remove nothing, and SL-281 design.md lines 244-246 and 383 say so. Yet the manifest example at lines 10-12 still declares each root converges exactly and removes anything else, and the What changes section at lines 99-104 says framework-owned canon removes anything no longer shipped with no scope limit. Those are implementer-facing contracts of the new ownership declaration, so they conflict with the amended global rule and could cause the global prune that DEC-377 forbids. Qualify these summaries and the manifest comment as project-only, state global report-only behavior beside them, and align the slice scope before lock."
+disposition = "fix-now"
+response = """
+Accepted. The manifest comment in sec-ownership, the What changes summary and table row, and SL-281 scope objective 2 now qualify exact convergence as project-only and state global report-only beside it (DEC-377). Scope objective 4 also updated for DEC-377's registry changes.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. The manifest comment in sec-ownership, the What changes summary and table row, and SL-281 scope objective 2 now qualify exact convergence as project-only and state global report-only beside it (DEC-377). Scope objective 4 also updated for DEC-377's registry changes.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. SL-281 design.md:10-13 qualifies exact canon convergence as project-only and states global orphan reporting; :106-121 gives the same distinction in What changes, and :225-238/:261-263 enforce it in the convergence rule. doctrine show SL-281 now states project-only removal and global report-only behavior in Scope & Objectives item 2, with the registry change in item 4. The previously conflicting implementer-facing contracts are aligned.
+"""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

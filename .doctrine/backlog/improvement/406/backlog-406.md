@@ -101,3 +101,17 @@ mechanism is harness-neutral.
 Cheapest fix is call-site scope and therefore this item's: either pass the label
 in, or move the header inside the `link_dirs` loop and name each target. No
 mechanism change.
+
+## Note (2026-10-16, from SL-281 design)
+
+SL-281 replaces the hardcoded harness mapping with a `[harness.*]` registry in
+`install/manifest.toml` and puts every harness's skills on one route: `skills`
+(doctrine links into a dir) or `skills_via` (npx target). Pi, codex and
+`universal` ship as `skills_via = "universal"`.
+
+That makes this item mostly a registry edit: change those entries to
+`skills = ".agents/skills"`. SL-281's convergence then writes the canon copies,
+links them, prunes dead links and gitignores them, the same as `.claude/skills`
+today. The npx path then serves only harnesses with bespoke layouts (possibly
+cursor), if any. The user's read: npx gives little or nothing beyond that.
+Whether to keep it at all is still `OQ-2`.

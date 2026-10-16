@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14230-350c-79e1-8550-bc095a485d51"
+recorded_at = "2026-10-16T00:50:17.996632928Z"
+kind = "friction"
+summary = "design: apply takes --input, not --payload; envelope's declare template doesn't name the flag"
+detail = "SL-281 design start: guessed --payload from the envelope's 'declare {...}' line; refused. contract output also omits the CLI flag name."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

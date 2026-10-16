@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1425a-5bbd-7880-8c43-8321faeae942"
+recorded_at = "2026-10-16T01:36:20.41392551Z"
+kind = "friction"
+summary = "design: materialise ordered SL-281 sections by creation/id order, not narrative order — ISS-356 recurrence; no reorder verb"
+detail = "Two batched declares (2 then 6 sections) rendered Ownership before What changes, Code impact before Convergence, Risks before Verification. Workaround (permuting bodies across ids) would break id/heading correspondence for review findings, so accepted the order."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

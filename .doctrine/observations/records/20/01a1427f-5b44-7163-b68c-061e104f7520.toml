@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1427f-5b44-7163-b68c-061e104f7520"
+recorded_at = "2026-10-16T02:16:45.12444536Z"
+kind = "friction"
+summary = "design/review: lock refused 'severe findings carry no route' after all 13 RV-418 findings were verified; route can only be backfilled by raiser reopen (clears concluded) + re-dispose + re-verify"
+detail = "SL-281: review dispose accepted fix-now without --route and never warned; the design-run lock gate requires a route on every severe finding. amend refuses verified findings. Backfill cost = 13 reopen/dispose/verify cycles or a waiver. dispose should require (or default) --route for severe findings on design-review ledgers."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

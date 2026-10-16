@@ -1,9 +1,9 @@
 id = 281
 slug = "install-artefact-ownership"
 title = "Install artefact ownership"
-status = "design"
+status = "plan"
 created = "2026-10-15"
-updated = "2026-10-15"
+updated = "2026-10-16"
 tags = ["area:agents", "area:install", "cluster:capsule"]
 
 [relationships]
@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/install.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install/**"
@@ -20,7 +20,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "install/manifest.toml"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "install/agents/**"
@@ -28,7 +28,31 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = ".gitignore"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/install_ownership.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/allowlist.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_claude_install.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_prompt_def_expansion.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/agents/AGENTS.md"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"

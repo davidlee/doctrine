@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14255-51cf-7dc1-b863-5cc4e4e6065a"
+recorded_at = "2026-10-16T01:30:50.191722374Z"
+kind = "friction"
+summary = "design: outstanding runbook steps show only their id in the envelope, even with --full; step text needs a grep of install/design-prompts"
+detail = "SL-281 inquiring: 'runbook outstanding inquire.scope' — no completion criterion printed; had to grep install/design-prompts/inquiring.toml."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
