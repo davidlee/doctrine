@@ -30,3 +30,26 @@ is `IMP-273` (pin an exact toolchain). Found while driving `SL-281`.
 ## Done when
 
 `doctrine check gate` is green on cargo 1.100 with no symlink shims in `target/`.
+
+## Outcome
+
+Landed in `5512d9a61`. `doctrine check gate` green on 1.100.0-beta.5
+(9313 tests passed, 0 failed); the 464 symlink shims in
+`target/debug/build/` were deleted first.
+
+- **Binary path.** `doctrine_bin` walks up from `current_exe` to the first
+  ancestor dir holding a `doctrine` file. That works for both the old
+  (`deps/`) and new (`build/<pkg>/<hash>/`) layouts. Not
+  `CARGO_BIN_EXE_doctrine`: SL-162/CHR-014 forbid baking the path, and cargo
+  doesn't set it for unit tests in `src/`.
+- **MSRV.** The root `[package]` never inherited `rust-version`, so clippy
+  assumed the toolchain's own version as MSRV. It now inherits `1.85`. That
+  silenced the 26 `map_or_default` (stable since 1.98) suggestions. It also
+  exposed four real post-1.85 uses, now rewritten: `is_multiple_of` → `%`,
+  and two `const fn`s (const `Vec::is_empty` / `char::is_whitespace`,
+  1.87) made non-const.
+- **Clippy.** Removed 13 redundant clones and one `needless_bool`.
+  Deleted two unfulfilled `#[expect]`s: `collapsible_if` in `install.rs`,
+  and `double_must_use` in `map_server/state.rs`, which cited `IMP-273`.
+  `IMP-273` (pin an exact toolchain) is still the root fix for this kind of
+  drift.
