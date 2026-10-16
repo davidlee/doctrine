@@ -1,4 +1,4 @@
-# REQ-172: Install owns neither skills distribution nor memory sync, treating both as a sibling verb it hints at or defers to
+# REQ-172: Install does not absorb memory sync, and delegates skills only for harnesses routed through npx
 
 ## Statement
 

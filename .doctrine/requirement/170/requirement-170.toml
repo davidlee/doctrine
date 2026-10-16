@@ -3,7 +3,7 @@ version = 1
 
 id = 170
 slug = "install-is-idempotent-files-written-only-when-absent-and-never-overwritten-dirs-created-if-missing-gitignore-lines-deduplicated"
-title = "Install is idempotent: files written only when absent and never overwritten, dirs created-if-missing, gitignore lines deduplicated"
+title = "Install is idempotent by ownership: user-owned files write-if-absent, framework-owned artefacts converge and are reported, dirs created-if-missing, the gitignore block rewritten"
 status = "active"
 kind = "quality"
 

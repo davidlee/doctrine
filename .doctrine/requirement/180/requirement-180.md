@@ -1,4 +1,4 @@
-# REQ-180: Self-enforce the derived .doctrine/skills gitignore anchored at the tree's base so it follows the tree under global
+# REQ-180: The derived .doctrine/skills tree is covered by the project's managed gitignore block; a global install writes no ignore
 
 ## Statement
 

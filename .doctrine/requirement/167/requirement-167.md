@@ -1,4 +1,4 @@
-# REQ-167: Build an inspectable plan of create-dir, install, skip, and gitignore steps before executing
+# REQ-167: Build an inspectable plan — base steps plus framework-owned write, link, relink, unlink and prune actions — before executing
 
 ## Statement
 

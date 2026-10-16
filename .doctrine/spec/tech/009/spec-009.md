@@ -36,10 +36,10 @@ ADR-019: templates / composable guidance / sealed definitions / curated
 reference / integrations / base-projection policy / memory corpus) rather than a
 single `install/` root — exact root names are left to the implementing slice.
 
-Two boundaries are deliberate. **Skills distribution is a sibling container**
-(PRD-003 / SPEC-010): install does not own the skill symlink tree — it only
-ensures the skills gitignore negation and shares its confirm prompt; the skill
-provisioning mechanism lives next door, and install *uses* it as a peer. That
+Two boundaries are deliberate. Install owns the skill canon tree and its links
+for harnesses with a `skills` route (true since SL-250); SPEC-010 specifies that
+mechanism. For harnesses routed `skills_via`, install delegates to `npx skills
+add`, a peer it uses but does not own. That
 peer `uses` edge (not containment) is authored as a durable `spec interactions`
 edge by the implementing slice, not asserted here. **Global-memory
 materialisation is not orchestrated here**: install prints a next-step hint
@@ -76,9 +76,12 @@ install, it is not part of it. All sections are optional and fall back to defaul
 - **`[dirs].create`** — directories created even when no file maps into them, so
   the empty authored-kind trees (`slice/`, `adr/`, `spec/product`, `spec/tech`,
   `memory/items`, the governance-kind dirs) exist from first install.
-- **`[gitignore].entries`** — lines appended to the project `.gitignore`,
-  narrowly scoped so the disposable/derived tiers are ignored while committed
-  authored trees (e.g. `memory/items/`) stay tracked.
+- **`[gitignore].entries`** — the runtime-state part of the managed gitignore
+  block. The block is rendered from these entries, a `<root>/*` line per
+  framework root and one anchored line per doctrine link present after the run,
+  and spliced between fixed markers, replacing the previous block. Lines outside
+  the markers are never read or changed; a malformed marker pair is refused and
+  the file left untouched.
 - **`[root_markers].markers`** — the files/dirs that identify the project root.
 
 ### Project-root detection
@@ -91,16 +94,14 @@ manifest-driven walk the rest of the tool resolves the root through.
 
 ### Plan then execute, idempotently
 
-A run is split into an inspectable plan and its execution. The plan is a list of
-typed steps — create-dir, install, skip, gitignore — built by diffing the target
-tree against the embedded fileset: a destination that already exists becomes a
-*skip*, an absent one an *install*. `--dry-run` prints the plan and stops; a normal
-run prints it, confirms (unless `--yes`), then executes. Execution is idempotent by
-construction: directories are `create_dir_all` (no-op if present), files are
-written only when the destination is absent and **never overwritten**, and
-`.gitignore` lines are appended only when not already present (line-based
-deduplication, creating the file if missing). Re-running install is a safe no-op —
-local edits to an installed file are preserved because install never clobbers.
+A run is split into an inspectable plan and its execution. The base plan is
+typed create-dir / install / skip steps; framework-owned paths get an ownership
+plan of write / link / relink / unlink / prune / report actions computed purely
+from the declaration, the embedded set and a disk snapshot. `--dry-run` prints
+both, including would-prune actions, and changes nothing. Re-install leaves
+user-owned files untouched and converges framework-owned ones; the executor
+re-proves each entry before mutating it. Removals never pass through a symlinked
+ancestor.
 
 ### Templates and the shared read seam
 
@@ -127,14 +128,16 @@ declared.
   edit to a shipped source file (a template, a rule) is invisible until the
   embedding crate is recompiled — a refresh discipline the distribution-side verbs
   must respect, not a runtime fault.
-- **Never-overwrite is the safety contract.** Idempotency is what makes re-install
-  safe, but the same property means install will never *update* an installed file
-  whose source has since changed; bringing a customised install forward is out of
-  this container's scope.
+- **Never-overwrite is the safety contract for user-owned files.** Idempotency is
+  what makes re-install safe, but the same property means install will never
+  *update* an installed user-owned file whose source has since changed; bringing a
+  customised install forward is out of this container's scope. Framework canon
+  roots are declared framework-owned and gitignored, so a user file placed inside
+  one is removed and reported (accepted).
 - **Gitignore scoping.** A too-broad ignore entry would silently exclude a
-  committed authored tree from version control; entries are deliberately narrow and
-  additive, and the authored-entity wiring contract is where that discipline is
-  enforced.
+  committed authored tree from version control; the managed block is narrow and
+  rewritten — user `!` rules placed after it survive re-install — and the
+  authored-entity wiring contract is where that discipline is enforced.
 - **Root misdetection.** A walk that matches the wrong ancestor marker lays the
   tree in the wrong place; `--path` is the explicit escape from an ambiguous walk.
 
@@ -144,11 +147,14 @@ declared.
   tree into the binary is preferred over shipping a sidecar directory or fetching
   assets, so distribution is one artefact with no version-skew between binary and
   assets and no network dependency at install time.
-- **Idempotent never-overwrite is the right default.** Treating an existing file as
-  a skip rather than a merge or overwrite is preferred so re-install is always safe
-  and a user's local edits are never lost — at the accepted cost that install does
-  not push updates to already-installed files.
-- **One manifest drives the whole lay-down.** Centralising target, dirs, gitignore,
+- **Idempotent never-overwrite is the right default for user-owned files;
+  framework-owned files converge so a re-install pushes updates and retires
+  removed instructions.** Treating an existing user-owned file as a skip rather
+  than a merge or overwrite is preferred so re-install is always safe and a user's
+  local edits are never lost — at the accepted cost that install does not push
+  updates to already-installed user-owned files.
+- **One manifest drives the whole lay-down, including the ownership declaration
+  and harness registry.** Centralising target, dirs, gitignore,
   and markers in one embedded TOML is preferred over scattering install policy
   across code, so making a new kind distributable is a manifest edit, not a code
   change.
@@ -161,10 +167,16 @@ declared.
   the *installed* fileset: what lands in a project is drawn from an explicit
   projection policy (D7), not from what the binary happens to embed. The manifest
   is embedded but excluded from every projected set.
-- **D2 — install is idempotent and never overwrites.** Files are written only when
-  absent, directories are create-if-missing, and gitignore lines are
-  deduplicated; re-install is a no-op and local edits survive. The cost — install
-  never updates an existing installed file — is accepted.
+- **D2 — install acts by ownership.** User-owned files (the base backings, hymn
+  starters, authored entities) are written only when absent and never overwritten
+  or pruned. Framework-owned artefacts — the `[framework]` canon roots and
+  doctrine links into them — converge: every shipped member is written and
+  refreshed, and on a project install anything else inside a canon root is
+  removed and every removal reported; a global install writes and relinks but
+  only reports orphans. In a shared harness link dir a symlink whose target lies
+  inside a canon root is doctrine's (relinked or removed); anything else is
+  foreign and kept. Directories are create-if-missing. Framework gitignore lines
+  live in one managed block rewritten each project install.
 - **D3 — `asset_text` is the single embedded-asset read seam.** Both the installer
   and the entity-scaffolding verbs fetch templates through one helper, so the
   shipped template set has one source of truth and scaffolding reads the same bytes
@@ -173,12 +185,18 @@ declared.
   manifest declares the minimal base fileset (D7), the materialize-on-demand
   surfaces (D8), the dirs, gitignore negations, and root markers. A new authored
   kind is made *materializable* — its root appears on first use — via a manifest
-  edit, not by base-projecting its tree or changing install code.
-- **D5 — skills distribution and memory sync are not absorbed.** The skill symlink
-  tree is a sibling container's mechanism (install only ensures its gitignore
-  negation and shares the confirm prompt), and global-memory materialisation is a
-  standalone `memory sync` verb install only hints at — install orchestrates
-  neither.
+  edit, not by base-projecting its tree or changing install code. It also
+  declares ownership: `[framework] roots` (the canon roots install converges) and
+  the `[harness.*]` registry — per harness its detect dir, boot adapter, agent
+  link dir and one skills route (`skills` link dir or `skills_via` npx target).
+  The harness vocabulary is the registry; an unregistered name gets no defs or
+  links and is disclosed.
+- **D5 — skills distribution and memory sync are not absorbed.** Install owns the
+  skill canon tree and its links for harnesses with a `skills` route (true since
+  SL-250); SPEC-010 specifies that mechanism. For harnesses routed `skills_via`,
+  install delegates to `npx skills add`, a peer it uses but does not own.
+  Global-memory materialisation is a standalone `memory sync` verb install only
+  hints at.
 - **D6 — the seven independent asset properties (ADR-019).** Cite ADR-019's
   canonical vocabulary *unchanged* — owned, versioned, distributed, embedded,
   runtime-loaded, published, projected — no property implies another; in
@@ -189,7 +207,10 @@ declared.
   only when its presence at a stable project path is operationally necessary or
   materially improves discoverability, integration, control, or supported
   customization. No template, reference doc, agent definition, hymn, or
-  integration asset is projected by default.
+  integration asset is projected by default. An explicit `--agent` harness leg,
+  or a detected harness the user confirms (at the prompt or under `-y`), is
+  integration, not default projection: it installs that harness's full agent-def
+  set and links, which the base projection never does (DEC-372).
 - **D8 — materialize on first use.** Surfaces that are distinct but not yet
   populated are not shipped empty: entity roots, customized hymns, and standing
   governance appear on disk only when first used/customized — the pattern already

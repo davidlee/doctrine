@@ -21,9 +21,10 @@ serves a consumer who already holds the binary. No skill is duplicated across
 channels — both read the same embedded tree.
 
 What this container owns is the *binary-side* mechanism: catalog discovery from
-the embed, the dual-path install plan (Claude direct, every other agent
-delegated), the canonical-tree-plus-symlink lay-down with its proven-ownership
-never-clobber contract, and the `claude install` surface. It rides
+the embed, the dual-path install plan (Claude direct, every harness without a
+doctrine skills route delegated — pi and codex via the `universal` target), the
+canonical-tree-plus-symlink lay-down with its proven-ownership never-clobber
+contract, and the `claude install` surface. It rides
 the install container (SPEC-009) for the shared project-root walk, the embedded
 `install/` gitignore helper, and the confirm prompt, and restates none of that.
 
@@ -32,8 +33,8 @@ the install container (SPEC-009) for the shared project-root walk, the embedded
 Mirrors the structured `responsibilities` list: carry the embedded canonical
 source; discover and validate the catalog; plan the dual-path per-agent install;
 reconcile each Claude link by proven ownership; materialise the canonical tree
-and links atomically; self-enforce the derived-tree gitignore; and surface the
-`install` command.
+and links atomically; cover the derived tree with the project's managed
+gitignore block; and surface the `install` command.
 
 ### One source, two channels
 
@@ -82,35 +83,33 @@ materialises a *derived* canonical tree at `.doctrine/skills/<id>` and points a
 at it. The link target is computed from the two directories, never hard-coded, so
 it stays correct under a shared `--global` ($HOME) base.
 
-Reconciliation is by *proven ownership*: a managed link is Doctrine's iff its
-value equals the relative target we would write — type alone (is-symlink) is
-necessary but not sufficient. This yields a trichotomy: **create** a missing
-link, **relink** (heal) a symlink already equal to our target — including a
-dangling-but-ours link whose canonical has not yet materialised, since ownership
-is the link *value*, not its resolvability — and **keep-foreign** anything else
-(a symlink pointing elsewhere, or a real directory the user pinned) untouched.
+Reconciliation is by *proven ownership*: a link is Doctrine's iff it is a
+symlink whose target lies inside a framework canon root — a relative value joined
+to its link dir and normalised lexically, an absolute value compared
+component-wise under the base. Ours and mapped to a shipped member: relinked to
+the current layout (heals stale layouts). Ours and unmapped: unlinked on a
+project install, reported on a global one. Anything else: kept foreign.
 Keep-foreign is both the never-clobber guarantee and the deliberate override
 hatch: a user who replaces a link with a real directory keeps it.
 
 ### Atomic lay-down
 
 The canonical tree is *derived* (it owns no authored data), so materialise always
-overwrites: it stages the embed into a `.tmp-<id>` sibling, then swaps it in by
-remove-then-rename (Unix `rename` cannot replace a non-empty directory, and std
-has no `RENAME_EXCHANGE`), so a crash leaves at worst a dangling agent link the
+overwrites: it stages the embed into a unique `.tmp-<name>.<pid>.<n>` staging
+entry made by exclusive create (staging entries are never pruned), then swaps it
+in by remove-then-rename (Unix `rename` cannot replace a non-empty directory, and
+std has no `RENAME_EXCHANGE`), so a crash leaves at worst a dangling agent link the
 next idempotent install heals — a live link never observes a half-staged tree.
 Links are written by stage-then-rename likewise. Ownership is re-classified at
 *mutation* time, not just at plan time, to close the plan-to-execute TOCTOU
 window: a foreign path that appears at the destination after the plan is built
 (the confirm prompt, or a concurrent install) is kept, never clobbered.
 
-### Gitignore self-enforcement
+### Gitignore coverage
 
-The canonical `.doctrine/skills/*` tree is derived and must be ignored. `claude
-install` enforces that ignore itself — independent of whether `doctrine install`
-ran first — anchored at the same base the canonical tree is written to, so under
-`--global` the entry follows the tree to `$HOME` rather than polluting a project
-with an ignore for a tree that is not there.
+The canonical `.doctrine/skills/*` tree is derived and must be ignored. The
+project's managed gitignore block carries `.doctrine/skills/*`; a global install
+writes no ignore.
 
 ### The command surface
 
@@ -124,9 +123,9 @@ inspectable plan; the thin shell prints it, prompts, and executes.
 ## Concerns
 
 - **Never-clobber is the safety contract.** The direct path must never destroy a
-  user's pinned skill (a real dir or a foreign symlink); ownership-by-target-value
-  re-proven at mutation time is what upholds it across the confirm/concurrency
-  window.
+  user's pinned skill (a real dir or a foreign symlink); ownership by
+  target-inside-a-framework-root re-proven at mutation time is what upholds it
+  across the confirm/concurrency window.
 - **Delegate version skew (accepted).** Delegated installs pull the repo at
   `HEAD`, not the embedded snapshot in the running binary, so a non-Claude agent
   can receive newer or older skills than the binary carries. v1 tracks `HEAD`;
@@ -165,12 +164,14 @@ inspectable plan; the thin shell prints it, prompts, and executes.
   installer.
 - **D3 — direct install is a canonical tree plus relative symlinks, reconciled by
   proven ownership.** Claude gets a derived `.doctrine/skills/<id>` tree and a
-  relative link into it; a link is ours iff its value equals our computed target,
-  yielding create / relink-heal / keep-foreign, re-proven at mutation time.
+  relative link into it; a link is ours iff it is a symlink whose target lies
+  inside a framework canon root — ours and mapped to a shipped member is relinked
+  to the current layout, ours and unmapped is unlinked on a project install and
+  reported on a global one, anything else is kept foreign — re-proven at mutation
+  time.
 - **D4 — the canonical tree is derived and self-ignored.** It owns no authored
-  data, so materialise always overwrites via a staged atomic swap, and `claude
-  install` self-enforces the `.doctrine/skills/*` ignore anchored at the
-  tree's base.
+  data, so materialise always overwrites via a staged atomic swap, and it is
+  covered by the managed gitignore block.
 - **D5 — marketplace-only subset domains are excluded from the CLI catalog.**
   `doctrine-memory`/`doctrine-partner` are symlink subsets of the canonical
   `doctrine` domain for marketplace publishing; discovery drops them so they
