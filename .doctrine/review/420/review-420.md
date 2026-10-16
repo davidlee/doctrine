@@ -41,3 +41,87 @@ Lines of attack:
 
 Gate: `doctrine check gate` green at `9dff138fa` (orchestrator re-run).
 
+
+## Synthesis
+
+**Closure story.** SL-281 makes `doctrine install` act on ADR-019's *owned*
+axis. The manifest classifies framework roots and per-harness def sets
+(PHASE-01). A pure ownership plan (PHASE-02) drives exclusive staging
+(PHASE-03) and a convergence executor that re-proves every entry before
+mutating it (PHASE-04). A managed `.gitignore` block replaces the hand-kept list
+(PHASE-05). The repo dogfoods it (PHASE-06). All 13 VT criteria pass, and
+`doctrine check gate` is green at `9dff138fa` and again after the fix-now
+commit `6fd47ea0b`. The safety contract held under adversarial probing:
+nothing user-owned was deleted in any reproduction, and no finding is a
+blocker.
+
+**What the audit changed.**
+- Fixed in code (`6fd47ea0b`):
+  - F-1: a symlinked canon container no longer freezes its members.
+  - F-15: an unreadable entry is disclosed, not classed as a real file.
+  - F-9: install prompts say what confirming mutates.
+- Fixed in the repo:
+  - F-5: the pi dispatch-worker link is untracked.
+  - F-2: PHASE-03..06 decisions and the user's assent are harvested into
+    `notes.md` (`a62526d64`).
+
+**Standing risks.**
+- `.agents/skills` is still written by npx from GitHub, not the local build,
+  so a dogfooded repo can carry retired or stale skills (F-6, owned by
+  IMP-406). ISS-353 is closed only for doctrine-linked harnesses.
+- A canon container that is a dangling symlink, or a symlink to a file,
+  records no member states. A write there fails at apply time, as before
+  (pre-existing; noted in the fix hand-back).
+- The F-9 convergence wording is single-sourced in `canon_convergence()` as
+  two match-arm literals rather than named constants. That meets STD-001's
+  intent, if not its letter; accepted.
+
+**Tradeoffs consciously accepted.**
+- PHASE-03..05 shipped on a substitute gate, forced by the cargo 1.100 bump
+  and later covered by CHR-178 and green gates (F-12).
+- PHASE-03 never observed red (F-13).
+- The `.gitignore` comment rationale now lives only in
+  `install/manifest.toml` (F-16).
+- User-visible output changes:
+  - Already-correct links print nothing (D1).
+  - The install prompt and summary lines are reworded; there is a new
+    `canon` summary line and an `unreadable` report row.
+
+## Reconciliation Brief
+
+### Per-slice (direct edit)
+- F-3 — `design.md` sec-convergence flowchart (`KF` node) and §Links prose:
+  a foreign symlink is kept and reported **only at a member link site**;
+  elsewhere it is ignored (PHASE-02 OQ-1).
+- F-4 — `design.md` §Shape / §Convergence and the report vocabulary. Record:
+  - D3: convergence runs only when at least one harness is confirmed; the
+    gitignore block is written regardless.
+  - D4: abort on the first I/O or bake error (`framework install failed`).
+  - D1: an already-correct link emits no line.
+  - The new rows from the fix: `skipped … (changed since scan)` and
+    `unreadable … (left untouched)`.
+- F-7 — `design.md` sec-ownership: replace "nothing else lists a framework
+  path" with "the manifest is the source; `canon_root()`'s kind→root map is
+  test-pinned to it (`canon_roots_match_manifest_framework_roots`), as with
+  `DERIVED_RUNTIME`".
+- F-14 — `design.md` sec-verification: move "only `.pi/` wires the codex boot
+  adapter" from the real-binary e2e list to unit coverage
+  (`detection_and_boot_follow_registry`).
+- F-10 — **selector registry** (load-bearing):
+  - `doctrine slice selector add 281` design-target `src/fsutil.rs`,
+    `tests/e2e_install_ownership.rs`, `.doctrine/adr/001/layering.toml`,
+    `.pi/agents/dispatch-worker.md`.
+  - scope-relevant `src/memory.rs`.
+  - Mirror in `design.md` §6.
+- F-8 (design half) — `design.md` DEC-372 text: the full def set projects on
+  an explicit `--agent` **or a detected harness the user confirms (prompt or
+  `-y`)**.
+
+### Governance/spec (REV)
+- F-8 — REV-071 D7 row (still proposed): amend to "explicit `--agent`, or
+  detected and confirmed". Check that ADR-019's VA ("nothing projected by
+  default") reads as satisfied, since confirmation is a request. Settle the
+  DEC-372 knowledge record's wording to match.
+- F-6 — ISS-353: on close, resolve as fixed **for doctrine-linked harnesses**
+  only, with the npx-written `.agents/skills` remainder pointed at IMP-406.
+  This is a backlog transition, not a spec write.

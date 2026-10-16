@@ -10,13 +10,21 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Conformance audit of SL-281 PHASE-01..06 (017329e71..9dff138fa) against design.md DEC-372..377, plan EX/VT criteria, ADR-019, ADR-001, SPEC-010 REQ-178, STD-001/003; slice conformance algebra; temp-project reproductions of prune safety and dry-run; doctrine check gate (green at 9dff138fa and 6fd47ea0b). Fix-now items landed (6fd47ea0b, a62526d64, F-5 untrack); design/governance items in the Reconciliation Brief.
+"""
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-281"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: canon writes follow a symlinked ancestor and refresh; observed: a symlinked canon container makes every member write 'skipped (changed since scan)' forever"
 detail = """
@@ -41,9 +49,14 @@ response = """
 Fix before close: record each member canon path's state regardless of container descent, keep the symlinked container prune-blocked. Regression test from the temp-project repro.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "fixed in 6fd47ea0b; execute_refreshes_defs_through_a_symlinked_canon_container seen red then green; gate green"
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: PHASE-03..06 decisions harvested into durable notes.md; observed: harvest stops at PHASE-02, decisions live only in gitignored phase sheets"
 detail = """
@@ -68,9 +81,14 @@ response = """
 User assent recorded 2026-10-16 ("ok i'll take your dispositions", in reply to the explicit list): accepts PHASE-04 D1 (no `relinked` line for an already-correct link), D3 (convergence only when ≥1 harness confirmed; gitignore block regardless), D4 (abort on first I/O/bake error), D6 (framework_roots test-only), PHASE-05 D2 (malformed markers: untouched, counts reported, exit 0), and PHASE-06 OQ-1 (shipped capsule-orchestrator "never pass `name`" line). Fix: harvest PHASE-03..06 decisions, OQs, findings and this assent into notes.md before close.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "harvested in a62526d64, incl. verbatim user assent"
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: design reports every foreign symlink; observed: code reports foreign symlinks only at member sites"
 detail = """
@@ -95,9 +113,14 @@ response = """
 Code is right (PHASE-02 OQ-1, user-agreed). Reconcile: design.md sec-convergence flowchart + §Links — foreign symlinks reported only at member sites. See RV-420 Reconciliation Brief.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "brief entry exists (Reconciliation Brief)"
+
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: convergence behaviour rules recorded in design; observed: PHASE-04 D1/D3/D4 exist only in the phase sheet"
 detail = """
@@ -123,9 +146,14 @@ response = """
 User accepted D1/D3/D4 (see F-2). Reconcile: record them in design.md §Shape / §Convergence and the report vocabulary. See Reconciliation Brief.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "brief entry exists (Reconciliation Brief)"
+
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: framework-owned links are untracked so the managed block governs them; observed: .pi/agents/dispatch-worker.md is tracked, relinked by install, and listed in the block"
 detail = """
@@ -149,9 +177,14 @@ response = """
 User accepted the recommendation: untrack `.pi/agents/dispatch-worker.md` (`git rm --cached`) so the managed block governs it, as for every other framework link.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "untracked in its own commit; git check-ignore confirms the block owns it"
+
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected (scope, ISS-353): retired skills no longer invocable; observed: npx-written .agents/skills still carries retired and stale skills"
 detail = """
@@ -175,9 +208,14 @@ response = """
 Design §Risks accepts it; owned by existing IMP-406 (npx-written skills neither ignored nor pruned). Reconcile closes ISS-353 for doctrine-linked harnesses only and points the remainder at IMP-406.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "owned by IMP-406; ISS-353 partial-close noted in brief"
+
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected (design §Ownership): nothing but the manifest lists a framework path; observed: Rust canon_root() hardcodes the three roots"
 detail = """
@@ -200,9 +238,14 @@ response = """
 Kind→root map is unavoidable (manifest roots carry no kind) and test-pinned to the manifest. Reconcile: design.md sec-ownership acknowledges the test-pinned map, as with DERIVED_RUNTIME.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "brief entry exists (Reconciliation Brief)"
+
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected (DEC-372): full def set projected only on an explicit --agent; observed: the same leg runs for a detected harness confirmed at the prompt or under -y"
 detail = """
@@ -226,9 +269,14 @@ response = """
 User chose option (a): confirmation is a request. Reconcile: DEC-372 text and REV-071 D7 row (still proposed) read "explicit --agent, or detected and confirmed (prompt or -y)". No code change.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "brief entry exists (Reconciliation Brief)"
+
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected: install prompts disclose what confirmation mutates; observed: pi prompt says only 'skills … delegates to npx', claude line says 'agent def' (singular)"
 detail = """
@@ -251,9 +299,14 @@ response = """
 Fix before close: install prompt/plan lines name what confirmation does (skills + agent defs, canon convergence), and plural defs.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "fixed in 6fd47ea0b; install_offer_names_what_confirming_mutates; e2e pins updated"
+
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: conformance clean; observed: 21 undeclared paths, plus off-registry paths from e523e95c0"
 detail = """
@@ -287,9 +340,14 @@ response = """
 Reconcile via the selector registry: `slice selector add` design-target src/fsutil.rs, tests/e2e_install_ownership.rs, .doctrine/adr/001/layering.toml, .pi/agents/dispatch-worker.md; scope-relevant src/memory.rs; design.md §6 mirrors. Observation records and slice-281.toml are process byproducts; the e523e95c0 fixture lift was user-approved pre-phase work.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "brief entry exists (Reconciliation Brief)"
+
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = 'Expected (STD-001): named constant; observed: literal "GIT_GUARD","off" repeated in 4 test git helpers'
 detail = """
@@ -312,9 +370,14 @@ response = """
 Pre-phase fixture code, out of slice scope; captured as a backlog chore to extract a shared test git helper with a named GIT_GUARD constant.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "captured as CHR-179"
+
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected: each phase's EX 'gate green' at commit; observed: PHASE-03..05 gated by a scoped clippy+tests substitute on a red toolchain baseline"
 detail = """
@@ -337,9 +400,14 @@ response = """
 Substitute gate was forced by an external toolchain bump (CHR-178). Real gate green at aec6fa420 and 9dff138fa covers PHASE-03..05 retroactively.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "rationale accepted"
+
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected: TDD red observed for PHASE-03; observed: none recorded"
 detail = """
@@ -362,9 +430,14 @@ response = """
 The test demonstrably exercises the regression (plants the legacy .tmp-<id> squatter the old code deleted). Process slip, recorded as friction; no remaining correctness risk.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "rationale accepted"
+
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected (design §Verification): real-binary e2e for 'only .pi/ wires the codex boot adapter'; observed: unit test only"
 detail = """
@@ -396,9 +469,14 @@ response = """
 Reconcile: design.md sec-verification moves 'only .pi/ wires the codex boot adapter' from the real-binary e2e list to unit coverage (detection_and_boot_follow_registry) — a pure registry mapping, e2e adds cost without signal.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "brief entry exists (Reconciliation Brief)"
+
 [[finding]]
 id = "F-15"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected (STD-003): unreadable link-dir entry disclosed accurately; observed: recorded as Real — reported as 'real file shadows' at a member site, silent elsewhere"
 detail = """
@@ -421,9 +499,14 @@ response = """
 Fix before close alongside F-1: an unreadable entry is reported as unreadable (STD-003), never classed Real or skipped silently.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "fixed in 6fd47ea0b; scan_records_unreadable_link_dir_entry and plan_discloses_unreadable_link_dir_entry seen red"
+
 [[finding]]
 id = "F-16"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected: observation-records rationale stays visible in .gitignore; observed: the 3-line comment was dropped when the entry moved into the block"
 detail = """
@@ -445,6 +528,11 @@ disposition = "tolerated"
 response = """
 Block lines cannot carry comments; rationale lives in install/manifest.toml [gitignore], the block's source.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "rationale accepted"
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
