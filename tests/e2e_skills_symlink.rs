@@ -52,7 +52,7 @@ fn install_links_then_refreshes_and_keeps_an_override() {
     // marketplace registration, no plugin install.
     let out = install(dir);
     assert!(
-        out.contains("install skills + agent def for claude"),
+        out.contains("install skills + agent defs + workflows for claude"),
         "forward summary: {out}"
     );
     // Skills are direct-written (SL-250 PHASE-05): a fresh install links.

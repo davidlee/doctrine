@@ -376,6 +376,60 @@ fn delegate_targets(agents: &[String], registry: &Registry) -> DelegateTargets {
     d
 }
 
+/// What confirming a harness installs, part by part (RV-420 F-9).
+const OFFER_SKILLS: &str = "skills";
+const OFFER_SKILLS_VIA_NPX: &str = "skills via npx";
+const OFFER_AGENT_DEFS: &str = "agent defs";
+const OFFER_WORKFLOWS: &str = "workflows";
+
+/// What confirming `agent` installs: its skills route, then the def sets its
+/// registry entry links. An unregistered harness gets npx skills only.
+fn install_offer(agent: &str, registry: &Registry) -> String {
+    let h = registry.get(agent);
+    let skills = if h.is_some_and(|h| h.skills.is_some()) {
+        OFFER_SKILLS
+    } else {
+        OFFER_SKILLS_VIA_NPX
+    };
+    let parts: Vec<&str> = [
+        Some(skills),
+        h.and_then(|h| h.agents.as_ref()).map(|_| OFFER_AGENT_DEFS),
+        h.and_then(|h| h.workflows.as_ref())
+            .map(|_| OFFER_WORKFLOWS),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    format!("{} for {agent}", parts.join(" + "))
+}
+
+/// The canon convergence any confirmed harness triggers: a project install
+/// prunes what is not shipped; a global one only reports it (DEC-377).
+fn canon_convergence(scope: Scope) -> &'static str {
+    match scope {
+        Scope::Project => "converge framework canon (pruning unshipped entries)",
+        Scope::Global => "converge framework canon (reporting orphans)",
+    }
+}
+
+/// The confirmation asked per harness before convergence.
+fn install_question(agent: &str, registry: &Registry, scope: Scope) -> String {
+    format!(
+        "Install {}, and {}? [y/N/a]",
+        install_offer(agent, registry),
+        canon_convergence(scope)
+    )
+}
+
+/// The ownership scope `global` selects.
+fn install_scope(global: bool) -> Scope {
+    if global {
+        Scope::Global
+    } else {
+        Scope::Project
+    }
+}
+
 /// Disclose each unregistered harness (DEC-377): it gets no agent defs or
 /// links, only npx skills delegation under its own name.
 fn report_unregistered(names: &[String], out: &mut dyn Write) -> io::Result<()> {
@@ -438,20 +492,18 @@ fn print_forward_summary(
         )?;
     } else {
         for agent in &agents {
-            if agent == "claude" {
-                writeln!(
-                    stdout,
-                    "  {:<12} install skills + agent def for claude",
-                    "claude"
-                )?;
-            } else {
-                writeln!(
-                    stdout,
-                    "  {:<12} install skills for {agent} (delegates to npx)",
-                    "skills"
-                )?;
-            }
+            writeln!(
+                stdout,
+                "  {agent:<12} install {}",
+                install_offer(agent, registry)
+            )?;
         }
+        writeln!(
+            stdout,
+            "  {:<12} {}",
+            "canon",
+            canon_convergence(install_scope(args.global))
+        )?;
     }
     Ok(())
 }
@@ -472,11 +524,7 @@ fn with_wanted<R>(
     let cx = Converge {
         root,
         base: &base,
-        scope: if args.global {
-            Scope::Global
-        } else {
-            Scope::Project
-        },
+        scope: install_scope(args.global),
     };
     let defs = embedded_agent_defs();
     let workflows = embedded_workflow_defs();
@@ -620,11 +668,7 @@ fn run_forward_steps(
 
     let mut confirmed: Vec<String> = Vec::new();
     for agent in &agents {
-        let question: String = if agent == "claude" {
-            "Install skills + agent def for claude? [y/N/a]".to_string()
-        } else {
-            format!("Install skills for {agent} (delegates to npx)? [y/N/a]")
-        };
+        let question = install_question(agent, registry, install_scope(args.global));
         if prompt_step(&question, args.yes, &mut all_yes)? {
             confirmed.push(agent.clone());
         }
@@ -2128,6 +2172,11 @@ fn entry_state(path: &Path) -> io::Result<EntryState> {
     })
 }
 
+/// [`entry_state`], an error naming `path`.
+fn read_state(path: &Path) -> anyhow::Result<EntryState> {
+    entry_state(path).with_context(|| format!("Failed to read {}", path.display()))
+}
+
 /// The plan's snapshot plus every scanned path's state (a missing key was
 /// absent) — re-proof state stays in the shell, not in `Snapshot`/`Action`.
 struct Scan {
@@ -2168,10 +2217,10 @@ fn scan(
         for path in out.list(base, dir)? {
             let name = path.file_name().unwrap_or_default().to_os_string();
             let dir = dir.clone();
-            // An unreadable symlink is recorded as real (no state): the plan
-            // only reports a real entry, so nothing ever re-proves or touches it.
+            // An unreadable entry has no state: the plan only discloses it
+            // (STD-003), so nothing ever re-proves or touches it.
             let Ok(state) = entry_state(&path) else {
-                out.snapshot.links.push(LinkSeen::Real { dir, name });
+                out.snapshot.links.push(LinkSeen::Unreadable { dir, name });
                 continue;
             };
             out.snapshot.links.push(match &state {
@@ -2196,20 +2245,29 @@ impl Scan {
 
     /// List canon dir `dir`, descending into each child that is a real-dir
     /// container of some member canon path — never into a symlink, never
-    /// below member depth (the canon depth contract).
+    /// below member depth (the canon depth contract). A container that is a
+    /// symlink to a dir is not listed (nothing beneath it becomes a prune
+    /// candidate), but its members' states are recorded so their writes
+    /// re-prove (RV-420 F-1).
     fn canon_dir(&mut self, base: &Path, dir: &Path, want: &Desired) -> anyhow::Result<()> {
         for path in self.list(base, dir)? {
-            let state =
-                entry_state(&path).with_context(|| format!("Failed to read {}", path.display()))?;
-            let container = state == EntryState::Dir
-                && want
-                    .members
-                    .iter()
-                    .any(|m| m.canon != path && m.canon.starts_with(&path));
+            let state = read_state(&path)?;
+            let beneath: Vec<&Path> = want
+                .members
+                .iter()
+                .map(|m| m.canon.as_path())
+                .filter(|canon| *canon != path && canon.starts_with(&path))
+                .collect();
+            let linked_dir = matches!(state, EntryState::Symlink(_)) && path.is_dir();
+            let descend = state == EntryState::Dir && !beneath.is_empty();
             self.snapshot.canon.push(path.clone());
             self.states.insert(path.clone(), state);
-            if container {
+            if descend {
                 self.canon_dir(base, &path, want)?;
+            } else if linked_dir {
+                for canon in beneath {
+                    self.states.insert(canon.to_path_buf(), read_state(canon)?);
+                }
             }
         }
         Ok(())
@@ -2309,6 +2367,10 @@ fn action_line(action: &Action, scan: &Scan, wanted: &Wanted<'_>, dry_run: bool)
             Notice::StaleStaging(p) => row(
                 "stale staging",
                 &format!("{} (left by an interrupted install — delete it)", shown(p)),
+            ),
+            Notice::Unreadable(p) => row(
+                "unreadable",
+                &format!("{} (could not read it — left untouched)", shown(p)),
             ),
         },
     }
@@ -2429,7 +2491,7 @@ fn apply<'p>(
             p
         }
     };
-    let now = entry_state(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    let now = read_state(path)?;
     if now != scan.scanned(path) {
         return Ok(Applied::Changed(path));
     }
@@ -2716,6 +2778,29 @@ mod tests_converge {
         assert_eq!(got.scanned(&real), EntryState::File);
     }
 
+    /// RV-420 F-15: a link-dir entry `lstat` cannot read (dir listable, not
+    /// searchable) is recorded as unreadable, with no state to re-prove.
+    #[test]
+    fn scan_records_unreadable_link_dir_entry() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = Tree::new();
+        let entry = t.file(".claude/agents/b.md", "mine");
+        let dir = t.path(".claude/agents");
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o444)).unwrap();
+        let got = scan(t.base(), &[], &[dir.clone()], &Desired::default());
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        let got = got.unwrap();
+
+        assert_eq!(
+            got.snapshot.links,
+            [LinkSeen::Unreadable {
+                dir,
+                name: "b.md".into(),
+            }]
+        );
+        assert!(!got.states.contains_key(&entry));
+    }
+
     #[test]
     fn scan_blocks_prune_through_symlinked_ancestors() {
         let t = Tree::new();
@@ -2903,6 +2988,10 @@ mod tests_converge {
             (
                 Notice::StaleStaging(p(".doctrine/skills/.tmp-x.1.0")),
                 "  stale staging /p/.doctrine/skills/.tmp-x.1.0 (left by an interrupted install — delete it)",
+            ),
+            (
+                Notice::Unreadable(p(".claude/agents/f.md")),
+                "  unreadable /p/.claude/agents/f.md (could not read it — left untouched)",
             ),
         ];
         for (notice, line) in notices {
@@ -3124,6 +3213,46 @@ mod tests_converge {
         );
         assert!(out.contains("  linked    dispatch-worker.md"), "{out}");
         assert!(!t.path(".doctrine/agents/pi").exists(), "pi not selected");
+    }
+
+    /// RV-420 F-1: a canon container symlinked outside the canon still
+    /// converges — its defs refresh through the link; nothing beside them is
+    /// pruned through it.
+    #[test]
+    fn execute_refreshes_defs_through_a_symlinked_canon_container() {
+        let t = Tree::new();
+        let reloc = tempfile::tempdir().unwrap();
+        let def = reloc.path().join("capsule-worker.md");
+        let notes = reloc.path().join("my-notes.md");
+        fs::write(&def, "edited").unwrap();
+        fs::write(&notes, "mine").unwrap();
+        t.link(".doctrine/agents/claude", reloc.path());
+        t.file(".doctrine/hymns/role/worker.md", "RESOLVED WORKER BODY");
+        let cx = project(&t);
+        let registry = real_registry();
+        let defs = embedded_agent_defs();
+        let catalog = discover().unwrap();
+        let wanted = desired_set(
+            t.base(),
+            &registry,
+            &names(&["claude"]),
+            &defs,
+            &catalog,
+            &[],
+            &[],
+        );
+        let (scanned, actions) = scan_and_plan(&cx, &registry, &wanted);
+        let out = run(&cx, &wanted, &scanned, &actions);
+
+        let (_, shipped) = defs
+            .iter()
+            .find(|(rel, _)| rel == "claude/capsule-worker.md")
+            .unwrap();
+        assert!(fs::read(&def).unwrap() == *shipped, "refreshed: {out}");
+        assert!(reloc.path().join("dispatch-worker.md").is_file(), "{out}");
+        assert_eq!(fs::read_to_string(&notes).unwrap(), "mine", "{out}");
+        assert!(!out.contains("skipped"), "{out}");
+        assert!(!out.contains("pruned"), "{out}");
     }
 
     #[test]
@@ -5522,6 +5651,30 @@ mod tests {
         assert!(
             out.contains("cursor") && out.contains("unregistered"),
             "{out}"
+        );
+    }
+
+    /// RV-420 F-9: the prompt and the forward summary name everything
+    /// confirming a harness installs, and the canon convergence it triggers.
+    #[test]
+    fn install_offer_names_what_confirming_mutates() {
+        let reg = registry();
+        for (agent, offer) in [
+            ("claude", "skills + agent defs + workflows for claude"),
+            ("pi", "skills via npx + agent defs for pi"),
+            ("codex", "skills via npx for codex"),
+            ("cursor", "skills via npx for cursor"),
+        ] {
+            assert_eq!(install_offer(agent, &reg), offer);
+        }
+        assert_eq!(
+            install_question("pi", &reg, Scope::Project),
+            "Install skills via npx + agent defs for pi, and converge framework canon \
+             (pruning unshipped entries)? [y/N/a]"
+        );
+        assert_eq!(
+            canon_convergence(Scope::Global),
+            "converge framework canon (reporting orphans)"
         );
     }
 

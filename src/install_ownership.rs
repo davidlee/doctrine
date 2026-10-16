@@ -70,6 +70,22 @@ pub(crate) enum LinkSeen {
         dir: PathBuf,
         name: OsString,
     },
+    /// `lstat` (or `readlink`) failed: what occupies the site is unknown.
+    Unreadable {
+        dir: PathBuf,
+        name: OsString,
+    },
+}
+
+impl LinkSeen {
+    /// The entry's path: its dir joined with its name.
+    pub(crate) fn dest(&self) -> PathBuf {
+        match self {
+            Self::Symlink { dir, name, .. }
+            | Self::Real { dir, name }
+            | Self::Unreadable { dir, name } => dir.join(name),
+        }
+    }
 }
 
 /// A project install converges canon roots; a global one only reports
@@ -97,6 +113,7 @@ pub(crate) enum Notice {
     Shadows(PathBuf),
     PruneBlocked(PathBuf),
     StaleStaging(PathBuf),
+    Unreadable(PathBuf),
 }
 
 /// Decide every action for framework-owned paths (design `sec-convergence`).
@@ -170,11 +187,15 @@ impl<'a> Plan<'a> {
         sites: &BTreeMap<&Path, &'a Member>,
         entry: &LinkSeen,
     ) {
-        let (dir, name, value) = match entry {
-            LinkSeen::Symlink { dir, name, value } => (dir, name, Some(value)),
-            LinkSeen::Real { dir, name } => (dir, name, None),
+        let dest = entry.dest();
+        let (dir, value) = match entry {
+            LinkSeen::Unreadable { .. } => {
+                self.notices.insert(Notice::Unreadable(dest));
+                return;
+            }
+            LinkSeen::Symlink { dir, value, .. } => (dir, Some(value)),
+            LinkSeen::Real { dir, .. } => (dir, None),
         };
-        let dest = dir.join(name);
         let site = sites.get(dest.as_path()).copied();
         if is_staging(&dest) {
             self.notices.insert(Notice::StaleStaging(dest));
@@ -207,15 +228,7 @@ impl<'a> Plan<'a> {
 
     /// Create the selected harnesses' links where nothing occupies the site.
     fn create_links(&mut self, want: &'a Desired, seen: &Snapshot) {
-        let occupied: BTreeSet<PathBuf> = seen
-            .links
-            .iter()
-            .map(|entry| match entry {
-                LinkSeen::Symlink { dir, name, .. } | LinkSeen::Real { dir, name } => {
-                    dir.join(name)
-                }
-            })
-            .collect();
+        let occupied: BTreeSet<PathBuf> = seen.links.iter().map(LinkSeen::dest).collect();
         for member in &want.members {
             for dest in &member.links {
                 if want.new_links.contains(dest) && !occupied.contains(dest) {
@@ -460,6 +473,13 @@ mod tests {
         )
     }
 
+    /// A link-dir entry's `(dir, name)` under `/p`.
+    fn site(rel: &str) -> (PathBuf, OsString) {
+        let dest = p(rel);
+        let name = dest.file_name().unwrap().to_owned();
+        (dest.parent().unwrap().to_path_buf(), name)
+    }
+
     /// A desired set and a snapshot under `/p`, planted by relative path.
     #[derive(Default)]
     struct World {
@@ -488,21 +508,24 @@ mod tests {
         }
 
         fn symlink(mut self, rel: &str, value: &str) -> Self {
-            let dest = p(rel);
+            let (dir, name) = site(rel);
             self.seen.links.push(LinkSeen::Symlink {
-                dir: dest.parent().unwrap().to_path_buf(),
-                name: dest.file_name().unwrap().to_owned(),
+                dir,
+                name,
                 value: PathBuf::from(value),
             });
             self
         }
 
         fn real(mut self, rel: &str) -> Self {
-            let dest = p(rel);
-            self.seen.links.push(LinkSeen::Real {
-                dir: dest.parent().unwrap().to_path_buf(),
-                name: dest.file_name().unwrap().to_owned(),
-            });
+            let (dir, name) = site(rel);
+            self.seen.links.push(LinkSeen::Real { dir, name });
+            self
+        }
+
+        fn unreadable(mut self, rel: &str) -> Self {
+            let (dir, name) = site(rel);
+            self.seen.links.push(LinkSeen::Unreadable { dir, name });
             self
         }
 
@@ -692,6 +715,27 @@ mod tests {
         assert_eq!(
             writes(&actions),
             [p(".doctrine/agents/claude/dispatch-worker.md")]
+        );
+    }
+
+    /// RV-420 F-15 (STD-003): an entry whose state could not be read is
+    /// disclosed as unreadable wherever it sits — never as a real file — and
+    /// is neither linked over nor removed.
+    #[test]
+    fn plan_discloses_unreadable_link_dir_entry() {
+        let w = World::default()
+            .selected(agent("claude", "dispatch-worker.md"))
+            .unreadable(".claude/agents/dispatch-worker.md")
+            .unreadable(".claude/agents/mine.md");
+        let actions = w.project();
+        assert!(links(&actions).is_empty(), "{actions:?}");
+        assert!(removals(&actions).is_empty(), "{actions:?}");
+        assert_eq!(
+            notices(&actions),
+            [
+                Notice::Unreadable(p(".claude/agents/dispatch-worker.md")),
+                Notice::Unreadable(p(".claude/agents/mine.md")),
+            ]
         );
     }
 

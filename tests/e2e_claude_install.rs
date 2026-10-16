@@ -3,7 +3,7 @@
 //!
 //! Drives the consolidated `doctrine install` handler against a temp project and
 //! proves the Claude-surface install (design §9):
-//!   * VT-1: `install --agent claude --skill code-review` wires skills + agent def.
+//!   * VT-1: `install --agent claude --skill code-review` wires skills + agent defs.
 //!   * VT-2: the dispatch-worker agent def resolves at `.claude/agents/`.
 //!   * SL-250 PHASE-04: Claude hooks are settings-wired by direct write — eleven
 //!     entries across five events, from the `claude_hook_specs` registry into
@@ -217,7 +217,7 @@ fn install_wires_skills_agent_and_hooks_directly() {
     // assertion on its direct-write replacement keeps a golden on the
     // forward summary.
     assert!(
-        out.contains("install skills + agent def for claude"),
+        out.contains("install skills + agent defs + workflows for claude"),
         "forward summary: {out}"
     );
     // Agent def still installed manually.
@@ -362,8 +362,12 @@ fn install_agent_pi_dry_run_prints_delegation_plan() {
         "pi agent mentioned in plan: {stdout}"
     );
     assert!(
-        stdout.contains("delegates to npx"),
+        stdout.contains("install skills via npx + agent defs for pi"),
         "npx delegation shown: {stdout}"
+    );
+    assert!(
+        stdout.contains("converge framework canon (pruning unshipped entries)"),
+        "canon convergence disclosed: {stdout}"
     );
     assert!(
         stdout.contains("not executed"),
