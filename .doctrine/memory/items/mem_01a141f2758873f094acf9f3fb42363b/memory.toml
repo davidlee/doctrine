@@ -1,0 +1,42 @@
+memory_uid = "mem_01a141f2758873f094acf9f3fb42363b"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "Install's gitignore contract is two drifting surfaces, and the parity gate only sees one"
+summary = "install/manifest.toml [gitignore].entries (client contract, 11 all-.doctrine entries, no negations) has drifted from this repo's own .gitignore (richer: /.claude/* + !/.claude/settings.json, /.pi/* + !/.pi/agents, .doctrine/agents/* + !.../AGENTS.md). The every_runtime_gitignore_glob_is_classified parity gate reads only the repo file and only .doctrine/-prefixed lines, so harness paths are unclassified."
+created = "2026-10-15"
+updated = "2026-10-15"
+
+[scope]
+paths = ["install/manifest.toml", ".gitignore", "src/worktree/allowlist.rs", "src/worktree/mod.rs", "src/install.rs"]
+globs = []
+commands = []
+tags = ["install", "gitignore", "worktree", "derived-tier", "sharp-edge"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "965a1376907f46758ff8f6e676b9d6145c7812df"
+ref_name = "refs/heads/edge"
+checkout_state_id = "bf0f757924a47bb653d04b8dd6724fa8b4b5b72abbe9cb89d78a2b2d2e737e70"
+base_commit = "2cd0fbfad3657f98885ee5422ff1d2bc94ae008d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

@@ -6,7 +6,39 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · **PARKED FOR INCUBATION** · design (**RV-314
+fresh-as-of: 2026-10-07 · **UNPARKED — redesign under DEC-371** · design run
+`dr-01a11528` (exploring) · RV-314 to be disposed superseded-by-redesign
+
+### Redesign triage — 2026-10-07 (DEC-371, RFC-035)
+
+The parked design below is **history**, not the plan. DEC-371 settles: stamp is
+claim-shaped (claim set = scope.paths + glob expansion + own `memory.md`; bytes +
+mode + set vs a commit); anchor (I3) dropped; `--allow-dirty` deleted; 62
+`checkout_state_id` stamps reset. REV-034 re-drafted to match.
+
+- **Constraining governance:** SPEC-007 + REV-034 (REQ-146/147/155), DEC-371,
+  CON-003, REV-041 render contract, STD-003 (no silent skip), POL-002 (no
+  repo-local migration script — client repos carry the same stamps), STD-001.
+- **Shaping evidence:** EVD-030 (byte primitive; residuals set/symlink/mode);
+  verified_sha consumer census (DEC-371 body).
+- **Probe (git 2.55.0, 2026-10-07):** a `:(literal)` entry *through* a tracked
+  symlink, and a gitignored entry, both enumerate **empty with rc 0** from
+  `ls-files --cached --others --exclude-standard` and `ls-tree -r HEAD`. So
+  symlink-rooted, ignored and nonexistent entries are one case — *enumerates
+  nothing* — and none needs resolving, only reporting.
+- **Open questions:** scope rewrite (what leaves the slice); the
+  enumerates-nothing rule; legacy stamp migration (write vs read-time); the
+  comparison primitive; `validate` tri-state (ISS-257); claim-set/seam lockstep.
+- **Risks:** R-G (validate noise for formerly-silent rows) re-measures after the
+  reset; RV-314's inherited R-E (skip-worktree/assume-unchanged) dissolves —
+  byte comparison reads the worktree, not the index flag — to be confirmed.
+- **Likely leaves scope:** objective 3's declared boundary (noise reduction, not
+  correctness) → backlog; objective 2's index-blob symlink resolution; objective
+  6 (refusal names `--allow-dirty`).
+
+### Parked-design harvest (2026-07-27) — history
+
+Was: **PARKED FOR INCUBATION** · design (**RV-314
 `active · await=responder · 42 findings · 10 OPEN of which 7 blockers`; 21 older
 findings answered-but-UNVERIFIED**) · ae3b275e
 

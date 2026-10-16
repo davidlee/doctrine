@@ -276,7 +276,7 @@ firing** — "the worker wrote it" is a claim like any other.
 one beat where getting the distinction wrong turns an autonomous loop back into a
 babysat one — compaction is survivable by construction, so keep going and just
 make sure `handover.md` reflects disk before you get close. Why, and what a
-firing costs: `mem.pattern.dispatch.budget-is-a-handover-condition`.
+firing costs: `mem.pattern.dispatch.budgets-a-handover-condition`.
 
 Delegation is what keeps the orchestrator alive — planning a phase in-context
 burns the loop down in three or four phases. If it is reading source or
