@@ -5,6 +5,7 @@
 use crate::boot::BootCommand;
 use crate::commands::cli::Command;
 use crate::commands::config::ConfigCommand;
+use crate::commands::prompt::PromptCommand;
 use crate::commands::reservation::ReservationCommand;
 use crate::knowledge::KnowledgeCommand;
 use crate::policy::PolicyCommand;
@@ -359,10 +360,17 @@ ConceptMapCommand::New { .. } => Write("concept-map new"),
         // that mutates source (e.g. `cargo fmt`) is a worker-legal source delta,
         // not an authored write — and a worker running `check gate` to verify its
         // fork is the intended use, so Read is correct AND necessary (SL-163 §5.3).
-        // prompt resolve/model-keys/explain/check are all read-only (SL-186).
-        | Command::Prompt { .. }
         | Command::Check { .. }
         | Command::Status { .. } => Read,
+        // `prompt customise` writes tracked `.doctrine/hymns/` files (SL-282);
+        // resolve/model-keys/explain/check are read-only (SL-186).
+        Command::Prompt { command } => match command {
+            PromptCommand::Customise { .. } => Write("prompt customise"),
+            PromptCommand::Resolve { .. }
+            | PromptCommand::ModelKeys { .. }
+            | PromptCommand::Explain { .. }
+            | PromptCommand::Check { .. } => Read,
+        },
         // Mutates the canonical-id triple — an authored write (D2/D6).
         Command::Reseat { .. } => Write("reseat"),
         // Author / remove a tier-1 `[[relation]]` edge — authored writes (SL-048 §5.4).
@@ -557,5 +565,24 @@ mod tests {
             }
         ));
         assert!(matches!(write_class(&cli.command), WriteClass::Read));
+    }
+
+    /// SL-282 PHASE-04: `prompt customise` writes tracked hymn files, so a
+    /// worker is refused it; the other prompt verbs stay read-only.
+    #[test]
+    fn prompt_customise_classifies_as_write() {
+        use clap::Parser as _;
+        let class = |args: &[&str]| {
+            let cli = crate::Cli::try_parse_from(args).unwrap();
+            write_class(&cli.command)
+        };
+        assert!(matches!(
+            class(&["doctrine", "prompt", "customise", "role/worker"]),
+            WriteClass::Write("prompt customise")
+        ));
+        assert!(matches!(
+            class(&["doctrine", "prompt", "check"]),
+            WriteClass::Read
+        ));
     }
 }

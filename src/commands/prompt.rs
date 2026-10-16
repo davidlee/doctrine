@@ -94,6 +94,22 @@ pub(crate) enum PromptCommand {
         path: Option<PathBuf>,
     },
 
+    /// Take a copy of a framework hymn slot to edit (e.g. `role/worker`).
+    ///
+    /// Writes `.doctrine/hymns/<slot>.md` (the framework text) and its sidecar
+    /// `<slot>.toml` (`replaces = "<slot>"`), leaving either alone if it exists.
+    /// The copy replaces the framework text and no longer receives framework
+    /// updates. Sealed slots cannot be customised; run `doctrine install` first.
+    #[command(alias = "customize")]
+    Customise {
+        /// The framework slot, as `band/label`.
+        slot: String,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Validate the replaces graph + stage vocabulary over the whole corpus.
     Check {
         /// Explicit project root (default: auto-detect).
@@ -116,7 +132,7 @@ pub(crate) fn dispatch(cmd: PromptCommand, command_map: fn() -> String) -> anyho
             path,
         } => {
             let root = crate::root::find(path, &crate::root::default_markers())?;
-            let disk_root = root.join(".doctrine").join(crate::install::HYMNS_DIRNAME);
+            let disk_root = crate::install::hymns_disk_root(&root);
             let embedded = crate::install::embedded_hymns();
             let sealed = crate::install::embedded_seal_set()?;
             let corpus = crate::install::load_full_corpus(&disk_root, &embedded, &sealed)?;
@@ -179,7 +195,7 @@ pub(crate) fn dispatch(cmd: PromptCommand, command_map: fn() -> String) -> anyho
             path,
         } => {
             let root = crate::root::find(path, &crate::root::default_markers())?;
-            let disk_root = root.join(".doctrine").join(crate::install::HYMNS_DIRNAME);
+            let disk_root = crate::install::hymns_disk_root(&root);
             let embedded = crate::install::embedded_hymns();
             let sealed = crate::install::embedded_seal_set()?;
             let corpus = crate::install::load_full_corpus(&disk_root, &embedded, &sealed)?;
@@ -223,9 +239,22 @@ pub(crate) fn dispatch(cmd: PromptCommand, command_map: fn() -> String) -> anyho
             }
             Ok(())
         }
+        PromptCommand::Customise { slot, path } => {
+            let root = crate::root::find(path, &crate::root::default_markers())?;
+            let done = crate::install::customise_slot(&root, &slot)?;
+            let mut out = std::io::stdout();
+            for written in &done.written {
+                writeln!(out, "{}", written.display())?;
+            }
+            for kept in &done.kept {
+                writeln!(out, "kept {} (already exists)", kept.display())?;
+            }
+            writeln!(out, "{}", done.notice())?;
+            Ok(())
+        }
         PromptCommand::Check { path } => {
             let root = crate::root::find(path, &crate::root::default_markers())?;
-            let disk_root = root.join(".doctrine").join(crate::install::HYMNS_DIRNAME);
+            let disk_root = crate::install::hymns_disk_root(&root);
             let embedded = crate::install::embedded_hymns();
             let sealed = crate::install::embedded_seal_set()?;
             let corpus = crate::install::load_full_corpus(&disk_root, &embedded, &sealed)?;
@@ -287,7 +316,7 @@ fn build_ctx(
 /// model snippets always pass the filter). Shared by the `prompt model-keys`
 /// verb and the `doctrine_onboard` MCP tool.
 pub(crate) fn model_keys(root: &Path, harness: Option<&str>) -> anyhow::Result<Vec<String>> {
-    let disk_root = root.join(".doctrine").join(crate::install::HYMNS_DIRNAME);
+    let disk_root = crate::install::hymns_disk_root(root);
     let embedded = crate::install::embedded_hymns();
     let sealed = crate::install::embedded_seal_set()?;
     let corpus = crate::install::load_full_corpus(&disk_root, &embedded, &sealed)?;
@@ -460,6 +489,26 @@ mod tests {
             body: "worker body".into(),
         });
         corpus
+    }
+
+    // ── SL-282 PHASE-04 VT-3: `prompt customise` (alias `customize`) ──────
+
+    #[test]
+    fn customise_and_customize_parse_to_customise() {
+        use clap::Parser as _;
+        for verb in ["customise", "customize"] {
+            let cli =
+                crate::Cli::try_parse_from(["doctrine", "prompt", verb, "role/worker"]).unwrap();
+            assert!(
+                matches!(
+                    &cli.command,
+                    crate::commands::cli::Command::Prompt {
+                        command: PromptCommand::Customise { slot, path: None },
+                    } if slot == "role/worker"
+                ),
+                "{verb}"
+            );
+        }
     }
 
     // ── VT-3: check_corpus unit tests ────────────────────────────────────

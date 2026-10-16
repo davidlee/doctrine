@@ -395,7 +395,7 @@ fn vt3_explain_multi_key_precedence_trace_spec_render() {
 
 // ── SL-193 PHASE-02 EX-2: exposed-slot self-`replaces` projection ─────────────
 //
-// After the producer (install forward-step 4) projects the exposed slots, each
+// After the producer (`prompt customise`) seeds the exposed slots, each
 // disk twin carries a self-`replaces` sidecar (`replaces = "<own slot>"`) that
 // suppresses its embedded framework origin at resolve — the single-emit MIRROR of
 // seal. These E2Es lock that corpus-wide over the built binary:
@@ -407,10 +407,9 @@ fn vt3_explain_multi_key_precedence_trace_spec_render() {
 //     (where the `replaces` graph is applied), not `prompt explain` (which prints
 //     the raw active set, ranked-but-present).
 //
-// The install producer cannot run here (worker-confined / heavy), so the fixture
-// is projected directly — the sidecar `.toml` is byte-for-byte the producer's
-// emission (`replaces = "<slot.path()>"\n`, src/install.rs::project_starters). The
-// disk `.md` carries a distinct user marker (an EDITED starter), so an un-
+// The fixture is seeded through the real producer, `prompt customise` (SL-282),
+// so each sidecar is the producer's emission by construction. The disk `.md` is
+// then overwritten with a distinct user marker (an EDITED starter), so an un-
 // suppressed framework twin would leave its framework body in the output — the
 // assertion that it is absent is the suppression proof.
 
@@ -448,17 +447,22 @@ const EXPOSED: &[(&str, &str, &[&str], &str, &str)] = &[
     ),
 ];
 
-/// Project the exposed slots into `root/.doctrine/hymns/**`: a user-marker `.md`
-/// twin and its self-`replaces` sidecar (the producer's exact `.toml` emission).
+/// Seed the exposed slots into `root/.doctrine/hymns/**` with `prompt customise`
+/// (after planting the install stamp it requires), then edit each `.md` to its
+/// user marker. Asserts the sidecar carries the self-`replaces` `target`.
 fn project_exposed(root: &Path) {
+    common::write_stamp(root, env!("CARGO_PKG_VERSION"));
     let hymns = root.join(".doctrine/hymns");
     for (stem, target, _args, marker, _fw) in EXPOSED {
-        let md = hymns.join(format!("{stem}.md"));
-        let toml = hymns.join(format!("{stem}.toml"));
-        fs::create_dir_all(md.parent().unwrap()).unwrap();
-        fs::write(&md, format!("{marker}\n")).unwrap();
-        // Byte-for-byte the producer's sidecar (src/install.rs::project_starters).
-        fs::write(&toml, format!("replaces = \"{target}\"\n")).unwrap();
+        let out = run(root, &["prompt", "customise", stem]);
+        assert!(
+            out.status.success(),
+            "prompt customise {stem} failed; stderr: {}",
+            stderr(&out)
+        );
+        let toml = fs::read_to_string(hymns.join(format!("{stem}.toml"))).unwrap();
+        assert_eq!(toml, format!("replaces = \"{target}\"\n"), "{stem} sidecar");
+        fs::write(hymns.join(format!("{stem}.md")), format!("{marker}\n")).unwrap();
     }
 }
 

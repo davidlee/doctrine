@@ -90,11 +90,20 @@ const PUBLISHED_DESIGN_ASSETS: &[&str] = &[
 /// byte-golden so the hymn's prose can be edited without breaking the seal tests.
 const SEALED_HYMN_MARKER: &str = "Design stage invariants";
 
-/// An `expose`d hymn slot, used as the POSITIVE CONTROL for the seal assertions:
-/// install projects exposed slots as editable starters, so a sealed slot's
-/// absence is attributable to the seal rather than to install projecting no
-/// hymns at all.
-const EXPOSED_HYMN_PROJECTION: &str = ".doctrine/hymns/role/worker.md";
+/// A customisable hymn slot and the copy `prompt customise` writes for it, used
+/// as the POSITIVE CONTROL for the seal assertions: the verb that refuses the
+/// sealed slot does write an unsealed one, so the sealed slot's absence is
+/// attributable to the seal rather than to a verb that writes nothing.
+const CUSTOMISABLE_HYMN: (&str, &str) = ("role/worker", ".doctrine/hymns/role/worker.md");
+
+/// `doctrine prompt customise <slot> -p <dir>`, output unchecked.
+fn customise(dir: &Path, slot: &str) -> std::process::Output {
+    common::doctrine_cmd(dir)
+        .args(["prompt", "customise", slot, "-p"])
+        .arg(dir)
+        .output()
+        .expect("spawn doctrine")
+}
 
 /// `doctrine publication validate` stdout — one `ok <address> -> <backing>` row
 /// per declared entry.
@@ -412,12 +421,27 @@ fn sealed_design_hymn_and_four_fragments_ship_installed() {
         !dir.join(".doctrine/hymns/stage/design.md").exists(),
         "sealed stage/design is not projected as user-editable content"
     );
-    // POSITIVE CONTROL for the assertion above: install DOES project exposed
-    // slots, so the absence is the seal's doing and not an empty projection.
+    // ... and `prompt customise` refuses it, naming the seal, writing nothing.
+    let sealed = customise(dir, "stage/design");
     assert!(
-        dir.join(EXPOSED_HYMN_PROJECTION).is_file(),
-        "exposed hymn slots are still projected ({EXPOSED_HYMN_PROJECTION}) — \
-         without this the sealed-slot assertion above is vacuous"
+        String::from_utf8_lossy(&sealed.stderr).contains("[hymns].seal"),
+        "customise refuses the sealed slot: {}",
+        String::from_utf8_lossy(&sealed.stderr)
+    );
+    assert!(
+        !dir.join(".doctrine/hymns/stage/design.md").exists(),
+        "a refused customise writes no sealed copy"
+    );
+    // POSITIVE CONTROL for the assertions above: customise DOES write an
+    // unsealed slot, so the absence is the seal's doing and not a verb that
+    // writes nothing.
+    let (slot, copy) = CUSTOMISABLE_HYMN;
+    let unsealed = customise(dir, slot);
+    assert!(
+        unsealed.status.success() && dir.join(copy).is_file(),
+        "customise writes {copy} — without this the sealed-slot assertions above \
+         are vacuous: {}",
+        String::from_utf8_lossy(&unsealed.stderr)
     );
 
     // EX-2: the fragment store is closed and code-owned — no user override, so

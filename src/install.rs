@@ -153,8 +153,6 @@ struct MemorySection {
 struct HymnsSection {
     #[serde(default)]
     seal: Vec<String>,
-    #[serde(default)]
-    expose: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -210,7 +208,7 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     let manifest = load_manifest()?;
     let project_root =
         detect_project_root(project_path, &manifest).context("Could not find project root")?;
-    let plan = InstallPlan::build(&manifest, &project_root, args, binary_version()?);
+    let plan = InstallPlan::build(&manifest, &project_root, args, binary_version()?)?;
     let root = plan.base.project_root.as_path();
 
     print_plan(&plan.base)?;
@@ -270,6 +268,10 @@ struct InstallPlan {
     /// How the project's install stamps compare with `binary`; read only for a
     /// project install (`--global` / `--only-memory` have no currency gate).
     currency: Option<CurrencyReport>,
+    /// Unedited starters the retired starter leg projected, removed once: only
+    /// on a project install whose tracked stamp is absent (a stamped repo's
+    /// identical copy is a deliberate `prompt customise`, RV-421 F-16).
+    legacy_starters: Vec<StarterCopy>,
 }
 
 impl InstallPlan {
@@ -278,13 +280,23 @@ impl InstallPlan {
         project_root: &Path,
         args: &InstallArgs<'_>,
         binary: semver::Version,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let base = build_plan(manifest, project_root);
         let harnesses = resolve_install_harnesses(args.agents, project_root, &manifest.harness);
         let boot = boot_harnesses(&harnesses, project_root, &manifest.harness);
         let is_project_install = !args.global && !args.only_memory;
         let currency = is_project_install.then(|| read_currency(project_root, &binary));
-        Self {
+        let legacy_starters =
+            if is_project_install && read_tracked_stamp(project_root) == StampRead::Absent {
+                identical_starters(
+                    &hymns_disk_root(project_root),
+                    &embedded_hymns(),
+                    &embedded_seal_set()?,
+                )?
+            } else {
+                Vec::new()
+            };
+        Ok(Self {
             base,
             harnesses,
             boot,
@@ -292,7 +304,8 @@ impl InstallPlan {
             is_project_install,
             binary,
             currency,
-        }
+            legacy_starters,
+        })
     }
 
     /// The warning for an install that would downgrade the project's generated
@@ -703,46 +716,14 @@ fn run_forward_steps(
     }
     outcomes.push((Leg::BootWiring, boot));
 
-    // Forward-step 4 (nominal label): project the exposed-slot starter twins +
-    // self-`replaces` sidecars onto disk. Placement is EARLY, not last (design F5):
-    // it MUST run before the convergence below, because its worker-def bake
-    // resolves the worker role body from the *disk* hymn corpus — the sidecars must
-    // already be on disk when it renders, or install is non-idempotent (the ISS-206
-    // double-emit). Establish the disk corpus (incl. user-override sidecars) here,
-    // before anything renders from it. Non-fatal on error (matches sibling steps).
-    let mut starters = LegOutcome::done();
-    if prompt_step(
-        "Project exposed hymn starters? [y/N/a]",
-        args.yes,
-        &mut all_yes,
-    )? {
-        match (embedded_expose_set(), embedded_seal_set()) {
-            (Ok(expose), Ok(seal)) => {
-                let disk = root.join(".doctrine").join(HYMNS_DIRNAME);
-                let embedded = embedded_hymns();
-                match project_starters(&disk, &embedded, &seal, &expose.0, args.dry_run) {
-                    Ok(written) => {
-                        writeln!(io::stdout(), "  projected {} hymn file(s)", written.len())?;
-                        starters = LegOutcome::Done(
-                            written
-                                .iter()
-                                .map(|p| Touched::under(root, p, Change::Created))
-                                .collect(),
-                        );
-                    }
-                    Err(e) => {
-                        writeln!(io::stdout(), "  hymn projection failed: {e:#}")?;
-                        starters = LegOutcome::failed(&e);
-                    }
-                }
-            }
-            (Err(e), _) | (_, Err(e)) => {
-                writeln!(io::stdout(), "  hymn projection failed: {e:#}")?;
-                starters = LegOutcome::failed(&e);
-            }
-        }
-    }
-    outcomes.push((Leg::HymnStarters, starters));
+    // Legacy starter removal (SL-282): the retired starter leg's unedited copies
+    // go, so the framework text applies again. Placement is EARLY, not last: it
+    // MUST run before the convergence below, because its worker-def bake
+    // resolves the worker role body from the *disk* hymn corpus — the corpus
+    // must be settled before anything renders from it, or install is
+    // non-idempotent. Non-fatal on error (matches sibling steps).
+    let starters = remove_legacy_starters(root, &plan.legacy_starters, &mut io::stdout())?;
+    outcomes.push((Leg::LegacyStarters, starters));
 
     // 3. Framework artefacts per confirmed harness, then npx delegation. The
     // answers form this run's selection; one convergence covers every
@@ -807,6 +788,41 @@ fn run_forward_steps(
     Ok(outcomes)
 }
 
+/// The progress line for one removed legacy starter (`rel`: its root-relative `.md`).
+fn legacy_removed_line(rel: &Path) -> String {
+    format!(
+        "  removed unedited starter {} (framework text applies again)",
+        rel.display()
+    )
+}
+
+/// Remove each unedited legacy starter (its `.md`, then its sidecar), printing
+/// one line per slot. The first error fails the leg.
+fn remove_legacy_starters(
+    root: &Path,
+    starters: &[StarterCopy],
+    out: &mut impl Write,
+) -> io::Result<LegOutcome> {
+    let mut touched = Vec::new();
+    for starter in starters {
+        let files = std::iter::once(&starter.md).chain(&starter.sidecar);
+        for path in files {
+            if let Err(e) = fs::remove_file(path) {
+                let e = anyhow::Error::new(e).context(format!("remove {}", path.display()));
+                writeln!(out, "  legacy starter removal failed: {e:#}")?;
+                return Ok(LegOutcome::failed(&e));
+            }
+            touched.push(Touched::under(root, path, Change::Removed));
+        }
+        writeln!(
+            out,
+            "{}",
+            legacy_removed_line(&root_relative(root, &starter.md))
+        )?;
+    }
+    Ok(LegOutcome::Done(touched))
+}
+
 // ---------------------------------------------------------------------------
 // Leg outcomes and the version stamps (SL-282 PHASE-03)
 // ---------------------------------------------------------------------------
@@ -816,7 +832,6 @@ fn run_forward_steps(
 pub(crate) enum Change {
     Created,
     Changed,
-    #[expect(dead_code, reason = "SL-282 PHASE-04 removes legacy starters")]
     Removed,
 }
 
@@ -834,14 +849,18 @@ impl Touched {
 
     /// `path` made relative to `root` (as given, or canonical) when under it.
     pub(crate) fn under(root: &Path, path: &Path, change: Change) -> Self {
-        let canonical = fs::canonicalize(root).ok();
-        let rel = path
-            .strip_prefix(root)
-            .ok()
-            .or_else(|| canonical.as_deref().and_then(|c| path.strip_prefix(c).ok()))
-            .unwrap_or(path);
-        Self::new(rel.to_path_buf(), change)
+        Self::new(root_relative(root, path), change)
     }
+}
+
+/// `path` made relative to `root` (as given, or canonical) when under it.
+fn root_relative(root: &Path, path: &Path) -> PathBuf {
+    let canonical = fs::canonicalize(root).ok();
+    path.strip_prefix(root)
+        .ok()
+        .or_else(|| canonical.as_deref().and_then(|c| path.strip_prefix(c).ok()))
+        .unwrap_or(path)
+        .to_path_buf()
 }
 
 /// What one install leg came to. Nothing to do, or deliberately skipped, is
@@ -871,7 +890,7 @@ impl LegOutcome {
 enum Leg {
     MemorySync,
     BootWiring,
-    HymnStarters,
+    LegacyStarters,
     Convergence,
     Skills,
     Gitignore,
@@ -883,7 +902,7 @@ impl Leg {
         match self {
             Self::MemorySync => "memory sync",
             Self::BootWiring => "boot wiring",
-            Self::HymnStarters => "hymn starters",
+            Self::LegacyStarters => "legacy starters",
             Self::Convergence => "convergence",
             Self::Skills => "skills",
             Self::Gitignore => "gitignore",
@@ -1027,20 +1046,6 @@ pub(crate) fn embedded_seal_set() -> anyhow::Result<crate::hymns::SealSet> {
     Ok(crate::hymns::SealSet(slots))
 }
 
-/// Build the exposed-slot set from the `[hymns] expose` entries in the embedded
-/// manifest — the mirror of `embedded_seal_set`. Each entry is a `"band/label"`
-/// string parsed into a `hymns::Slot`. Consumed by `project_starters` (forward
-/// step) to project the self-`replaces` starter twins.
-pub(crate) fn embedded_expose_set() -> anyhow::Result<crate::hymns::SealSet> {
-    let manifest = load_manifest()?;
-    let mut slots = std::collections::BTreeSet::new();
-    for s in &manifest.hymns.expose {
-        let slot = parse_seal_slot(s)?;
-        slots.insert(slot);
-    }
-    Ok(crate::hymns::SealSet(slots))
-}
-
 /// Return every embedded file whose name starts with `"hymns/"`,
 /// as `(relative-path-under-"hymns/", bytes)` pairs. The "hymns/" prefix is
 /// stripped so callers work with slot-relative paths.
@@ -1085,6 +1090,11 @@ pub(crate) fn embedded_agent_defs() -> Vec<(String, Vec<u8>)> {
 /// disk root. `"hymns/"` is the `rust_embed` prefix; `"hymns"` is the subdirectory
 /// name inside the `.doctrine` target.
 pub(crate) const HYMNS_DIRNAME: &str = "hymns";
+
+/// The project's disk hymn corpus root: `<root>/.doctrine/hymns`.
+pub(crate) fn hymns_disk_root(root: &Path) -> PathBuf {
+    root.join(".doctrine").join(HYMNS_DIRNAME)
+}
 
 /// Provisional SL-186 stage set (STD-001 single source). `check` flags any
 /// `stage`-band label not in this list.
@@ -1285,15 +1295,9 @@ fn load_embedded_corpus(
 
     let mut snippets = Vec::new();
     for (rel_path, bytes) in embedded {
-        if has_ext(rel_path, "toml") {
-            continue;
-        }
-        if !has_ext(rel_path, "md") {
-            continue;
-        }
-        // Skip files at the hymns root (no band directory).
+        // Skip sidecars, and files at the hymns root (no band directory).
         let rel = Path::new(rel_path);
-        if rel.components().count() < 2 {
+        if !is_snippet_path(rel) {
             continue;
         }
         let body = String::from_utf8(bytes.clone())
@@ -1329,16 +1333,7 @@ fn load_disk_corpus(
         return Ok(Vec::new());
     }
     let mut snippets = Vec::new();
-    let mut paths: BTreeSet<PathBuf> = BTreeSet::new();
-    collect_snippet_paths(disk_root, disk_root, &mut paths);
-
-    for rel in &paths {
-        if rel.extension() != Some("md".as_ref()) {
-            continue;
-        }
-        if rel.components().count() < 2 {
-            continue;
-        }
+    for rel in &disk_snippet_paths(disk_root) {
         let md_path = disk_root.join(rel);
         let body = fs::read_to_string(&md_path)
             .with_context(|| format!("Failed to read {}", md_path.display()))?;
@@ -1426,44 +1421,30 @@ fn bake_worker_def(
     Ok(expand_worker_marker(def_str, &body))
 }
 
-/// Project the disk starter twin + self-`replaces` sidecar for each exposed slot.
+/// Project the disk starter twin + self-`replaces` sidecar for each given slot
+/// (`prompt customise` passes the one slot it takes).
 ///
-/// For every exposed (non-sealed) slot, writes `.doctrine/hymns/<band>/<label>.md`
+/// For every given (non-sealed) slot, writes `.doctrine/hymns/<band>/<label>.md`
 /// (framework body) and `.doctrine/hymns/<band>/<label>.toml` (carrying
 /// `replaces = "<slot>"`, single-sourced off `Slot::path`, STD-001/D3). The `.md`
 /// and `.toml` are INDEPENDENT write-if-absent (D2): an absent file is written, a
 /// present file is preserved byte-for-byte — so a user-edited starter survives and
-/// a sidecar-less legacy twin is backfilled. `create_dir_all(parent)` runs before
+/// a sidecar-less twin is completed. `create_dir_all(parent)` runs before
 /// every `write_atomic` because `write_atomic` (`fsutil.rs`) does not mkdir (F2).
 /// `dry_run` writes nothing. The user twin's self-`replaces` suppresses its
-/// framework origin at resolve, so the exposed slot single-emits (REV-019 REQ-322).
+/// framework origin at resolve, so the slot single-emits (REV-019 REQ-322).
 pub(crate) fn project_starters(
     disk_root: &Path,
     embedded: &[(String, Vec<u8>)],
     sealed: &crate::hymns::SealSet,
-    exposed_slots: &BTreeSet<crate::hymns::Slot>,
+    slots: &BTreeSet<crate::hymns::Slot>,
     dry_run: bool,
 ) -> anyhow::Result<Vec<PathBuf>> {
-    let mut embedded_by_slot: std::collections::BTreeMap<crate::hymns::Slot, String> =
-        std::collections::BTreeMap::new();
-    for (rel_path, bytes) in embedded {
-        if !has_ext(rel_path, "md") {
-            continue;
-        }
-        let rel = Path::new(rel_path);
-        let Ok(slot) = path_to_slot(rel) else {
-            continue;
-        };
-        let Ok(body) = String::from_utf8(bytes.clone()) else {
-            continue;
-        };
-        embedded_by_slot.entry(slot).or_insert(body);
-    }
-
+    let embedded_by_slot = framework_bodies(embedded);
     let mut written = Vec::new();
-    for slot in exposed_slots {
-        // Belt-and-braces: seal wins if a slot is ever mislisted in both lists
-        // (the manifest lists are disjoint by construction). EX-1/VT-5.
+    for slot in slots {
+        // Belt-and-braces: a sealed slot is never projected, even if a caller
+        // passes one (`customise_slot` refuses it first). EX-1/VT-5.
         if sealed.0.contains(slot) {
             continue;
         }
@@ -1471,26 +1452,208 @@ pub(crate) fn project_starters(
             continue;
         };
 
-        let dir = disk_root.join(slot.band.as_str());
-        let md = dir.join(format!("{}.md", slot.label));
-        let toml = dir.join(format!("{}.toml", slot.label));
+        let [md, toml] = starter_paths(disk_root, slot);
 
         // Independent per-file write-if-absent (D2). `.md` and `.toml` are decided
         // separately: an absent `.md` is written and a present one preserved;
         // likewise the sidecar `.toml`, which backfills the legacy orphan twins.
         if !md.exists() {
-            project_write_if_absent(&md, body.as_bytes(), dry_run)?;
+            project_write_if_absent(&md, body, dry_run)?;
             written.push(md);
         }
 
         if !toml.exists() {
-            // Single-sourced off `Slot::path` — no magic string (D3/STD-001).
-            let sidecar = format!("replaces = \"{}\"\n", slot.path());
-            project_write_if_absent(&toml, sidecar.as_bytes(), dry_run)?;
+            project_write_if_absent(&toml, starter_sidecar(slot).as_bytes(), dry_run)?;
             written.push(toml);
         }
     }
     Ok(written)
+}
+
+/// The sidecar a starter twin carries: `replaces = "<slot>"`, so the user copy
+/// suppresses its framework origin (single emit). Single-sourced off `Slot::path`
+/// — no magic string (D3/STD-001).
+fn starter_sidecar(slot: &crate::hymns::Slot) -> String {
+    format!("replaces = \"{}\"\n", slot.path())
+}
+
+/// True for a corpus snippet path: a `.md` under a band directory (at least two
+/// components — a hymns-root file such as `README.md` is not a snippet). The one
+/// predicate both corpus loaders apply.
+fn is_snippet_path(rel: &Path) -> bool {
+    rel.extension().is_some_and(|e| e == "md") && rel.components().count() >= 2
+}
+
+/// The framework body for each embedded snippet slot. Its keys are the framework
+/// slots — the set `prompt customise` validates against.
+fn framework_bodies(embedded: &[(String, Vec<u8>)]) -> BTreeMap<crate::hymns::Slot, &[u8]> {
+    let mut bodies = BTreeMap::new();
+    for (rel_path, bytes) in embedded {
+        let rel = Path::new(rel_path);
+        if !is_snippet_path(rel) {
+            continue;
+        }
+        let Ok(slot) = path_to_slot(rel) else {
+            continue;
+        };
+        bodies.entry(slot).or_insert(bytes.as_slice());
+    }
+    bodies
+}
+
+/// The snippet paths (relative to `disk_root`) the disk corpus loader reads.
+fn disk_snippet_paths(disk_root: &Path) -> BTreeSet<PathBuf> {
+    let mut paths = BTreeSet::new();
+    collect_snippet_paths(disk_root, disk_root, &mut paths);
+    paths.retain(|rel| is_snippet_path(rel));
+    paths
+}
+
+/// One unedited legacy starter on disk: its `.md`, and its sidecar when present.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StarterCopy {
+    pub(crate) slot: crate::hymns::Slot,
+    pub(crate) md: PathBuf,
+    pub(crate) sidecar: Option<PathBuf>,
+}
+
+/// The legacy starter copies under `disk_root` that still carry exactly what
+/// the old install leg projected (SL-282): the framework body byte-for-byte,
+/// and either no sidecar or the default `starter_sidecar`. A sealed slot never
+/// had a sidecar projected, so for it any sidecar is the user's and blocks the
+/// match. An edited body, edited sidecar or non-framework slot never matches.
+pub(crate) fn identical_starters(
+    disk_root: &Path,
+    embedded: &[(String, Vec<u8>)],
+    sealed: &crate::hymns::SealSet,
+) -> anyhow::Result<Vec<StarterCopy>> {
+    let bodies = framework_bodies(embedded);
+    let read = |path: &Path| fs::read(path).with_context(|| format!("read {}", path.display()));
+    let mut copies = Vec::new();
+    for rel in disk_snippet_paths(disk_root) {
+        let Ok(slot) = path_to_slot(&rel) else {
+            continue;
+        };
+        let Some(body) = bodies.get(&slot) else {
+            continue;
+        };
+        let md = disk_root.join(&rel);
+        if read(&md)? != *body {
+            continue;
+        }
+        let toml = md.with_extension("toml");
+        let sidecar = if toml.is_file() {
+            let default =
+                !sealed.0.contains(&slot) && read(&toml)? == starter_sidecar(&slot).as_bytes();
+            if !default {
+                continue;
+            }
+            Some(toml)
+        } else {
+            None
+        };
+        copies.push(StarterCopy { slot, md, sidecar });
+    }
+    Ok(copies)
+}
+
+/// A slot's starter files under `disk_root`: `<band>/<label>.md` and its sidecar
+/// `<band>/<label>.toml`.
+fn starter_paths(disk_root: &Path, slot: &crate::hymns::Slot) -> [PathBuf; 2] {
+    let dir = disk_root.join(slot.band.as_str());
+    [
+        dir.join(format!("{}.md", slot.label)),
+        dir.join(format!("{}.toml", slot.label)),
+    ]
+}
+
+/// What `prompt customise` did: root-relative paths it wrote, and those that
+/// already existed and were left alone.
+#[derive(Debug)]
+pub(crate) struct Customised {
+    pub(crate) slot: crate::hymns::Slot,
+    pub(crate) written: Vec<PathBuf>,
+    pub(crate) kept: Vec<PathBuf>,
+}
+
+impl Customised {
+    /// The line `prompt customise` ends on whenever it succeeds.
+    pub(crate) fn notice(&self) -> String {
+        format!(
+            "this copy replaces the framework text for {}; it no longer receives framework updates",
+            self.slot.path()
+        )
+    }
+}
+
+/// `prompt customise` refuses before install: the stamp is what lets a later
+/// install tell a customisation from a legacy starter (RV-421 F-18).
+const CUSTOMISE_BEFORE_INSTALL: &str = "doctrine isn't installed here (no installed-version in \
+                                        .doctrine/doctrine.toml): run `doctrine install` first";
+
+/// Take a user copy of framework slot `slot_ref` (`prompt customise`): its
+/// starter `.md` (the framework body) and self-`replaces` sidecar, each written
+/// only when absent. Refuses, writing nothing, before install, on a slot the
+/// framework does not ship, and on a sealed slot.
+pub(crate) fn customise_slot(root: &Path, slot_ref: &str) -> anyhow::Result<Customised> {
+    match read_tracked_stamp(root) {
+        StampRead::Version(_) => {}
+        StampRead::Absent => bail!(CUSTOMISE_BEFORE_INSTALL),
+        StampRead::Unreadable { path, reason } => {
+            bail!("cannot read {} ({reason})", path.display())
+        }
+    }
+    let embedded = embedded_hymns();
+    let sealed = embedded_seal_set()?;
+    let slot = customisable_slot(slot_ref, &framework_bodies(&embedded), &sealed)?;
+    let disk = hymns_disk_root(root);
+    let kept: Vec<PathBuf> = starter_paths(&disk, &slot)
+        .into_iter()
+        .filter(|p| p.exists())
+        .collect();
+    let written = project_starters(
+        &disk,
+        &embedded,
+        &sealed,
+        &BTreeSet::from([slot.clone()]),
+        false,
+    )?;
+    let relative = |paths: Vec<PathBuf>| paths.iter().map(|p| root_relative(root, p)).collect();
+    Ok(Customised {
+        slot,
+        written: relative(written),
+        kept: relative(kept),
+    })
+}
+
+/// The framework slot `slot_ref` names, if a user may replace it (PURE). An
+/// unknown slot lists the customisable ones; a sealed slot names the seal.
+fn customisable_slot(
+    slot_ref: &str,
+    framework: &BTreeMap<crate::hymns::Slot, &[u8]>,
+    sealed: &crate::hymns::SealSet,
+) -> anyhow::Result<crate::hymns::Slot> {
+    let known = parse_slot_ref(slot_ref)
+        .ok()
+        .filter(|slot| framework.contains_key(slot));
+    let Some(slot) = known else {
+        let listing: Vec<String> = framework
+            .keys()
+            .filter(|slot| !sealed.0.contains(slot))
+            .map(|slot| format!("  {}", slot.path()))
+            .collect();
+        bail!(
+            "{slot_ref} is not a framework slot; customisable slots:\n{}",
+            listing.join("\n")
+        );
+    };
+    if sealed.0.contains(&slot) {
+        bail!(
+            "{} is sealed ([hymns].seal): its framework text cannot be replaced",
+            slot.path()
+        );
+    }
+    Ok(slot)
 }
 
 /// Write `bytes` to `dest` unless `dry_run`, first ensuring the parent dir exists
@@ -2836,7 +2999,7 @@ impl Baker<'_> {
         let (corpus, sealed) = match &mut self.corpus {
             Some(loaded) => loaded,
             slot @ None => {
-                let disk = self.root.join(".doctrine").join(HYMNS_DIRNAME);
+                let disk = hymns_disk_root(self.root);
                 let sealed = embedded_seal_set()?;
                 let corpus = load_full_corpus(&disk, &embedded_hymns(), &sealed)?;
                 slot.insert((corpus, sealed))
@@ -4339,8 +4502,8 @@ mod tests_hymns {
     }
 
     // ── SL-193 PHASE-01: project_starters (self-`replaces` sidecar projection) ──
-    // project_starters is untested dead code today; these are net-new units
-    // (tempdir-scoped) driving the exposed-slot starter + sidecar emission.
+    // Tempdir-scoped units driving the starter + sidecar emission that
+    // `prompt customise` rides (SL-282).
 
     fn worker_slot() -> crate::hymns::Slot {
         crate::hymns::Slot::new(crate::hymns::Band::Role, "worker")
@@ -4355,7 +4518,7 @@ mod tests_hymns {
         )]
     }
 
-    fn exposed_set(slot: crate::hymns::Slot) -> BTreeSet<crate::hymns::Slot> {
+    fn slot_set(slot: crate::hymns::Slot) -> BTreeSet<crate::hymns::Slot> {
         BTreeSet::from([slot])
     }
 
@@ -4372,7 +4535,7 @@ mod tests_hymns {
             root,
             &worker_embedded(),
             &no_seal(),
-            &exposed_set(worker_slot()),
+            &slot_set(worker_slot()),
             false,
         )
         .unwrap();
@@ -4397,7 +4560,7 @@ mod tests_hymns {
             root,
             &worker_embedded(),
             &no_seal(),
-            &exposed_set(worker_slot()),
+            &slot_set(worker_slot()),
             false,
         )
         .unwrap();
@@ -4426,7 +4589,7 @@ mod tests_hymns {
             root,
             &worker_embedded(),
             &no_seal(),
-            &exposed_set(worker_slot()),
+            &slot_set(worker_slot()),
             false,
         )
         .unwrap();
@@ -4454,7 +4617,7 @@ mod tests_hymns {
             root,
             &worker_embedded(),
             &no_seal(),
-            &exposed_set(worker_slot()),
+            &slot_set(worker_slot()),
             false,
         )
         .unwrap();
@@ -4481,7 +4644,7 @@ mod tests_hymns {
             root,
             &worker_embedded(),
             &seal,
-            &exposed_set(worker_slot()),
+            &slot_set(worker_slot()),
             false,
         )
         .unwrap();
@@ -4501,7 +4664,7 @@ mod tests_hymns {
             root,
             &worker_embedded(),
             &no_seal(),
-            &exposed_set(worker_slot()),
+            &slot_set(worker_slot()),
             true,
         )
         .unwrap();
@@ -4523,7 +4686,7 @@ mod tests_hymns {
             &root,
             &worker_embedded(),
             &no_seal(),
-            &exposed_set(worker_slot()),
+            &slot_set(worker_slot()),
             false,
         )
         .unwrap();
@@ -4533,6 +4696,191 @@ mod tests_hymns {
             "missing parent dir must be created before write_atomic"
         );
         assert!(root.join("role").join("worker.toml").exists());
+    }
+
+    // ── SL-282 PHASE-04: identical_starters (legacy starter identity) ──
+
+    fn plant(root: &Path, rel: &str, bytes: &[u8]) {
+        let path = root.join(rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
+    }
+
+    /// `(slot, has_sidecar)` per match, in slot order.
+    fn matched(
+        disk: &Path,
+        embedded: &[(String, Vec<u8>)],
+        seal: &crate::hymns::SealSet,
+    ) -> Vec<(String, bool)> {
+        identical_starters(disk, embedded, seal)
+            .unwrap()
+            .into_iter()
+            .map(|c| (c.slot.path(), c.sidecar.is_some()))
+            .collect()
+    }
+
+    fn worker_matched(disk: &Path) -> Vec<(String, bool)> {
+        matched(disk, &worker_embedded(), &no_seal())
+    }
+
+    #[test]
+    fn identical_starter_with_default_sidecar_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        plant(dir.path(), "role/worker.md", FRAMEWORK_BODY.as_bytes());
+        plant(
+            dir.path(),
+            "role/worker.toml",
+            starter_sidecar(&worker_slot()).as_bytes(),
+        );
+        let copies = identical_starters(dir.path(), &worker_embedded(), &no_seal()).unwrap();
+        assert_eq!(copies.len(), 1);
+        assert_eq!(copies[0].md, dir.path().join("role/worker.md"));
+        assert_eq!(copies[0].sidecar, Some(dir.path().join("role/worker.toml")));
+    }
+
+    #[test]
+    fn identical_starter_without_sidecar_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        plant(dir.path(), "role/worker.md", FRAMEWORK_BODY.as_bytes());
+        assert_eq!(
+            worker_matched(dir.path()),
+            vec![("role/worker".to_string(), false)]
+        );
+    }
+
+    #[test]
+    fn edited_starter_body_does_not_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut edited = FRAMEWORK_BODY.as_bytes().to_vec();
+        edited.push(b'!');
+        plant(dir.path(), "role/worker.md", &edited);
+        assert!(worker_matched(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn identical_body_with_edited_sidecar_does_not_match() {
+        let dir = tempfile::tempdir().unwrap();
+        plant(dir.path(), "role/worker.md", FRAMEWORK_BODY.as_bytes());
+        plant(
+            dir.path(),
+            "role/worker.toml",
+            b"replaces = \"role/worker\"\nharness = \"claude\"\n",
+        );
+        assert!(worker_matched(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn non_snippet_files_never_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let readme = b"HYMNS README".to_vec();
+        let embedded = vec![
+            ("README.md".to_string(), readme.clone()),
+            (
+                "role/worker.md".to_string(),
+                FRAMEWORK_BODY.as_bytes().to_vec(),
+            ),
+        ];
+        plant(dir.path(), "README.md", &readme);
+        plant(
+            dir.path(),
+            "role/worker.toml",
+            starter_sidecar(&worker_slot()).as_bytes(),
+        );
+        plant(
+            dir.path(),
+            "role/orchestrator.md",
+            FRAMEWORK_BODY.as_bytes(),
+        );
+        assert!(matched(dir.path(), &embedded, &no_seal()).is_empty());
+    }
+
+    #[test]
+    fn sealed_slot_matches_only_without_a_sidecar() {
+        let seal = crate::hymns::SealSet(BTreeSet::from([worker_slot()]));
+        let dir = tempfile::tempdir().unwrap();
+        plant(dir.path(), "role/worker.md", FRAMEWORK_BODY.as_bytes());
+        assert_eq!(
+            matched(dir.path(), &worker_embedded(), &seal),
+            vec![("role/worker".to_string(), false)]
+        );
+        plant(
+            dir.path(),
+            "role/worker.toml",
+            starter_sidecar(&worker_slot()).as_bytes(),
+        );
+        assert!(
+            matched(dir.path(), &worker_embedded(), &seal).is_empty(),
+            "a sealed slot has no default sidecar: any sidecar is the user's"
+        );
+    }
+
+    #[test]
+    fn nested_label_matches_like_a_flat_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let slot = crate::hymns::Slot::new(crate::hymns::Band::Model, "anthropic/claude-sonnet-4");
+        let embedded = vec![(
+            "model/anthropic/claude-sonnet-4.md".to_string(),
+            b"SONNET".to_vec(),
+        )];
+        plant(dir.path(), "model/anthropic/claude-sonnet-4.md", b"SONNET");
+        plant(
+            dir.path(),
+            "model/anthropic/claude-sonnet-4.toml",
+            starter_sidecar(&slot).as_bytes(),
+        );
+        assert_eq!(
+            matched(dir.path(), &embedded, &no_seal()),
+            vec![("model/anthropic/claude-sonnet-4".to_string(), true)]
+        );
+    }
+
+    #[test]
+    fn absent_hymns_dir_has_no_starters() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(worker_matched(&dir.path().join("hymns")).is_empty());
+    }
+
+    /// STOP guard for SL-282 PHASE-06 EX-1: this repo's seven legacy copies,
+    /// reproduced from the shipped corpus, all match; `role/orchestrator` (no
+    /// framework counterpart) does not.
+    #[test]
+    fn this_repos_seven_legacy_copies_match_the_shipped_corpus() {
+        let embedded = embedded_hymns();
+        let seal = embedded_seal_set().unwrap();
+        let bodies = framework_bodies(&embedded);
+        let dir = tempfile::tempdir().unwrap();
+        let with_sidecar = [
+            "harness/claude",
+            "harness/cursor",
+            "model/anthropic/claude-sonnet-4",
+            "model/deepseek/_default",
+            "role/worker",
+        ];
+        let without_sidecar = ["model/adherence/low", "preamble/core"];
+        for path in with_sidecar.iter().chain(&without_sidecar) {
+            let slot = parse_slot_ref(path).unwrap();
+            plant(dir.path(), &format!("{path}.md"), bodies[&slot]);
+            if with_sidecar.contains(path) {
+                plant(
+                    dir.path(),
+                    &format!("{path}.toml"),
+                    starter_sidecar(&slot).as_bytes(),
+                );
+            }
+        }
+        plant(dir.path(), "role/orchestrator.md", b"ORCHESTRATOR");
+        plant(
+            dir.path(),
+            "role/orchestrator.toml",
+            b"replaces = \"role/orchestrator\"\n",
+        );
+        let mut want: Vec<(String, bool)> = with_sidecar
+            .iter()
+            .map(|p| ((*p).to_string(), true))
+            .chain(without_sidecar.iter().map(|p| ((*p).to_string(), false)))
+            .collect();
+        want.sort();
+        assert_eq!(matched(dir.path(), &embedded, &seal), want);
     }
 
     // SL-191 PHASE-07 / VT-1: overlay-reconciliation composition guard.
@@ -6018,7 +6366,8 @@ mod tests {
             yes: true,
             allow_downgrade: false,
         };
-        let plan = InstallPlan::build(&manifest, dir.path(), &args, semver::Version::new(1, 2, 3));
+        let plan = InstallPlan::build(&manifest, dir.path(), &args, semver::Version::new(1, 2, 3))
+            .unwrap();
         assert_eq!(plan.harnesses, strings(&["codex"]));
         assert_eq!(boot_labels(&plan.boot), vec!["codex"]);
         assert!(plan.is_project_install && plan.write_gitignore);
@@ -6033,7 +6382,8 @@ mod tests {
             dir.path(),
             &only_memory,
             semver::Version::new(1, 2, 3),
-        );
+        )
+        .unwrap();
         assert!(!plan.is_project_install, "--only-memory records no version");
         assert!(
             plan.currency.is_none(),
@@ -6049,9 +6399,124 @@ mod tests {
             dir.path(),
             &global,
             semver::Version::new(1, 2, 3),
-        );
+        )
+        .unwrap();
         assert!(!plan.is_project_install && !plan.write_gitignore);
         assert!(plan.currency.is_none(), "--global has no currency gate");
+    }
+
+    // --- legacy starter candidates (SL-282 PHASE-04) ---
+
+    fn project_args() -> InstallArgs<'static> {
+        InstallArgs {
+            agents: &[],
+            skills: &[],
+            domains: &[],
+            only_memory: false,
+            global: false,
+            dry_run: false,
+            yes: true,
+            allow_downgrade: false,
+        }
+    }
+
+    /// A project holding an unedited legacy `role/worker` starter, with
+    /// `doctrine.toml` set to `toml` (`None`: no file).
+    fn legacy_project(toml: Option<&str>) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let worker = embedded_hymns()
+            .into_iter()
+            .find(|(rel, _)| rel == "role/worker.md")
+            .unwrap()
+            .1;
+        let md = dir.path().join(".doctrine/hymns/role/worker.md");
+        fs::create_dir_all(md.parent().unwrap()).unwrap();
+        fs::write(md, worker).unwrap();
+        if let Some(text) = toml {
+            fs::write(dir.path().join(crate::config_file::DOCTRINE_TOML), text).unwrap();
+        }
+        dir
+    }
+
+    fn legacy_slots(dir: &tempfile::TempDir, args: &InstallArgs<'_>) -> Vec<String> {
+        let manifest = load_manifest().unwrap();
+        InstallPlan::build(&manifest, dir.path(), args, semver::Version::new(1, 2, 3))
+            .unwrap()
+            .legacy_starters
+            .iter()
+            .map(|c| c.slot.path())
+            .collect()
+    }
+
+    #[test]
+    fn unstamped_project_install_plans_legacy_removal() {
+        let dir = legacy_project(None);
+        assert_eq!(legacy_slots(&dir, &project_args()), vec!["role/worker"]);
+    }
+
+    #[test]
+    fn stamped_project_plans_no_legacy_removal() {
+        let dir = legacy_project(Some("[install]\ninstalled-version = \"1.2.3\"\n"));
+        assert!(legacy_slots(&dir, &project_args()).is_empty());
+    }
+
+    #[test]
+    fn unreadable_tracked_stamp_plans_no_legacy_removal() {
+        let dir = legacy_project(Some("[install\n"));
+        assert!(legacy_slots(&dir, &project_args()).is_empty());
+    }
+
+    #[test]
+    fn global_and_memory_only_installs_plan_no_legacy_removal() {
+        let dir = legacy_project(None);
+        let global = InstallArgs {
+            global: true,
+            ..project_args()
+        };
+        assert!(legacy_slots(&dir, &global).is_empty());
+        let only_memory = InstallArgs {
+            only_memory: true,
+            ..project_args()
+        };
+        assert!(legacy_slots(&dir, &only_memory).is_empty());
+    }
+
+    #[test]
+    fn legacy_removal_reports_each_file_and_fails_on_the_first_error() {
+        let dir = legacy_project(None);
+        let root = dir.path();
+        let md = hymns_disk_root(root).join("role/worker.md");
+        let worker = StarterCopy {
+            slot: crate::hymns::Slot::new(crate::hymns::Band::Role, "worker"),
+            md: md.clone(),
+            sidecar: None,
+        };
+        let mut out = Vec::new();
+        let outcome =
+            remove_legacy_starters(root, std::slice::from_ref(&worker), &mut out).unwrap();
+        assert_eq!(
+            outcome,
+            LegOutcome::Done(vec![Touched::new(
+                PathBuf::from(".doctrine/hymns/role/worker.md"),
+                Change::Removed
+            )])
+        );
+        assert!(!md.exists());
+        assert!(
+            String::from_utf8(out)
+                .unwrap()
+                .contains("removed unedited starter")
+        );
+
+        // Already gone: the leg fails and says so.
+        let mut out = Vec::new();
+        let outcome = remove_legacy_starters(root, &[worker], &mut out).unwrap();
+        assert!(matches!(outcome, LegOutcome::Failed(_)), "{outcome:?}");
+        assert!(
+            String::from_utf8(out)
+                .unwrap()
+                .contains("legacy starter removal failed")
+        );
     }
 
     // --- leg outcomes and stamps (SL-282 PHASE-03) ---
