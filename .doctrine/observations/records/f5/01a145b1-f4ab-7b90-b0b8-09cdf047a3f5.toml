@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a145b1-f4ab-7b90-b0b8-09cdf047a3f5"
+recorded_at = "2026-10-16T17:10:52.843148578Z"
+kind = "friction"
+summary = "phase-plan: sheet e2e row implied --only-memory accepts suite base args"
+detail = "SL-282 PHASE-05 T8 row 11: clap rejects --skill with --only-memory, so the row needed bespoke args; the planner had not checked flag conflicts."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

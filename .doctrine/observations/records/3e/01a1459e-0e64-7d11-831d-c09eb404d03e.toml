@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1459e-0e64-7d11-831d-c09eb404d03e"
+recorded_at = "2026-10-16T16:49:08.708890866Z"
+kind = "friction"
+summary = "phase-plan: phase sheets lack worker findings when the worker cannot write .doctrine/"
+detail = "SL-282 PHASE-05 planning: PHASE-04's capsule-worker findings were not written into its runtime sheet (worker contract forbids .doctrine/ writes), so the next planner relied on the orchestrator relaying them and re-verified drifted line refs. Orchestrator should write findings back, or the worker contract should allow its own sheet's Findings section."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

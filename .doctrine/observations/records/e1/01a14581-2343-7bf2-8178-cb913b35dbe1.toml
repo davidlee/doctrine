@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14581-2343-7bf2-8178-cb913b35dbe1"
+recorded_at = "2026-10-16T16:17:33.507598709Z"
+kind = "friction"
+summary = "capsule-worker: phase sheet's F-17 wrong-admission guidance did not map to a one-line change"
+detail = "SL-282 PHASE-07: sheet said capture 'keep tracked whenever downgrading' as the wrong candidate, but tracked_stamp_action has no downgrade context; worker substituted 'Absent => Keep'. Also tests/common write_stamp assumed .doctrine dir existed and panicked on first use."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a145b1-f4a7-7f10-8316-b6af9e6fea76"
+recorded_at = "2026-10-16T17:10:52.839402646Z"
+kind = "friction"
+summary = "capsule-worker: sheet asks worker to fill Findings/Decisions but the contract forbids .doctrine/ writes"
+detail = "SL-282 PHASE-05 (and PHASE-04): runtime sheet template asks the worker to fill Findings and Decisions, while the capsule-worker contract forbids runtime-state writes; findings travel only in the hand-back and are lost to the next planner unless relayed."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

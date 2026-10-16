@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14597-5a28-7d43-aade-6b456ce2fc83"
+recorded_at = "2026-10-16T16:41:49.352308229Z"
+kind = "friction"
+summary = "capsule-worker: concurrent cargo build contended for the target-dir lock"
+detail = "SL-282 PHASE-04: a worker cargo build blocked waiting for the build-directory file lock, meaning another process built the same main-worktree target concurrently. Delay only."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

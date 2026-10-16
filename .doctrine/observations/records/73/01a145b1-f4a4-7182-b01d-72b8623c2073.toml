@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a145b1-f4a4-7182-b01d-72b8623c2073"
+recorded_at = "2026-10-16T17:10:52.836942565Z"
+kind = "friction"
+summary = "phase-plan: memory-derived premise about the gitignore whitelist pair was stale"
+detail = "SL-282 PHASE-05: the sheet (from mem.pattern.distribution.claude-install-agents-gitignore-too-broad) claimed the managed gitignore block carries a !.doctrine/agents/AGENTS.md whitelist; it does not (plain <root>/* roots). Worker detoured to verify render_block/manifest; the memory may be stale."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

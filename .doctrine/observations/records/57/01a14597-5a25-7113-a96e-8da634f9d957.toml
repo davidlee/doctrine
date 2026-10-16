@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14597-5a25-7113-a96e-8da634f9d957"
+recorded_at = "2026-10-16T16:41:49.349495781Z"
+kind = "friction"
+summary = "capsule-worker: bulk string replace introducing a helper rewrote the helper's own body"
+detail = "SL-282 PHASE-04: bulk replace of root.join(.doctrine).join(HYMNS_DIRNAME) with hymns_disk_root ran after the helper was defined, making it recurse and touching a self.root site; compiler/clippy caught it. Add the helper after the bulk replace."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

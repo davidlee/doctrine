@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14586-f3c2-7bc2-bef9-e3c72d67013b"
+recorded_at = "2026-10-16T16:23:54.562037282Z"
+kind = "friction"
+summary = "capsule-phase-planner: handover and phase-sheet line numbers drift after each phase"
+detail = "SL-282 PHASE-04 planning: line refs in handover.md and PHASE-03/07 sheets drifted 40-60 lines after PHASE-07; planner re-verified everything on head. Line-number citations in tier-5 notes cost a re-verification pass each phase."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

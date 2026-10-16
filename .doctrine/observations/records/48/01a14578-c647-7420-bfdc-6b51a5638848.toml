@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14578-c647-7420-bfdc-6b51a5638848"
+recorded_at = "2026-10-16T16:08:25.415930305Z"
+kind = "friction"
+summary = "capsule-phase-planner: slice research baseline drift noise on plan files"
+detail = "SL-282 PHASE-07 planning: 'doctrine slice research 282' reports baseline drift only because plan.md and plan.toml were added after the research baseline. Planner must re-check this noise on every phase-plan."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
