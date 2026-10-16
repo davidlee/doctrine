@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-16 · started; PHASE-01 completed · cdcd408a6
+fresh-as-of: 2026-10-16 · started; PHASE-02 completed · 9d312ebc8
 
 ### Produced
 - design.md (locked, run dr-01a1422f…, rev 50); RV-418 (13/13 verified; pass waived for missing routes)
@@ -16,6 +16,8 @@ fresh-as-of: 2026-10-16 · started; PHASE-01 completed · cdcd408a6
 - plan.toml/plan.md (PHASE-01..06); REV-071 drafted + approved (SPEC-009, SPEC-010, REQ-167/170/172/176/180)
 - RV-419 (plan-time amendment pass, codex; F-1 verified)
 - PHASE-01: manifest [framework] + [harness.*] registry; detect/boot/delegate read it (017329e71)
+- fixture git helpers GIT_GUARD=off (e523e95c0) — gate green
+- PHASE-02: fsutil path algebra lift (38ab4932b); src/install_ownership.rs pure plan + STAGING_PREFIX (9d312ebc8); VT-1 PASS
 
 ### Learned
 - ISS-216's refresh half already fixed; real fault is stale-layout links kept as foreign
@@ -24,12 +26,16 @@ fresh-as-of: 2026-10-16 · started; PHASE-01 completed · cdcd408a6
 - boot.rs detector misses `.pi` (RV-418 F-11)
 - plan-time: ensure_gitignored has no prod caller beyond Step::Gitignore → deleted (design amended); REV widened past design table (same class as RV-418 F-7)
 - jail git-guard refuses checkout -f / reset --hard in test temp repos → 26 unrelated gate failures (observation cdcd408a6)
-- friction observations: 6 recorded (apply flag, runbook text, ISS-356 recurrence, missing routes → IMP-517)
+- friction observations: 7 recorded (apply flag, runbook text, ISS-356 recurrence, missing routes → IMP-517, verify-vt unattributable before phase completion)
+- PHASE-02: links map to members by site (Member.links), not by value; foreign symlinks reported only at member sites (OQ-1, user-agreed)
+- PHASE-02: Snapshot scan contract — canon entries at member depth + containers; plan also keeps anything beneath a member (PHASE-04 scanner must honour)
+- new src module must be classified in .doctrine/adr/001/layering.toml or the layering gate fails Unclassified
+- four duplicated test `git` helpers (dispatch, slice, ledger, e2e_dispatch_candidate) — candidate shared fixture
 
 ### Open
 - REV-071 applies at /reconcile
-- next: /phase-plan PHASE-02
-- git-guard gate red: user decision pending (fixtures set GIT_GUARD=off vs accept)
+- next: /phase-plan PHASE-03 (staging uses install_ownership::STAGING_PREFIX)
+- per-phase review: one pass after PHASE-04 (user agreed)
 - PHASE-04 removes the dead_code expects on framework/roots/agents/workflows + framework_roots()
 
 ## Design review passes
