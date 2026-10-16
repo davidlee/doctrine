@@ -15,7 +15,6 @@
     reason = "integration test: fail-fast unwrap/expect are idiomatic, and test fns live at crate root by construction"
 )]
 
-use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -102,33 +101,6 @@ impl Project {
 
 fn is_symlink(p: &Path) -> bool {
     fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink())
-}
-
-/// Relative path → `file:<sha256>` | `link:<value>` | `dir`, over a whole tree
-/// (symlinks are recorded, never followed).
-fn tree_digest(dir: &Path) -> BTreeMap<PathBuf, String> {
-    fn walk(root: &Path, dir: &Path, acc: &mut BTreeMap<PathBuf, String>) {
-        for e in fs::read_dir(dir).unwrap() {
-            let p = e.unwrap().path();
-            let rel = p.strip_prefix(root).unwrap().to_path_buf();
-            let meta = fs::symlink_metadata(&p).unwrap();
-            if meta.file_type().is_symlink() {
-                let v = fs::read_link(&p).unwrap();
-                acc.insert(rel, format!("link:{}", v.display()));
-            } else if meta.is_dir() {
-                acc.insert(rel, "dir".to_string());
-                walk(root, &p, acc);
-            } else {
-                acc.insert(
-                    rel,
-                    format!("file:{}", common::sha256(&fs::read(&p).unwrap())),
-                );
-            }
-        }
-    }
-    let mut acc = BTreeMap::new();
-    walk(dir, dir, &mut acc);
-    acc
 }
 
 /// A report line starting (after indentation) with `verb` and ending with `suffix`.
@@ -259,7 +231,7 @@ fn dry_run_lists_prune_and_changes_nothing() {
     let p = Project::new();
     p.install();
     let orphan = p.plant_file(".doctrine/agents/claude/retired-def.md", "retired");
-    let before = tree_digest(p.root());
+    let before = common::tree_digest(p.root());
     assert!(
         before.contains_key(Path::new(".doctrine/agents/claude/retired-def.md")),
         "control: the digest sees the orphan"
@@ -275,7 +247,11 @@ fn dry_run_lists_prune_and_changes_nothing() {
         ".doctrine/agents/claude/retired-def.md",
     );
     assert!(orphan.is_file(), "orphan untouched");
-    assert_eq!(tree_digest(p.root()), before, "dry-run mutated nothing");
+    assert_eq!(
+        common::tree_digest(p.root()),
+        before,
+        "dry-run mutated nothing"
+    );
 }
 
 #[test]

@@ -49,8 +49,10 @@ pub(crate) fn write_marker(root: &std::path::Path, version: &str) {
 /// Plant the tracked stamp: a `doctrine.toml` carrying only
 /// `[install] installed-version`.
 pub(crate) fn write_stamp(root: &std::path::Path, version: &str) {
+    let path = doctrine_toml(root);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(
-        doctrine_toml(root),
+        path,
         format!("[install]\ninstalled-version = \"{version}\"\n"),
     )
     .unwrap();
@@ -221,4 +223,35 @@ pub(crate) fn unchanged_ids(report: &str) -> std::collections::BTreeSet<&str> {
         .find_map(|line| line.strip_prefix("unchanged "))
         .map(|ids| ids.split_whitespace().collect())
         .unwrap_or_default()
+}
+
+/// Relative path -> `file:<sha256>` | `link:<value>` | `dir`, over a whole tree
+/// (symlinks are recorded, never followed). Equal digests mean nothing changed.
+pub(crate) fn tree_digest(
+    dir: &std::path::Path,
+) -> std::collections::BTreeMap<std::path::PathBuf, String> {
+    use std::fs;
+    fn walk(
+        root: &std::path::Path,
+        dir: &std::path::Path,
+        acc: &mut std::collections::BTreeMap<std::path::PathBuf, String>,
+    ) {
+        for e in fs::read_dir(dir).unwrap() {
+            let p = e.unwrap().path();
+            let rel = p.strip_prefix(root).unwrap().to_path_buf();
+            let meta = fs::symlink_metadata(&p).unwrap();
+            if meta.file_type().is_symlink() {
+                let v = fs::read_link(&p).unwrap();
+                acc.insert(rel, format!("link:{}", v.display()));
+            } else if meta.is_dir() {
+                acc.insert(rel, "dir".to_string());
+                walk(root, &p, acc);
+            } else {
+                acc.insert(rel, format!("file:{}", sha256(&fs::read(&p).unwrap())));
+            }
+        }
+    }
+    let mut acc = std::collections::BTreeMap::new();
+    walk(dir, dir, &mut acc);
+    acc
 }

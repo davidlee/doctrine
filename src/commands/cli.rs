@@ -118,6 +118,10 @@ pub(crate) enum Command {
         /// Skip the confirmation prompt.
         #[arg(short = 'y', long)]
         yes: bool,
+
+        /// Proceed even when this project was installed by a newer doctrine.
+        #[arg(long)]
+        allow_downgrade: bool,
     },
 
     /// Debug catalog inspection.
@@ -1524,6 +1528,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             global,
             dry_run,
             yes,
+            allow_downgrade,
         } => crate::install::run(
             path,
             &crate::install::InstallArgs {
@@ -1534,6 +1539,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 global,
                 dry_run,
                 yes,
+                allow_downgrade,
             },
         ),
         Command::ConceptMap { command } => crate::concept_map::dispatch(command, color),

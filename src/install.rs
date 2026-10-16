@@ -17,7 +17,10 @@ use crate::git;
 use crate::install_ownership::{
     Action, Desired, LinkSeen, Member, MemberKind, Notice, Scope, Snapshot, SpliceRefusal,
 };
-use crate::install_state::{CurrencyReport, MarkerSource, StampRead, classify, parse_stamp};
+use crate::install_state::{
+    ALLOW_DOWNGRADE_HINT, CurrencyReport, MarkerSource, StampRead, TrackedStamp, classify,
+    downgrade_from, downgrade_warning, parse_stamp, tracked_stamp_action,
+};
 use crate::memory::MemoryType;
 
 /// Embedded skill plugins — everything under `plugins/`.
@@ -196,6 +199,7 @@ pub(crate) struct InstallArgs<'a> {
     pub(crate) global: bool,
     pub(crate) dry_run: bool,
     pub(crate) yes: bool,
+    pub(crate) allow_downgrade: bool,
 }
 
 /// Run `doctrine install`.
@@ -206,10 +210,14 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     let manifest = load_manifest()?;
     let project_root =
         detect_project_root(project_path, &manifest).context("Could not find project root")?;
-    let plan = InstallPlan::build(&manifest, &project_root, args);
+    let plan = InstallPlan::build(&manifest, &project_root, args, binary_version()?);
     let root = plan.base.project_root.as_path();
 
     print_plan(&plan.base)?;
+    let downgrade = plan.downgrade_warning();
+    if let Some(warning) = &downgrade {
+        stdout_line(warning)?;
+    }
 
     // ── Stage 1: base install ──
     if args.dry_run {
@@ -221,6 +229,9 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
         return Ok(());
     }
 
+    if downgrade.is_some() && args.yes && !args.allow_downgrade {
+        bail!(ALLOW_DOWNGRADE_HINT);
+    }
     if !args.yes && !prompt_confirm("\nProceed? [y/N] ")? {
         stdout_line("Aborted.")?;
         return Ok(());
@@ -254,20 +265,42 @@ struct InstallPlan {
     write_gitignore: bool,
     /// A full project install: the only kind that records its version.
     is_project_install: bool,
+    /// The running binary's version.
+    binary: semver::Version,
+    /// How the project's install stamps compare with `binary`; read only for a
+    /// project install (`--global` / `--only-memory` have no currency gate).
+    currency: Option<CurrencyReport>,
 }
 
 impl InstallPlan {
-    fn build(manifest: &Manifest, project_root: &Path, args: &InstallArgs<'_>) -> Self {
+    fn build(
+        manifest: &Manifest,
+        project_root: &Path,
+        args: &InstallArgs<'_>,
+        binary: semver::Version,
+    ) -> Self {
         let base = build_plan(manifest, project_root);
         let harnesses = resolve_install_harnesses(args.agents, project_root, &manifest.harness);
         let boot = boot_harnesses(&harnesses, project_root, &manifest.harness);
+        let is_project_install = !args.global && !args.only_memory;
+        let currency = is_project_install.then(|| read_currency(project_root, &binary));
         Self {
             base,
             harnesses,
             boot,
             write_gitignore: !args.global,
-            is_project_install: !args.global && !args.only_memory,
+            is_project_install,
+            binary,
+            currency,
         }
+    }
+
+    /// The warning for an install that would downgrade the project's generated
+    /// files; `None` when nothing outranks this binary.
+    fn downgrade_warning(&self) -> Option<String> {
+        let report = self.currency.as_ref()?;
+        let from = downgrade_from(&report.findings)?;
+        Some(downgrade_warning(from, &self.binary))
     }
 }
 
@@ -925,8 +958,7 @@ fn record_version(plan: &InstallPlan, outcomes: &[(Leg, LegOutcome)]) -> anyhow:
     let legs = match stamp_decision(outcomes, plan.is_project_install) {
         StampDecision::Skip => return Ok(()),
         StampDecision::Write => {
-            let binary = binary_version()?;
-            match write_stamps(&plan.base.project_root, &binary, &plan.harnesses) {
+            match write_stamps(&plan.base.project_root, &plan.binary, &plan.harnesses) {
                 Ok(()) => return Ok(()),
                 Err(e) => {
                     writeln!(io::stdout(), "  version stamp failed: {e:#}")?;
@@ -949,8 +981,14 @@ fn write_stamps(root: &Path, binary: &semver::Version, harnesses: &[String]) -> 
     let tracked_path = root.join(crate::config_file::DOCTRINE_TOML);
     let tracked = crate::config_file::read_doctrine_toml_text(root)?;
     let current = tracked.as_deref().unwrap_or_default();
-    let stamped = crate::install_config::write_installed_version(current, &version)
-        .with_context(|| format!("Failed to stamp {}", tracked_path.display()))?;
+    let stamped =
+        match tracked_stamp_action(&tracked_stamp(&tracked_path, tracked.as_deref()), binary) {
+            TrackedStamp::Write => {
+                crate::install_config::write_installed_version(current, &version)
+                    .with_context(|| format!("Failed to stamp {}", tracked_path.display()))?
+            }
+            TrackedStamp::Keep => current.to_string(),
+        };
     let marker = toml::to_string(&InstallMarker {
         version,
         harnesses: harnesses.to_vec(),
@@ -2920,18 +2958,28 @@ pub(crate) fn read_install_marker(root: &Path) -> (StampRead, MarkerSource) {
 /// cannot be read or parsed, or a value that is not semver, is `Unreadable`.
 fn read_tracked_stamp(root: &Path) -> StampRead {
     let path = root.join(crate::config_file::DOCTRINE_TOML);
-    let unreadable = |e: anyhow::Error| StampRead::Unreadable {
-        path: path.clone(),
-        reason: format!("{e:#}"),
-    };
-    match crate::config_file::read_doctrine_toml_text(root).and_then(|text| {
-        text.map(|t| crate::dtoml::parse(&t))
-            .transpose()
-            .map(|doc| doc.and_then(|d| d.install.installed_version))
-    }) {
-        Ok(Some(raw)) => parse_stamp(&path, &raw),
+    match crate::config_file::read_doctrine_toml_text(root) {
+        Ok(text) => tracked_stamp(&path, text.as_deref()),
+        Err(e) => StampRead::Unreadable {
+            path,
+            reason: format!("{e:#}"),
+        },
+    }
+}
+
+/// The tracked stamp in `doctrine.toml`'s text (`None`: no file) (PURE).
+fn tracked_stamp(path: &Path, text: Option<&str>) -> StampRead {
+    match text
+        .map(crate::dtoml::parse)
+        .transpose()
+        .map(|doc| doc.and_then(|d| d.install.installed_version))
+    {
+        Ok(Some(raw)) => parse_stamp(path, &raw),
         Ok(None) => StampRead::Absent,
-        Err(e) => unreadable(e),
+        Err(e) => StampRead::Unreadable {
+            path: path.to_path_buf(),
+            reason: format!("{e:#}"),
+        },
     }
 }
 
@@ -5968,25 +6016,42 @@ mod tests {
             global: false,
             dry_run: false,
             yes: true,
+            allow_downgrade: false,
         };
-        let plan = InstallPlan::build(&manifest, dir.path(), &args);
+        let plan = InstallPlan::build(&manifest, dir.path(), &args, semver::Version::new(1, 2, 3));
         assert_eq!(plan.harnesses, strings(&["codex"]));
         assert_eq!(boot_labels(&plan.boot), vec!["codex"]);
         assert!(plan.is_project_install && plan.write_gitignore);
+        assert!(plan.currency.is_some(), "a project install reads currency");
 
         let only_memory = InstallArgs {
             only_memory: true,
             ..args
         };
-        let plan = InstallPlan::build(&manifest, dir.path(), &only_memory);
+        let plan = InstallPlan::build(
+            &manifest,
+            dir.path(),
+            &only_memory,
+            semver::Version::new(1, 2, 3),
+        );
         assert!(!plan.is_project_install, "--only-memory records no version");
+        assert!(
+            plan.currency.is_none(),
+            "--only-memory has no currency gate"
+        );
         assert!(plan.write_gitignore);
         let global = InstallArgs {
             global: true,
             ..args
         };
-        let plan = InstallPlan::build(&manifest, dir.path(), &global);
+        let plan = InstallPlan::build(
+            &manifest,
+            dir.path(),
+            &global,
+            semver::Version::new(1, 2, 3),
+        );
         assert!(!plan.is_project_install && !plan.write_gitignore);
+        assert!(plan.currency.is_none(), "--global has no currency gate");
     }
 
     // --- leg outcomes and stamps (SL-282 PHASE-03) ---
@@ -6092,6 +6157,33 @@ mod tests {
         assert_eq!(
             fs::read(root.join(INSTALL_MARKER_REL)).unwrap(),
             marker_before
+        );
+    }
+
+    #[test]
+    fn write_stamps_keeps_a_newer_tracked_stamp_and_rewrites_an_older_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let binary = semver::Version::new(9, 8, 7);
+        fs::create_dir_all(root.join(".doctrine")).unwrap();
+        let toml_path = root.join(crate::config_file::DOCTRINE_TOML);
+        let marker_version = || {
+            let text = fs::read_to_string(root.join(INSTALL_MARKER_REL)).unwrap();
+            toml::from_str::<InstallMarker>(&text).unwrap().version
+        };
+
+        let newer = "# mine\n[install]\ninstalled-version = \"10.0.0\"\n";
+        fs::write(&toml_path, newer).unwrap();
+        write_stamps(root, &binary, &[]).unwrap();
+        assert_eq!(fs::read_to_string(&toml_path).unwrap(), newer);
+        assert_eq!(marker_version(), "9.8.7", "the marker records the binary");
+
+        fs::write(&toml_path, "[install]\ninstalled-version = \"1.0.0\"\n").unwrap();
+        write_stamps(root, &binary, &[]).unwrap();
+        let tracked = fs::read_to_string(&toml_path).unwrap();
+        assert!(
+            tracked.contains("installed-version = \"9.8.7\""),
+            "{tracked}"
         );
     }
 

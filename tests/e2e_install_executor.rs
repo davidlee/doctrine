@@ -21,7 +21,7 @@ use std::path::Path;
 
 mod common;
 
-use common::{INSTALL_MARKER, doctrine_cmd, doctrine_toml};
+use common::{INSTALL_MARKER, doctrine_cmd, doctrine_toml, tree_digest, write_marker, write_stamp};
 
 /// The running binary's version: what a complete install records.
 const B: &str = env!("CARGO_PKG_VERSION");
@@ -29,16 +29,26 @@ const B: &str = env!("CARGO_PKG_VERSION");
 const BASE_ARGS: &[&str] = &["--agent", "claude", "--skill", "code-review", "--yes"];
 const INCOMPLETE: &str = "install incomplete:";
 const CODEX_HOOKS: &str = ".codex/hooks.json";
+const OLDER: &str = "0.0.1";
+const NEWER: &str = "999.0.0";
+const ALLOW: &str = "--allow-downgrade";
+/// The downgrade warning's lead-in, and the `--yes` refusal (stderr).
+const WARNING: &str = "! this project was installed by doctrine";
+const REFUSAL: &str = "Error: pass --allow-downgrade to proceed";
 
-/// `doctrine <verb…> -p <root>` with extra env on the child; asserts success
-/// and returns stdout.
-fn run(root: &Path, args: &[&str], env: &[(&str, &OsStr)]) -> String {
+/// `doctrine <verb…> -p <root>` with extra env on the child, output unchecked.
+fn run_output(root: &Path, args: &[&str], env: &[(&str, &OsStr)]) -> std::process::Output {
     let mut cmd = doctrine_cmd(root);
     cmd.args(args).arg("-p").arg(root);
     for (k, v) in env {
         cmd.env(k, v);
     }
-    let out = cmd.output().expect("spawn doctrine");
+    cmd.output().expect("spawn doctrine")
+}
+
+/// As [`run_output`]; asserts success and returns stdout.
+fn run(root: &Path, args: &[&str], env: &[(&str, &OsStr)]) -> String {
+    let out = run_output(root, args, env);
     let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
     assert!(
         out.status.success(),
@@ -56,6 +66,17 @@ fn install(root: &Path, extra: &[&str]) -> String {
         .copied()
         .collect();
     run(root, &args, &[])
+}
+
+/// `install` with `BASE_ARGS` (so `--yes`) and `extra`, output unchecked.
+fn install_output(root: &Path, extra: &[&str]) -> std::process::Output {
+    let args: Vec<&str> = ["install"]
+        .iter()
+        .chain(BASE_ARGS)
+        .chain(extra)
+        .copied()
+        .collect();
+    run_output(root, &args, &[])
 }
 
 fn tracked_text(root: &Path) -> Option<String> {
@@ -99,11 +120,15 @@ fn a_complete_install_records_both_stamps_and_is_idempotent() {
         &vec![toml::Value::from("claude")]
     );
 
-    install(root, &[]);
+    let second = install(root, &[]);
     assert_eq!(
         tracked_text(root).unwrap(),
         tracked,
         "a second run leaves doctrine.toml byte-identical"
+    );
+    assert!(
+        !second.contains(WARNING),
+        "a current install warns of no downgrade: {second}"
     );
 }
 
@@ -245,4 +270,167 @@ fn a_lone_symlinked_pair_is_codex_for_both_verbs() {
             "{verb:?} did not wire claude: {out}"
         );
     }
+}
+
+// ── downgrade gate (SL-282 PHASE-07) ─────────────────────────────────────────
+
+fn marker_version(root: &Path) -> String {
+    let marker: toml::Value =
+        toml::from_str(&fs::read_to_string(root.join(INSTALL_MARKER)).unwrap()).unwrap();
+    marker["version"].as_str().unwrap().to_string()
+}
+
+/// Refusal row: `-y` onto a newer stamp exits non-zero with exactly the hint,
+/// warns first, and writes nothing.
+fn assert_refused(root: &Path, newer: &str) {
+    let before = tree_digest(root);
+    let out = install_output(root, &[]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "refused: {stdout}");
+    assert!(
+        stdout.contains(&format!(
+            "{WARNING} {newer}; you are running {B}. Proceeding will downgrade generated files."
+        )),
+        "control: the run reached the gate: {stdout}"
+    );
+    assert_eq!(stderr.trim_end(), REFUSAL, "{stderr}");
+    assert_eq!(tree_digest(root), before, "a refusal writes nothing");
+}
+
+#[test]
+fn yes_refuses_when_the_tracked_stamp_is_newer() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_stamp(dir.path(), NEWER);
+    assert_refused(dir.path(), NEWER);
+}
+
+#[test]
+fn yes_refuses_when_the_local_marker_is_newer() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    write_marker(dir.path(), NEWER);
+    assert_refused(dir.path(), NEWER);
+}
+
+/// RV-421 F-17 control: a local-only downgrade (tracked stamp absent) still
+/// records the binary's version in both stamps.
+#[test]
+fn allow_downgrade_stamps_an_absent_tracked_stamp_as_the_binary() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write_marker(root, NEWER);
+
+    let out = install(root, &[ALLOW]);
+
+    assert!(out.contains(WARNING), "control: the gate warned: {out}");
+    let tracked = tracked_text(root).expect("doctrine.toml written");
+    assert!(tracked.contains(&stamp_line()), "{tracked}");
+    assert_eq!(marker_version(root), B);
+}
+
+#[test]
+fn allow_downgrade_rewrites_an_older_tracked_stamp() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write_marker(root, NEWER);
+    write_stamp(root, OLDER);
+
+    let out = install(root, &[ALLOW]);
+
+    assert!(out.contains(WARNING), "control: the gate warned: {out}");
+    let tracked = tracked_text(root).unwrap();
+    assert!(tracked.contains(&stamp_line()), "{tracked}");
+    assert!(!tracked.contains(OLDER), "{tracked}");
+    assert_eq!(marker_version(root), B);
+}
+
+#[test]
+fn allow_downgrade_keeps_a_newer_tracked_stamp() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write_marker(root, NEWER);
+    write_stamp(root, NEWER);
+
+    let out = install(root, &[ALLOW]);
+
+    assert!(out.contains(WARNING), "control: the gate warned: {out}");
+    let tracked = tracked_text(root).unwrap();
+    assert!(
+        tracked.contains(&format!("installed-version = \"{NEWER}\"")),
+        "{tracked}"
+    );
+    assert_eq!(marker_version(root), B, "the checkout records this binary");
+}
+
+#[test]
+fn dry_run_warns_but_never_refuses_or_writes() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write_stamp(root, NEWER);
+    let before = tree_digest(root);
+
+    let out = install(root, &["--dry-run"]);
+
+    assert!(out.contains(WARNING), "{out}");
+    assert_eq!(tree_digest(root), before, "dry-run writes nothing");
+}
+
+#[test]
+fn the_warning_precedes_the_interactive_prompt() {
+    if common::under_worker_marker() {
+        return;
+    }
+    use std::io::Write as _;
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write_stamp(root, NEWER);
+    let before = tree_digest(root);
+
+    let mut cmd = doctrine_cmd(root);
+    cmd.args([
+        "install",
+        "--agent",
+        "claude",
+        "--skill",
+        "code-review",
+        "-p",
+    ])
+    .arg(root)
+    .stdin(std::process::Stdio::piped())
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped());
+    let mut child = cmd.spawn().expect("spawn doctrine");
+    child.stdin.take().unwrap().write_all(b"n\n").unwrap();
+    let out = child.wait_with_output().unwrap();
+    let stdout = String::from_utf8(out.stdout).unwrap();
+
+    let warned = stdout.find(WARNING).unwrap_or_else(|| panic!("{stdout}"));
+    let asked = stdout
+        .find("Proceed? [y/N]")
+        .unwrap_or_else(|| panic!("{stdout}"));
+    assert!(warned < asked, "{stdout}");
+    assert!(stdout.contains("Aborted."), "{stdout}");
+    assert_eq!(
+        tree_digest(root),
+        before,
+        "a declined prompt writes nothing"
+    );
 }

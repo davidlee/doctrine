@@ -191,6 +191,48 @@ fn in_main(marker: &MarkerSource) -> String {
     }
 }
 
+/// What `install --yes` says when it refuses a downgrade.
+pub(crate) const ALLOW_DOWNGRADE_HINT: &str = "pass --allow-downgrade to proceed";
+
+/// The version a downgrade would come from: the newest of the repo's and the
+/// checkout's stamps that outrank the binary. `None` when neither does.
+pub(crate) fn downgrade_from(findings: &[Currency]) -> Option<&Version> {
+    findings
+        .iter()
+        .filter_map(|c| match c {
+            Currency::RepoNewer { repo: v } | Currency::CheckoutNewer { checkout: v } => Some(v),
+            _ => None,
+        })
+        .max()
+}
+
+/// The warning printed above the install prompt when `from` outranks `binary`.
+pub(crate) fn downgrade_warning(from: &Version, binary: &Version) -> String {
+    format!(
+        "! this project was installed by doctrine {from}; you are running {binary}. Proceeding will downgrade generated files."
+    )
+}
+
+/// What install does with the tracked stamp.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TrackedStamp {
+    /// Record the binary's version.
+    Write,
+    /// Leave it: one stale binary does not lower the team's recorded version.
+    Keep,
+}
+
+/// Keep the tracked stamp only when it is newer than `binary`; absent, older,
+/// equal and unreadable stamps are (re)written.
+pub(crate) fn tracked_stamp_action(tracked: &StampRead, binary: &Version) -> TrackedStamp {
+    match tracked {
+        StampRead::Version(v) if v > binary => TrackedStamp::Keep,
+        StampRead::Absent | StampRead::Unreadable { .. } | StampRead::Version(_) => {
+            TrackedStamp::Write
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,5 +498,61 @@ mod tests {
                 line(&f, &MarkerSource::Checkout)
             );
         }
+    }
+
+    // --- downgrade gate (SL-282 PHASE-07) ---
+
+    #[test]
+    fn downgrade_from_is_the_newest_newer_finding() {
+        let repo_newer_99 = || Currency::RepoNewer { repo: v("0.99.0") };
+        let checkout_newer_50 = || Currency::CheckoutNewer {
+            checkout: v("0.50.0"),
+        };
+        let rows: Vec<(Vec<Currency>, Option<Version>)> = vec![
+            (vec![], None),
+            (vec![repo_newer()], Some(v("0.48.0"))),
+            (vec![checkout_newer()], Some(v("0.48.0"))),
+            (
+                vec![repo_newer_99(), checkout_newer_50()],
+                Some(v("0.99.0")),
+            ),
+            (
+                vec![checkout_newer_50(), repo_newer_99()],
+                Some(v("0.99.0")),
+            ),
+            (vec![repo_older(), checkout_newer()], Some(v("0.48.0"))),
+            (vec![Currency::CheckoutNotInstalled], None),
+            (vec![Currency::RepoUnstamped], None),
+            (vec![unreadable_finding_of("t")], None),
+            (vec![repo_older(), checkout_older()], None),
+        ];
+        for (findings, want) in rows {
+            assert_eq!(downgrade_from(&findings), want.as_ref(), "{findings:?}");
+        }
+    }
+
+    #[test]
+    fn tracked_stamp_is_kept_only_when_newer_than_the_binary() {
+        for (kind, want) in [
+            ("absent", TrackedStamp::Write),
+            ("older", TrackedStamp::Write),
+            ("equal", TrackedStamp::Write),
+            ("newer", TrackedStamp::Keep),
+            ("unreadable", TrackedStamp::Write),
+        ] {
+            assert_eq!(
+                tracked_stamp_action(&store(kind, "t"), &binary()),
+                want,
+                "{kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn downgrade_warning_names_both_versions() {
+        assert_eq!(
+            downgrade_warning(&v("0.48.0"), &binary()),
+            "! this project was installed by doctrine 0.48.0; you are running 0.47.0. Proceeding will downgrade generated files."
+        );
     }
 }
