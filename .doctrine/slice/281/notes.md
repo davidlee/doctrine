@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-16 · PHASE-06 completed · 9dff138fa
+fresh-as-of: 2026-10-16 · close · 60417be29
 
 ### Produced
 - design.md (locked, run dr-01a1422f…, rev 50); RV-418 (13/13 verified; pass waived for missing routes)
@@ -23,7 +23,8 @@ fresh-as-of: 2026-10-16 · PHASE-06 completed · 9dff138fa
 - PHASE-05: managed gitignore block (4242b63a8)
 - PHASE-06: dogfood managed install (9dff138fa)
 - CHR-178: cargo 1.100 adoption (4a7c4f7ff, 5512d9a61, aec6fa420)
-- RV-420 (audit pass, 16 findings raised; F-2 = this harvest, F-5 = pi link untracked, e09b9fef6)
+- RV-420 (audit: 17 findings, all verified, concluded); fix-now 6fd47ea0b (F-1/F-9/F-15), notes harvest a62526d64 (F-2), pi link untracked (F-5); CHR-179 (F-11)
+- reconcile: design.md + selectors (F-3/4/7/8/10/14); DEC-372 amended (F-8); REV-071 done (234c9b2da); REV-072 spec residuals done (de73d6288, F-17)
 - phase detail: § Phase record below
 
 ### Learned
@@ -40,12 +41,15 @@ fresh-as-of: 2026-10-16 · PHASE-06 completed · 9dff138fa
 - four duplicated test `git` helpers (dispatch, slice, ledger, e2e_dispatch_candidate) — candidate shared fixture
 - cargo 1.100 moves test exes to `<profile>/build/<pkg>/<hash>/`; `test_support::doctrine_bin` needed a walk-up fix (CHR-178)
 - a sheet's stated retire/edit counts can drift from the plan text; check the diff, not the sheet (PHASE-05 EX-4)
+- root `[package]` did not inherit workspace `rust-version`, so clippy enforced no MSRV; post-1.85 APIs had landed unnoticed (CHR-178)
+- a REV's rows cover only passages found at draft time; landing one surfaced contradicting residuals (RV-420 F-17 → REV-072) — re-read the whole spec after landing
+- `git commit <paths>` records worktree state, so it cannot commit a `git rm --cached` (re-adds the file); verify the index and commit it unscoped
 
 ### Open
-- REV-071 applies at /reconcile
-- RV-420 dispositions pending beyond F-2 and F-5
-- PHASE-06 OQ-5 — block has no `/.claude/agents/capsule-*.md` link lines (see Phase record); disposition not recorded on the sheet
-- PHASE-06 OQ-6 — research baseline drift (`doctrine slice research 281 --restamp`), orchestrator's call
+- F-6: npx-written `.agents/skills` still carries retired skills → IMP-406 (ISS-353 resolved for doctrine-linked harnesses only)
+- CHR-179 shared test git helper; IMP-273 exact toolchain pin (root cause of CHR-178)
+- canon container that is a dangling symlink / symlink-to-file records no member states (pre-existing; write fails at apply)
+- PHASE-06 OQ-5 dissolved (block carries the capsule link lines once the hand copies went); OQ-6 research baseline drift consciously not restamped — design locked, slice closed
 
 ## Phase record
 

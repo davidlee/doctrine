@@ -1,0 +1,46 @@
+memory_uid = "mem_01a1445c70457b708934b49b90c5fa95"
+memory_key = "mem.pattern.git.pathspec-commit-cannot-untrack"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A path-limited commit cannot record git rm --cached"
+summary = "git commit <paths> takes each path's worktree state, so it silently re-adds a file you untracked with git rm --cached"
+created = "2026-10-16"
+updated = "2026-10-16"
+
+[scope]
+paths = []
+globs = []
+commands = ["git rm --cached", "git commit"]
+tags = ["git", "commit"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0e13b9c071099f5728f375729429380d30bbc28b"
+ref_name = "refs/heads/edge"
+checkout_state_id = "2ca6fc3e55580c1d4469baed82f31e598c171ab2af1cfffcc700a41047df4f7f"
+base_commit = "60417be2943b4d61a9ab811a1427127446261f99"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-281"
+
