@@ -1,0 +1,52 @@
+id    = 419
+slug  = "design-review-of-sl-281"
+title = "design review of SL-281"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Compared the HEAD diff of SL-281 design.md sections sec-code-impact, sec-gitignore, and sec-verification with the rest of the design and plan; searched ensure_gitignored and Step::Gitignore across src/, tests/, crates/, including cfg(test) and MCP code; traced src/install.rs run/build_plan/execute_plan and global harness paths; checked existing gitignore tests, PRD-006, SPEC-009, SPEC-010, and REV-071 draft changes for retained ignore guarantees and newline handling."
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-281"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Account for test-only ensure_gitignored callers during deletion"
+detail = "SL-281 sec-code-impact and sec-gitignore say ensure_gitignored has only the Step::Gitignore caller. That is true for production code, but src/install.rs:3270 calls it in observation_publication_temps_are_ignored, and src/install.rs:3443,3449,3465 call it in two #[cfg(test)] tests. Deleting the helper without changing these sites fails the test build. The existing embedded_manifest_ignores_the_skills_derived_tree test (src/install.rs:3417-3434) also asserts .doctrine/skills/* remains in [gitignore].entries, while sec-code-impact explicitly removes it. Update sec-verification or the impact row to call for migrating the observation round-trip and skills-ignore assertions to the managed-block behavior, and retiring or replacing the two helper-specific tests; the newly removed proposed tests alone do not cover these existing callers."
+disposition = "fix-now"
+response = """
+Accepted. design.md sec-gitignore now names the migrating test-only callers (observation_publication_temps_are_ignored, embedded_manifest_ignores_the_skills_derived_tree assert through render_block; the two ensure_gitignored tests retire); sec-verification lists them as migrated. Plan PHASE-05 EX-4, VT-2 and VA-1 carry the migration and an absence grep with positive control.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Accepted. design.md sec-gitignore now names the migrating test-only callers (observation_publication_temps_are_ignored, embedded_manifest_ignores_the_skills_derived_tree assert through render_block; the two ensure_gitignored tests retire); sec-verification lists them as migrated. Plan PHASE-05 EX-4, VT-2 and VA-1 carry the migration and an absence grep with positive control.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "The design and PHASE-05 now explicitly migrate both test-only assertion sites to render_block, retire both helper-specific tests, and check that no ensure_gitignored callers remain with a positive control; this addresses the test-build failure raised in F-1."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

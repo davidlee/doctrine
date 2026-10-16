@@ -150,7 +150,7 @@ executor and the disk scan are the thin impure shell around it.
 |---|---|
 | `install/manifest.toml` | add `[framework] roots`, `[harness.claude|pi|codex|universal]` (detect, boot, agents, skills route); `[gitignore].entries` keeps runtime entries only (drop `.doctrine/skills/*`, now derived) |
 | `src/install_ownership.rs` (new) | pure `plan`, `Desired`/`Snapshot`/`Action`, `render_block`, `splice_block` |
-| `src/install.rs` | `FrameworkSection`/`HarnessSection` on `Manifest`; desired-set builder over `embedded_agent_defs` + catalog; disk scan; one executor replacing `install_agents_for`/`install_agent_def`/`install_skills_direct`/`install_workflows_for` legs; lexical "into a framework root" test beside `classify_link`; gitignore block written after the forward legs from a re-scan, replacing `Step::Gitignore`; `detect_agents` and `boot_harness_names` read the registry; `install_harnesses` derives the boot set from the registry in both the flagged and unflagged paths, unioning `boot::resolve_harnesses`' AGENTS.md rule; unregistered names keep npx delegation with a disclosure; `.tmp-` staging prefix named; `ensure_gitignored` gains a final-newline guard; executor re-proves before each mutation; delete `DISPATCH_WORKER_AGENT_ASSET{,_PI}`, `claude_agents_dir`/`pi_agents_dir`, both `_ => pi` arms; `delegate_argv` receives de-duplicated `skills_via` targets |
+| `src/install.rs` | `FrameworkSection`/`HarnessSection` on `Manifest`; desired-set builder over `embedded_agent_defs` + catalog; disk scan; one executor replacing `install_agents_for`/`install_agent_def`/`install_skills_direct`/`install_workflows_for` legs; lexical "into a framework root" test beside `classify_link`; gitignore block written after the forward legs from a re-scan, replacing `Step::Gitignore`; `detect_agents` and `boot_harness_names` read the registry; `install_harnesses` derives the boot set from the registry in both the flagged and unflagged paths, unioning `boot::resolve_harnesses`' AGENTS.md rule; unregistered names keep npx delegation with a disclosure; `.tmp-` staging prefix named; `ensure_gitignored` deleted (no caller once `Step::Gitignore` goes); executor re-proves before each mutation; delete `DISPATCH_WORKER_AGENT_ASSET{,_PI}`, `claude_agents_dir`/`pi_agents_dir`, both `_ => pi` arms; `delegate_argv` receives de-duplicated `skills_via` targets |
 | `src/main.rs` | `mod install_ownership;` |
 | `src/worktree/allowlist.rs` | `DERIVED_RUNTIME` gains `.doctrine/workflows/*`; test that every `[framework] roots` entry is covered |
 | `tests/e2e_claude_install.rs` | walk `install/agents/claude/*.md`; canon path moves to `.doctrine/agents/claude/` |
@@ -384,9 +384,13 @@ Hymns and every user-owned path are never in the block. Lines older installs
 appended loose stay where they are (the migration non-goal) as harmless
 duplicates.
 
-`ensure_gitignored`, which other commands call to self-enforce one entry, keeps
-its contract. It finds a line already in the block and does nothing. It gains
-the same missing-final-newline guard before appending.
+`ensure_gitignored` is deleted. Its only caller is the base plan's
+`Step::Gitignore`, removed above; no other command self-enforces an entry (the
+skills caller went with `skills.rs` in IMP-226). Amended at `/plan`. Its test-only
+callers migrate with it: `observation_publication_temps_are_ignored` asserts
+the entry through the rendered block, the two helper-specific tests retire, and
+`embedded_manifest_ignores_the_skills_derived_tree` moves to asserting
+`.doctrine/skills/*` comes from the `[framework] roots` glob.
 
 ### Dogfood
 
@@ -489,8 +493,9 @@ Manifest and wiring tests (`src/install.rs`):
 - `detection_and_boot_follow_registry` (pi/codex/universal dirs → harness set
   and boot adapters, with and without `--agent`; a real non-alias `AGENTS.md`
   still adds codex)
-- `ensure_gitignored_noops_when_line_in_block` /
-  `ensure_gitignored_adds_newline_before_append`
+- existing tests migrated, not dropped: `observation_publication_temps_are_ignored`
+  and `embedded_manifest_ignores_the_skills_derived_tree` assert through
+  `render_block`; the two `ensure_gitignored_*` tests retire with the helper
 - `framework_roots_are_classified_derived_runtime`
 - `repo_gitignore_contains_static_block_entries` (dogfood parity)
 

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14322-5e07-7d32-9834-b6a7ae47347d"
+recorded_at = "2026-10-16T05:14:48.199492063Z"
+kind = "friction"
+summary = "[plan; SL-281] design stage regress re-rendered design.md over an unadopted out-of-band edit without warning"
+detail = "Locked run refused adopt and said to regress to reviewing first. I had already edited design.md; the stage-move apply (locked->reviewing) re-rendered design.md from run state, silently discarding the edit (output listed only act/stage events). Had to redo the edit then adopt. Either the refusal should say 'regress BEFORE editing', or apply should refuse/disclose when on-disk design.md diverges from the watermark (STD-003)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
