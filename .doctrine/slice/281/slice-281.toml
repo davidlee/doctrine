@@ -100,6 +100,12 @@ role = "concerns"
 descriptor = "D2 never-overwrite to be revised for framework-owned artefacts"
 target = "SPEC-009"
 
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "spec revision applied at reconcile (DEC-376)"
+target = "REV-071"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis. Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
