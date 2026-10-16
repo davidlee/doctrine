@@ -186,7 +186,7 @@ mkdir .claude
 # also run this after a new doctrine version:
 doctrine install -y
 
-git add -A && git commit -m "chore: doctrine install"
+# commit with the git add / git commit command install prints
 ```
 
 ## Memory-only use 

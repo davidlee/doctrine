@@ -3,10 +3,10 @@ memory_key = "mem.concept.doctrine.hymn-cascade"
 schema_version = 1
 memory_type = "concept"
 status = "active"
-title = "Doctrine hymn cascade — bands, trait-keyed model band, seal/expose, precedence"
+title = "Doctrine hymn cascade — bands, trait-keyed model band, seal/customise, precedence"
 summary = ""
 created = "2026-07-03"
-updated = "2026-07-03"
+updated = "2026-10-17"
 
 [scope]
 paths = ["install/hymns/", ".doctrine/hymns/"]

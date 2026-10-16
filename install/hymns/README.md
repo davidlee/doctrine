@@ -48,17 +48,20 @@ model = "anthropic/_default"
 ```
 The sidecar overrides the path-derived defaults; undeclared axes keep their default.
 
-## Seal / Expose
+## Seal / Customise
 
 Two sides of one coin, both **single-emit**:
 
 - **sealed** slot: the framework (embedded) snippet is authoritative — a
   user-provenance twin at that slot is dropped BEFORE matching. Framework
   wins by active exclusion of its disk twin.
-- **exposed** slot: the projector writes an editable starter to disk AND
-  writes a sidecar `replaces = <own slot>`. The user twin self-`replaces` its
-  own framework origin, making it the unique strict top of the slot — user
-  wins by SUPPRESSION, not by the provenance tiebreak below.
+- **customised** slot: `doctrine prompt customise <band/label>` writes an
+  editable copy of the framework snippet to disk AND a sidecar
+  `replaces = <own slot>` (install no longer projects starters; it needs a
+  prior install). The user twin self-`replaces` its own framework origin,
+  making it the unique strict top of the slot — user wins by SUPPRESSION, not
+  by the provenance tiebreak below. A customised copy no longer follows
+  framework updates to that slot.
 
 ## Provenance
 
@@ -72,5 +75,5 @@ Precedence key (ascending; last word wins):
 Specificity dominates provenance — a framework exact-trait snippet outranks a
 user broad one. The provenance leg is **ordering only**: it reorders
 same-slot twins, it never suppresses one. `replaces` is the only suppression
-mechanism (see Seal / Expose above) — there is no "user always wins at equal
+mechanism (see Seal / Customise above) — there is no "user always wins at equal
 specificity" rule.

@@ -1,4 +1,4 @@
-# Doctrine hymn cascade — bands, trait-keyed model band, seal/expose, precedence
+# Doctrine hymn cascade — bands, trait-keyed model band, seal/customise, precedence
 
 The hymn cascade composes agent-facing prose from a corpus of small snippets.
 Getting the authoring model wrong (treating the model band as a model registry,
@@ -34,23 +34,27 @@ under the band — a model label (`anthropic/claude-sonnet-4`) or a trait path
 (`adherence/low`) alike. A sidecar `<file>.toml` overlays selector axes
 per-axis; an axis it does not declare keeps its path-derived default.
 
-## Seal / expose — two sides of one coin, both single-emit
+## Seal / customise — two sides of one coin, both single-emit
 
 Two roots layer: the compile-embedded framework superset unioned with
-`.doctrine/hymns/` (on-disk, user overlay + projected editable starters).
+`.doctrine/hymns/` (on-disk: the user overlay, plus any slot copied there by
+`doctrine prompt customise`).
 Provenance is DERIVED from the source root, never stored as a flag.
 
 - **Sealed** slot: the framework snippet is authoritative — any
   user-provenance snippet at that slot is dropped BEFORE matching. Framework
   wins by active exclusion of its disk twin.
-- **Exposed** slot: the projector writes an editable starter to disk AND
-  writes a sidecar `replaces = <own slot>`. The user twin self-`replaces` its
-  own framework origin, making it the unique strict top of the slot — user
-  wins by SUPPRESSION, not by the provenance tiebreak below.
+- **Customised** slot: `doctrine prompt customise <band/label>` writes an
+  editable copy of the framework snippet to disk AND a sidecar
+  `replaces = <own slot>` (install no longer projects starters; customise
+  needs a prior install). The user twin self-`replaces` its own framework
+  origin, making it the unique strict top of the slot — user wins by
+  SUPPRESSION, not by the provenance tiebreak below. The copy stops following
+  framework updates to that slot.
 
 `replaces` is the ONLY suppression mechanism, legal only on the unique
 most-specific active snippet of its slot (self-targeting is exactly the
-expose mechanism). Duplicate targets, non-top replacers, and cycles are
+customise mechanism). Duplicate targets, non-top replacers, and cycles are
 authoring errors surfaced by `prompt check`/`validate` — never silently
 alpha-ordered.
 
@@ -64,8 +68,8 @@ Specificity dominates provenance — a framework exact-trait snippet outranks a
 user broad one. Within a band, specificity leads with the band's namesake
 axis, then the sum of other pinned axis depths. The same-slot provenance leg
 is ORDERING ONLY: it reorders same-slot twins, it never suppresses one. The
-exposed starter's override of its framework origin is delivered by
-self-`replaces` (the expose mechanism above), NOT by winning this tiebreak —
+customised copy's override of its framework origin is delivered by
+self-`replaces` (the customise mechanism above), NOT by winning this tiebreak —
 there is no "user always wins at equal specificity" rule.
 
 Point of truth: `reference/model-band.md` for the full cascade contract, and

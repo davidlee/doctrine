@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a145b6-8f33-7b63-9e1d-58860cad245f"
+recorded_at = "2026-10-16T17:15:54.547991168Z"
+kind = "friction"
+summary = "capsule-orchestrator: PHASE-04/05 left 'notes for PHASE-06' findings empty; planner re-derived starter identity checks"
+detail = "Reported by SL-282 PHASE-06 phase planner hand-back."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

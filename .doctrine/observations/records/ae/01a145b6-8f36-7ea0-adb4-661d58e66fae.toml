@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a145b6-8f36-7ea0-adb4-661d58e66fae"
+recorded_at = "2026-10-16T17:15:54.550761122Z"
+kind = "friction"
+summary = "capsule-phase-planner: phase-plan skill step 8 (flip in_progress) contradicts planner write-only contract"
+detail = "Reported by SL-282 PHASE-06 phase planner hand-back."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

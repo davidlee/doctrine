@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a145b6-8f31-70b0-a31a-7bad39e774a1"
+recorded_at = "2026-10-16T17:15:54.545792268Z"
+kind = "friction"
+summary = "capsule-orchestrator: PHASE-06 authored objective says 'commit the result', conflicting with no-commit capsule worker; planner split phase by hand"
+detail = "Reported by SL-282 PHASE-06 phase planner hand-back."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
