@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/install.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/hymns.rs"
@@ -20,11 +20,11 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/commands/prompt.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "install/manifest.toml"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/**"
@@ -32,7 +32,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/boot.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "install/**"
@@ -40,27 +40,39 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/install_state.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/dtoml.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install_config.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "Cargo.toml"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".doctrine/hymns/**"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".doctrine/adr/001/layering.toml"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/status.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_install_*.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a144e3-b438-7e42-aacc-f903a780092a"
+recorded_at = "2026-10-16T13:25:35.928510509Z"
+kind = "friction"
+summary = "design: first materialise orders sections alphabetically by id (SL-282)"
+detail = "Declared sections in reading order in one apply; materialise wrote them sorted by sec- id (code-impact first, problem seventh). Fixed by hand-reordering design.md and running design adopt (which records reorders). Declaration order, or an explicit order field, would avoid the round trip."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
