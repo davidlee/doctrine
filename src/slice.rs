@@ -5566,6 +5566,8 @@ mod tests {
                 "commit.gpgsign=false",
             ])
             .args(args)
+            // Fixture repos are disposable: lift the jail git-guard's refusals.
+            .env("GIT_GUARD", "off")
             .output()
             .unwrap();
         assert!(

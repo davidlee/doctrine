@@ -32,6 +32,8 @@ fn git(dir: &Path, args: &[&str]) -> String {
         .arg("-C")
         .arg(dir)
         .args(args)
+        // Fixture repos are disposable: lift the jail git-guard's refusals.
+        .env("GIT_GUARD", "off")
         .output()
         .expect("spawn git");
     assert!(

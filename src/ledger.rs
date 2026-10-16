@@ -1022,6 +1022,8 @@ created_at = "d"
                 .args(args)
                 .env("GIT_AUTHOR_DATE", "2026-06-20T00:00:00 +0000")
                 .env("GIT_COMMITTER_DATE", "2026-06-20T00:00:00 +0000")
+                // Fixture repos are disposable: lift the jail git-guard's refusals.
+                .env("GIT_GUARD", "off")
                 .output()
                 .expect("spawn git");
             assert!(
