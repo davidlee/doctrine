@@ -449,3 +449,42 @@ fn no_harness_interactive_asks_once() {
     );
     assert!(!root.join("CLAUDE.md").exists(), "{out}");
 }
+
+#[test]
+fn hint_omits_untracked_paths_the_projects_own_gitignore_ignores() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let dir = repo();
+    let root = dir.path();
+    fs::write(root.join(".gitignore"), "/CLAUDE.md\n").unwrap();
+
+    let out = install_yes(root, &[], &[]);
+
+    let (add, commit) = pathspecs(hint_line(&out));
+    assert!(!add.contains("CLAUDE.md") && !add.is_empty(), "{out}");
+    assert_eq!(add, commit, "{out}");
+    execute(hint_line(&out), root);
+    assert!(
+        root.join("CLAUDE.md").is_file(),
+        "control: install wrote it"
+    );
+}
+
+#[test]
+fn hint_keeps_a_tracked_path_even_when_gitignore_matches_it() {
+    if common::under_worker_marker() {
+        return;
+    }
+    let dir = repo();
+    let root = dir.path();
+    fs::write(root.join("CLAUDE.md"), "mine\n").unwrap();
+    git(root, &["add", "-f", "CLAUDE.md"]);
+    fs::write(root.join(".gitignore"), "/CLAUDE.md\n").unwrap();
+
+    let out = install_yes(root, &[], &[]);
+
+    let (add, _) = pathspecs(hint_line(&out));
+    assert!(add.contains("CLAUDE.md"), "{out}");
+    execute(hint_line(&out), root);
+}

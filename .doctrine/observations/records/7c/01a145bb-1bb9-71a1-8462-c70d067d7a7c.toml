@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a145bb-1bb9-71a1-8462-c70d067d7a7c"
+recorded_at = "2026-10-16T17:20:52.665219608Z"
+kind = "friction"
+summary = "capsule-worker SL-282 PHASE-06: install --dry-run reports hymn starter removal as a count only, never names the slots"
+detail = "Verifying VA-1 needed a separate byte-compare or git show --stat after the real run. Also: TMPDIR unset broke a scripted edit; memory.toml title/updated edits have no verb (manual TOML edit)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -242,7 +242,13 @@ mod tests {
         let original = include_str!("../.doctrine/doctrine.toml");
         let out = stamped(original);
         if original.contains("\n[install]") {
-            assert_eq!(out.replace(STAMP_LINE, ""), original);
+            // The repo's own stamp (any version) is replaced in place.
+            fn unstamped(t: &str) -> Vec<&str> {
+                t.lines()
+                    .filter(|l| !l.starts_with("installed-version"))
+                    .collect()
+            }
+            assert_eq!(unstamped(&out), unstamped(original));
         } else {
             assert!(out.starts_with(original), "existing bytes must be a prefix");
             assert_eq!(

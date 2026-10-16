@@ -1078,6 +1078,7 @@ fn remove_legacy_starters(
             }
             touched.push(Touched::under(root, path, Change::Removed));
         }
+        prune_empty_dirs(&hymns_disk_root(root), &starter.md);
         writeln!(
             out,
             "{}",
@@ -1085,6 +1086,16 @@ fn remove_legacy_starters(
         )?;
     }
     Ok(LegOutcome::Done(touched))
+}
+
+/// Remove the directories `removed` leaves empty, innermost first, stopping at
+/// `stop` (kept). `remove_dir` only: a populated directory ends the walk.
+fn prune_empty_dirs(stop: &Path, removed: &Path) {
+    for dir in removed.ancestors().skip(1).take_while(|d| *d != stop) {
+        if fs::remove_dir(dir).is_err() {
+            break;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1243,9 +1254,12 @@ fn print_commit_hint(
         return Ok(());
     }
     let contract = ignore_contract(&gitignore_block(root, manifest, &[])?);
-    let paths = hint_paths(&touched(outcomes), &|p| {
+    let mut paths = hint_paths(&touched(outcomes), &|p| {
         contract.matched_path_or_any_parents(p, false).is_ignore()
     });
+    // Asked after the gitignore leg ran: git must see the block this run wrote.
+    let git_ignored = git::ignored_among(root, &paths)?;
+    paths.retain(|p| !git_ignored.contains(p));
     stdout_line("")?;
     if paths.is_empty() {
         stdout_line(NOTHING_TO_COMMIT)?;
@@ -6904,6 +6918,8 @@ mod tests {
             )])
         );
         assert!(!md.exists());
+        assert!(!md.parent().unwrap().exists(), "emptied band dir pruned");
+        assert!(hymns_disk_root(root).is_dir(), "hymns root itself kept");
         assert!(
             String::from_utf8(out)
                 .unwrap()

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a145bb-1bb2-7c03-bfad-a85ec3376736"
+recorded_at = "2026-10-16T17:20:52.65880833Z"
+kind = "friction"
+summary = "capsule-orchestrator SL-282 PHASE-06: install commit hint lists gitignored generated paths, so the printed git add fails"
+detail = "Dogfood install -y in this repo printed Next: git add -- ... including .codex/hooks.json and .pi/extensions/doctrine/{index,mcp,surface}.ts. All are gitignored (/.codex, /.pi/*) and unchanged-tracked-wise; git add refuses ignored paths (exit 1) so the && commit never runs. EX-1 'committed with the printed hint' could not be met literally; committed with filtered list. Worker spawned to filter ignored paths from the hint."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

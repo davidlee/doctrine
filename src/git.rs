@@ -977,6 +977,25 @@ pub(crate) fn commit_tree_merge(
 /// must feed git records it cannot pass as argv — e.g. `update-index --index-info`
 /// stage rewrites whose paths are raw bytes. Mirrors [`hash_object_stdin`]'s spawn/pipe.
 fn git_stdin(root: &Path, args: &[&str], raw: &[u8]) -> Result<Vec<u8>, CaptureError> {
+    let output = git_stdin_output(root, args, raw)?;
+    if output.status.success() {
+        Ok(output.stdout)
+    } else {
+        Err(CaptureError::Git(format!(
+            "{}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+}
+
+/// [`git_stdin`] without the exit-code judgement, for commands whose non-zero
+/// exit is informational (`check-ignore` exits 1 when nothing matched).
+fn git_stdin_output(
+    root: &Path,
+    args: &[&str],
+    raw: &[u8],
+) -> Result<std::process::Output, CaptureError> {
     use std::io::Write as _;
     use std::process::Stdio;
 
@@ -1011,14 +1030,37 @@ fn git_stdin(root: &Path, args: &[&str], raw: &[u8]) -> Result<Vec<u8>, CaptureE
             .wait_with_output()
             .map_err(|e| CaptureError::Git(format!("git {}: wait: {e}", args.join(" "))))
     })?;
-    if output.status.success() {
-        Ok(output.stdout)
-    } else {
-        Err(CaptureError::Git(format!(
+    Ok(output)
+}
+
+/// The subset of `paths` (relative to `root`, or absolute) that git would
+/// refuse to `add` as ignored: matched by an ignore rule and not tracked. One
+/// batched `git check-ignore -z --stdin`; exit 1 (none matched) is an empty
+/// answer, any other failure an error. Impure shell.
+pub(crate) fn ignored_among(
+    root: &Path,
+    paths: &[PathBuf],
+) -> Result<std::collections::BTreeSet<PathBuf>, CaptureError> {
+    use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
+
+    let args = ["check-ignore", "-z", "--stdin"];
+    let raw: Vec<u8> = paths
+        .iter()
+        .flat_map(|p| p.as_os_str().as_bytes().iter().copied().chain([0]))
+        .collect();
+    let output = git_stdin_output(root, &args, &raw)?;
+    match output.status.code() {
+        Some(0 | 1) => Ok(output
+            .stdout
+            .split(|b| *b == 0)
+            .filter(|f| !f.is_empty())
+            .map(|f| PathBuf::from(std::ffi::OsString::from_vec(f.to_vec())))
+            .collect()),
+        _ => Err(CaptureError::Git(format!(
             "{}: {}",
             args.join(" "),
             String::from_utf8_lossy(&output.stderr).trim()
-        )))
+        ))),
     }
 }
 
