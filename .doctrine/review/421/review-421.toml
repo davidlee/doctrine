@@ -26,6 +26,13 @@ note = """
 Raiser pass over all 16 responder dispositions against SL-282's revised design at 4e2387bc3, accepted DEC-378 through DEC-385 (including the user's DEC-379 and DEC-384 amendments), PRD-006 and SPEC-009/011/023, and relevant install/boot/prompt source. Verified 13 original findings, including the user-directed F-9 route to ISS-522; contested F-11, F-13 and F-14. Probed revised InstallPlan/LegOutcome, path-limited hint, currency and downgrade rules, linked-worktree lookup, legacy hymn cleanup and verification rows; raised F-17 through F-19. No implementation or design files were changed.
 """
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Raiser rechecked RV-421 F-11, F-13, F-14, F-17, F-18, and F-19 against the responder turns, the two SL-282 design commits (310181244 and 79df16f18), and the amended DEC-382/DEC-384 rulings. Verified F-11, F-14, F-17, F-18, F-19. Contested F-13 against the published install --global and --only-memory contracts. Bounded sweep of only this round's revised design passages found no additional verified material defect or regression of an earlier verified finding.
+"""
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-282"
 
@@ -323,7 +330,7 @@ role = "raiser"
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Delegated skills changes cannot enter the exact commit hint"
 detail = """
@@ -363,6 +370,11 @@ response = """
 Contest accepted: narrowing needed a governance change, not a REV note. User ruling 2026-10-17 ("1a — npx is likely going soon"): DEC-382 amended — the hint names exactly doctrine's own tracked writes, path-limited; delegated (npx) writes get a review line. Design cites the amended DEC.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "DEC-382's amended doctrine-owned path contract is reflected in design.md:169-173, including the delegated npx review line."
+
 [[finding]]
 id = "F-12"
 status = "verified"
@@ -396,7 +408,7 @@ role = "raiser"
 
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "contested"
 severity = "major"
 title = "Scope variants still compose the full project install plan"
 detail = """
@@ -436,9 +448,16 @@ response = """
 Contest accepted: suppressing stamps while running the full plan was incoherent. Today both modes run the full project plan (--global only redirects convergence to user scope; --only-memory is unwired). The design now treats both as a plain install for stamps, currency gate and commit hint; user-scope writes never enter the hint. Re-scoping the modes stays out of scope: --only-memory being dead is filed as ISS-523. E2e row added.
 """
 
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+The revision still leaves the raised mode-contract gap unresolved. `doctrine install --help` promises `--global` installs to the user directory instead of the project, and `--only-memory` installs only the memory skills. Design.md:181-186 explicitly runs the full project plan for both, including project doctrine.toml, and now stamps that full run as a plain install. ISS-523 records the dead `--only-memory` flag for later; it does not make this design conform to either advertised mode. Define mode-specific plans and stamp/hint effects, or obtain a user ruling that changes these contracts and update the CLI/help accordingly.
+"""
+
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "F-6 severity escalation: soft failures still authorize a current stamp"
 detail = """
@@ -477,6 +496,11 @@ disposition = "design-wrong"
 response = """
 Contest accepted; verified src/boot.rs:3307-3310 catches per-harness refresh errors and returns Ok. apply_wire now returns per-harness results while printing the same lines and continuing; wire still returns Ok after printing (boot install unchanged); install maps any failed harness to a Failed boot-wiring leg, so no stamps. E2e row: one harness's refresh fails inside apply_wire.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Design.md:93-101 now carries internally caught per-harness refresh failures through apply_wire to a Failed install leg; lines 486-488 require the regression fixture."
 
 [[finding]]
 id = "F-15"
@@ -542,7 +566,7 @@ role = "raiser"
 
 [[finding]]
 id = "F-17"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Local-only downgrade can finish without a tracked version"
 detail = """
@@ -567,9 +591,14 @@ response = """
 Agreed. Under --allow-downgrade the tracked stamp is preserved only when newer than B; absent or older is written as B like any successful install. E2e rows for absent / older / newer tracked under a local-only downgrade.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Design.md:303-307 preserves only a tracked stamp newer than B and writes B when absent or older; lines 489-490 cover all three cases."
+
 [[finding]]
 id = "F-18"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Pre-stamp customise is deleted by the one-time cleanup"
 detail = """
@@ -594,9 +623,14 @@ response = """
 Agreed: a pre-stamp customise was still a cleanup candidate. User ruling 2026-10-17 ("2a"): DEC-384 amended — prompt customise refuses while the tracked installed-version is absent ("run `doctrine install` first"). Design sec-hymns, risks row and e2e row (pre-stamp customise refuses, writes nothing) updated.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "DEC-384's amended pre-stamp refusal is explicit in design.md:348-350; lines 475-476 require no-write coverage."
+
 [[finding]]
 id = "F-19"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Git common-dir does not locate every main worktree"
 detail = """
@@ -620,6 +654,11 @@ disposition = "design-wrong"
 response = """
 Agreed (reproduced shape: separate-git-dir puts the common dir outside any checkout). Main root = common dir's parent, accepted only if its .git is the common dir or a gitfile to it; otherwise MarkerSource::Unlocated and CheckoutNotInstalled says "main worktree not located" (STD-003, no silent fallback). E2e row added.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Design.md:216-225 validates the common-dir parent and discloses an unlocatable main worktree; line 485 covers separate-git-dir."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
