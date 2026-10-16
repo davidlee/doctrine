@@ -1,0 +1,160 @@
+# Implementation plan for SL-282 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-282"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber, so the id
+# sequence goes non-monotonic after a split and that is expected. Criterion ids
+# are local to their phase, bare, and equally immutable
+# (`lib:reference/glossary.md` § reference forms). The prefix is
+# the only mode marker; there is no mode field. Reference a criterion from
+# another phase phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Currency model and stores"
+objective = "Pure leaf `install_state` (StampRead, Currency, MarkerSource, classify, advisory) plus the two stores: `installed-version` read through InstallConfig and written by a comment-preserving single-key `write_installed_version`; the local marker at INSTALL_MARKER_REL; and the command-tier reader that resolves both (with the linked-worktree marker lookup) into findings. No call sites yet."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-282 design locked; plan approved." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/install_state.rs` exists, registered `install_state = \"leaf\"` in .doctrine/adr/001/layering.toml; it does no I/O; `semver` is a direct dependency." },
+  { id = "EX-2", text = "classify covers tracked × local in {Absent, Unreadable, older, equal, newer} against a fixed binary, in the design's finding order; Unreadable is never reported as Absent (STD-003); tracked Absent → RepoUnstamped, dropped beside CheckoutNotInstalled." },
+  { id = "EX-3", text = "RV-421 F-3 (control): local marker newer than the binary with tracked Absent classifies as CheckoutNewer; a classifier returning no finding for that input fails the test." },
+  { id = "EX-4", text = "advisory renders every variant from constants (STD-001), naming the main root when the marker source is Main and saying `main worktree not located` when Unlocated." },
+  { id = "EX-5", text = "write_installed_version leaves this repo's commented .doctrine/doctrine.toml byte-identical outside the key, and creates `[install]` only when absent." },
+  { id = "EX-6", text = "The marker reader uses the checkout's own marker first, else a verified main worktree's marker in a linked worktree, else Absent; a `--separate-git-dir` layout yields Unlocated; outside git only the checkout's marker applies." },
+  { id = "EX-7", text = "`doctrine check gate` green; clippy zero warnings." },
+]
+verification = [
+  { id = "VT-1", expects = "classify / advisory unit matrix incl. CheckoutNewer (RV-421 F-3) and RepoUnstamped suppression", test_file = "src/install_state.rs", keywords = ["fn classify", "fn advisory", "CheckoutNewer", "RepoUnstamped", "MarkerSource", "#[cfg(test)]"], waived = false },
+  { id = "VT-2", expects = "write_installed_version round-trips a commented doctrine.toml byte-identically outside the key", test_file = "src/install_config.rs", keywords = ["installed_version", "write_installed_version"], waived = false },
+  { id = "VT-3", expects = "marker reader: own marker, linked worktree main fallback, separate-git-dir Unlocated, non-git", test_file = "src/install.rs", keywords = ["read_install_marker", "INSTALL_MARKER_REL", "git-common-dir"], waived = false },
+  { id = "VA-1", expects = "layering check passes with the new leaf registered; install_state imports no fs/process." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Currency sites and boot guard"
+objective = "Surface currency where DEC-380 says: after the unbanded `prompt resolve` cascade (text and --json hook envelope), after `doctrine boot` / `boot --check` output, and in `status` (structured in JSON, rendered in text). Add the not-installed sentence to BOOT_REF_GUARD with PRIOR_BOOT_REF_GUARDS upgrade in plan_boot_import (DEC-383)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Each finding's advisory appears via prompt resolve (after the snapshot; snapshot bytes unchanged), boot and boot --check (exit status unchanged), and status text; nothing prints when current." },
+  { id = "EX-2", text = "status --json carries currency as structured findings (kind plus versions or path), not prose." },
+  { id = "EX-3", text = "RV-421 F-1 (control): in a linked worktree of an installed checkout, prompt resolve emits no checkout advisory; the candidate that reports CheckoutNotInstalled for a marker-less fork fails the e2e." },
+  { id = "EX-4", text = "plan_boot_import: current guard → Present (no write); a prior guard → replaced; bare `@` line → upgraded; no block → created." },
+  { id = "EX-5", text = "`doctrine check gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "currency matrix e2e across prompt resolve / boot / status --json, incl. linked-worktree rows (RV-421 F-1)", test_file = "tests/e2e_install_currency.rs", keywords = ["prompt", "resolve", "status", "--json", "linked_fork", "CheckoutNotInstalled"], waived = false },
+  { id = "VT-2", expects = "guard upgrade unit rows", test_file = "src/boot.rs", keywords = ["PRIOR_BOOT_REF_GUARDS", "plan_boot_import", "doctrine is not set up"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Install executor: one harness set, leg outcomes, stamps"
+objective = "Restructure install execution without changing its prompts yet: resolve_install_harnesses replaces detect_agents + install_harnesses with boot's AGENTS.md predicate verbatim; split boot::wire into plan_wire + apply_wire (boot install unchanged); legs and the gitignore writer return LegOutcome with Touched entries; InstallPlan composes them; stamps written last only when every leg is Done; downgrade gate and --allow-downgrade."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete (stores and classifier exist)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "One harness resolver feeds boot wiring and convergence; the lone CLAUDE.md↔AGENTS.md symlink pair (no .claude/) resolves to codex through both install and boot install." },
+  { id = "EX-2", text = "boot::wire is plan_wire + apply_wire; existing boot install suites pass unchanged; apply_wire returns per-harness results." },
+  { id = "EX-3", text = "RV-421 F-14 (control): a harness refresh failure caught inside apply_wire, and malformed gitignore markers, each make install report `install incomplete` and write neither stamp; the candidate that stamps after a caught failure fails the e2e." },
+  { id = "EX-4", text = "A successful install writes the tracked stamp and the local marker last; --global and --only-memory write neither." },
+  { id = "EX-5", text = "Downgrade gate fires on RepoNewer or CheckoutNewer: -y refuses naming --allow-downgrade. RV-421 F-17 (control): --allow-downgrade with only the local marker newer writes an absent or older tracked stamp as B and keeps a newer one; the candidate leaving it absent fails the e2e." },
+  { id = "EX-6", text = "`doctrine check gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "executor e2e: stamps on success, none on forced leg failure (RV-421 F-14), downgrade gate and --allow-downgrade tracked-stamp rule (RV-421 F-17), lone symlink pair", test_file = "tests/e2e_install_executor.rs", keywords = ["installed-version", "install incomplete", "--allow-downgrade", "AGENTS.md"], waived = false },
+  { id = "VT-2", expects = "unit: LegOutcome / Touched composition and resolver", test_file = "src/install.rs", keywords = ["LegOutcome", "Touched", "resolve_install_harnesses", "InstallPlan"], waived = false },
+  { id = "VT-3", expects = "wire split keeps boot install behaviour", test_file = "src/boot.rs", keywords = ["fn plan_wire", "fn apply_wire"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Hymn starters on demand"
+objective = "Delete the install starter leg, `[hymns].expose` and embedded_expose_set; add `doctrine prompt customise <slot>` (alias customize) that refuses unknown/sealed slots and pre-stamp repos and writes starter + self-replaces sidecar via project_starters; add identical_starters legacy removal, gated on an absent tracked stamp, running where the starter leg ran."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete (install writes the tracked stamp)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A fresh install writes no files under .doctrine/hymns/; prompt resolve --role worker then contains the framework worker contract (ISS-210)." },
+  { id = "EX-2", text = "prompt customise writes `<slot>.md` + `<slot>.toml` (replaces = slot), leaves an existing file alone and reports it, refuses a sealed slot naming the seal, and lists framework slots on an unknown one." },
+  { id = "EX-3", text = "RV-421 F-18 (control): in a repo with no installed-version, prompt customise refuses (`run doctrine install first`) and writes nothing; the candidate that writes the starter fails the e2e." },
+  { id = "EX-4", text = "Legacy removal (stamp absent only) removes identical body + absent-or-default sidecar, reports each, keeps edited bodies, edited sidecars and non-snippet files; adherence/low emits once afterwards (ISS-521)." },
+  { id = "EX-5", text = "RV-421 F-16 (control): install → prompt customise role/worker → install leaves both files; the candidate that deletes them fails the e2e." },
+  { id = "EX-6", text = "`doctrine check gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "customise and legacy-removal e2e incl. RV-421 F-16 and F-18 rows", test_file = "tests/e2e_install_hymns.rs", keywords = ["customise", "role/worker", "run `doctrine install` first", "removed unedited starter"], waived = false },
+  { id = "VT-2", expects = "identical_starters unit rows", test_file = "src/install.rs", keywords = ["fn identical_starters"], waived = false },
+  { id = "VT-3", expects = "customise verb wired with alias", test_file = "src/commands/prompt.rs", keywords = ["Customise", "customize"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Overview, one prompt, commit hint"
+objective = "Replace the step-list first screen and per-step prompts with render_overview over InstallPlan and a single `Proceed? [y/N/d]` read by prompt_choice (prompt_confirm becomes its adapter); delete prompt_step and the per-step prompts; ask for harnesses once only when none detected interactively; print the path-limited commit hint from Touched, with the npx review line."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 and PHASE-04 complete (InstallPlan holds every leg, incl. legacy removal)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Interactive fresh install: overview, exactly one prompt, commit hint; `d` then `y` proceeds, `d` then `N` and `N` write nothing; -y prints the overview and asks nothing; --dry-run prints overview and details and writes nothing (digest check)." },
+  { id = "EX-2", text = "prompt_confirm callers (boot install, memory sync) keep their yes/no behaviour." },
+  { id = "EX-3", text = "RV-421 F-10 (control): with an unrelated file staged, the printed `git commit … -- <paths>` pathspec excludes it; a pathless-commit candidate fails the e2e. From a nested directory the hint is prefixed `cd <root> &&`." },
+  { id = "EX-4", text = "Second install prints `Nothing to commit.`; a removed starter appears in the hint; when the npx leg ran, the review line appears; --global and --only-memory print no hint." },
+  { id = "EX-5", text = "`doctrine check gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "interactive flow and commit hint e2e incl. RV-421 F-10", test_file = "tests/e2e_install_flow.rs", keywords = ["Proceed? [y/N/d]", "git commit", "Nothing to commit.", "cd "], waived = false },
+  { id = "VT-2", expects = "prompt_choice unit rows", test_file = "src/install.rs", keywords = ["fn prompt_choice", "Choice", "Details", "fn render_overview"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Dogfood"
+objective = "Run the new install in this repo: the seven identical starters go, both stamps are written, the hint is correct; commit the result. Sweep shipped reference docs and skills for stale mentions of the starter leg, `[hymns].expose` and per-step prompts."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete; binary built from the slice source." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Install in this repo removes exactly harness/claude, harness/cursor, model/anthropic/claude-sonnet-4, model/deepseek/_default, role/worker, preamble/core, model/adherence/low (with their default sidecars); role/orchestrator, project/* and README.md remain; the result is committed with the printed hint." },
+  { id = "EX-2", text = "No shipped doc or skill still describes the removed starter leg, `[hymns].expose` or per-step install prompts." },
+  { id = "EX-3", text = "`doctrine check gate` green." },
+]
+verification = [
+  { id = "VA-1", expects = "agent inspects the dogfood commit: exactly the seven starters (plus sidecars) removed, doctrine.toml diff is the one key." },
+  { id = "VH-1", expects = "user runs `doctrine install` interactively in a scratch repo and judges the overview and hint readable." },
+]
+specs        = []
+requirements = []
