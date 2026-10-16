@@ -16,7 +16,7 @@
 [tiers]
 # tier = "leaf" | "engine" | "command"
 
-# ── leaf (47) ────────────────────────────────────────────────────────────
+# ── leaf (48) ────────────────────────────────────────────────────────────
 # Import only std + other leaves. Pure utilities, impure seams, no domain knowledge.
 asset_source = "leaf"       # out=0: neutral embedded-asset byte-read seam — owns install/ embed (SL-223 PHASE-01, D3/REQ-376)
 boundary = "leaf"           # out=0: recorded source-delta row type — pure serde (SL-147 PHASE-02)
@@ -34,6 +34,7 @@ dtoml = "leaf"              # → config_file, estimate, value, conduct, dispatc
 estimate = "leaf"           # out=0: estimate facet types — pure
 install_config = "leaf"     # out=0: [install] config defaults — pure (SL-152 PHASE-06)
 install_ownership = "leaf"  # → fsutil: install convergence plan — pure, framework-owned paths (SL-281 PHASE-02)
+install_state = "leaf"      # out=0: SL-282 currency model — StampRead, Currency, classify, advisory; pure
 facet = "leaf"   # → estimate, value, risk: EntityFacets aggregation — pure data, imports only leaf facet types
 facet_write = "leaf"        # → fsutil (SL-113): shared facet read→mutate→write core — std+leaf only
 fsutil = "leaf"             # out=0: filesystem utility — impure seam, no domain

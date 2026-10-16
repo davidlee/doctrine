@@ -21,7 +21,7 @@ pub(crate) fn matches(base: &str, head: &str) -> bool {
 // shared gathering helpers
 // ---------------------------------------------------------------------------
 
-pub(super) fn resolve_common_dir(root: &Path, common: &str) -> anyhow::Result<PathBuf> {
+pub(crate) fn resolve_common_dir(root: &Path, common: &str) -> anyhow::Result<PathBuf> {
     let raw = Path::new(common);
     let joined = if raw.is_absolute() {
         raw.to_path_buf()

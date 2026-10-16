@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1453d-bb80-7221-ad31-91be387abafa"
+recorded_at = "2026-10-16T15:03:56.03233161Z"
+kind = "friction"
+summary = "phase-plan: slice research drift fires on the slice's own plan.md/plan.toml"
+detail = "SL-282 PHASE-01 planner: 'doctrine slice research 282' reports drift only because plan files were added after the research baseline; no research thread is stale. Advisory is noise for the slice's own plan artefacts."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

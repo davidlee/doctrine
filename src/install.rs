@@ -13,9 +13,11 @@ use anyhow::{Context, bail};
 use rust_embed::RustEmbed;
 use serde::Deserialize;
 
+use crate::git;
 use crate::install_ownership::{
     Action, Desired, LinkSeen, Member, MemberKind, Notice, Scope, Snapshot, SpliceRefusal,
 };
+use crate::install_state::{Currency, MarkerSource, StampRead, classify, parse_stamp};
 use crate::memory::MemoryType;
 
 /// Embedded skill plugins — everything under `plugins/`.
@@ -2552,6 +2554,175 @@ impl Baker<'_> {
         };
         bake_worker_def(def, label, corpus, sealed)
     }
+}
+
+// ── Install currency stores (SL-282 PHASE-01) ────────────────────────────
+
+/// The local install marker, relative to the doctrine root. Covered by the
+/// `.doctrine/state/` gitignore entry; written by install (precedent: `BOOT_REL`).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
+)]
+pub(crate) const INSTALL_MARKER_REL: &str = ".doctrine/state/install.toml";
+
+/// The marker's shape, as far as reading needs (`harnesses` is install's own
+/// record and is ignored here).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
+)]
+#[derive(Deserialize)]
+struct InstallMarker {
+    version: String,
+}
+
+/// Read one marker file: absent when it does not exist, `Unreadable` (path +
+/// reason) when it exists but cannot be read or parsed (STD-003).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
+)]
+fn read_marker_file(path: &Path) -> StampRead {
+    let unreadable = |reason: String| StampRead::Unreadable {
+        path: path.to_path_buf(),
+        reason,
+    };
+    match fs::read_to_string(path) {
+        Ok(text) => match toml::from_str::<InstallMarker>(&text) {
+            Ok(marker) => parse_stamp(path, &marker.version),
+            Err(e) => unreadable(e.to_string()),
+        },
+        Err(e) if e.kind() == io::ErrorKind::NotFound => StampRead::Absent,
+        Err(e) => unreadable(e.to_string()),
+    }
+}
+
+/// The git directory a `.git` file points at (PURE): its `gitdir: <p>` line,
+/// resolved against the directory holding the file.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
+)]
+fn gitfile_target(text: &str, base_dir: &Path) -> Option<PathBuf> {
+    let target = text.lines().find_map(|l| l.strip_prefix("gitdir:"))?;
+    Some(base_dir.join(target.trim()))
+}
+
+/// `candidate` is the main worktree of the repo whose shared git dir is `common`
+/// when its `.git` is that directory, or a gitfile pointing to it.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
+)]
+fn owns_common_dir(candidate: &Path, common: &Path) -> bool {
+    let dot_git = candidate.join(".git");
+    let git_dir = if dot_git.is_dir() {
+        Some(dot_git)
+    } else {
+        fs::read_to_string(&dot_git)
+            .ok()
+            .and_then(|text| gitfile_target(&text, candidate))
+    };
+    git_dir.and_then(|d| fs::canonicalize(d).ok()).as_deref() == Some(common)
+}
+
+/// Where the main worktree's doctrine root is, when `root` is a linked worktree
+/// (`git rev-parse --git-dir` differs from `--git-common-dir`): `None` for an
+/// ordinary checkout, outside git, or when git is unavailable (POL-002);
+/// otherwise [`MarkerSource::Main`] or, when the main root cannot be located
+/// (e.g. `git init --separate-git-dir`), [`MarkerSource::Unlocated`].
+///
+/// The main root is the common dir's parent, accepted only when its `.git`
+/// really is the common dir. `git::primary_worktree` is deliberately not used:
+/// under a separate git dir it can name a path that is not a checkout. The
+/// doctrine root's offset inside the repo (`--show-prefix`) is carried over.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
+)]
+fn linked_main_root(root: &Path) -> Option<MarkerSource> {
+    let dirs = git::git_opt(root, &["rev-parse", "--git-dir", "--git-common-dir"]).ok()??;
+    let mut lines = dirs.lines();
+    let git_dir = crate::worktree::resolve_common_dir(root, lines.next()?).ok()?;
+    let common = crate::worktree::resolve_common_dir(root, lines.next()?).ok()?;
+    if git_dir == common {
+        return None;
+    }
+    let main = common
+        .parent()
+        .filter(|candidate| owns_common_dir(candidate, &common));
+    Some(match main {
+        Some(main) => {
+            let prefix = git::toplevel_and_prefix(root)
+                .ok()
+                .flatten()
+                .map(|(_top, prefix)| prefix)
+                .unwrap_or_default();
+            MarkerSource::Main(main.join(prefix))
+        }
+        None => MarkerSource::Unlocated,
+    })
+}
+
+/// The local install marker for `root` and where it was found: this checkout's
+/// own `INSTALL_MARKER_REL`, else — for a linked worktree, which never receives
+/// `.doctrine/state/` — the main worktree's (read via `git-common-dir`), else
+/// absent. See [`linked_main_root`] for the layouts that cannot be located.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
+)]
+pub(crate) fn read_install_marker(root: &Path) -> (StampRead, MarkerSource) {
+    let own = read_marker_file(&root.join(INSTALL_MARKER_REL));
+    if own != StampRead::Absent {
+        return (own, MarkerSource::Checkout);
+    }
+    match linked_main_root(root) {
+        Some(MarkerSource::Main(main)) => (
+            read_marker_file(&main.join(INSTALL_MARKER_REL)),
+            MarkerSource::Main(main),
+        ),
+        Some(unlocated) => (StampRead::Absent, unlocated),
+        None => (StampRead::Absent, MarkerSource::Checkout),
+    }
+}
+
+/// The tracked stamp: `installed-version` from `doctrine.toml`. A file that
+/// cannot be read or parsed, or a value that is not semver, is `Unreadable`.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
+)]
+fn read_tracked_stamp(root: &Path) -> StampRead {
+    let path = root.join(crate::config_file::DOCTRINE_TOML);
+    let unreadable = |e: anyhow::Error| StampRead::Unreadable {
+        path: path.clone(),
+        reason: format!("{e:#}"),
+    };
+    match crate::config_file::read_doctrine_toml_text(root).and_then(|text| {
+        text.map(|t| crate::dtoml::parse(&t))
+            .transpose()
+            .map(|doc| doc.and_then(|d| d.install.installed_version))
+    }) {
+        Ok(Some(raw)) => parse_stamp(&path, &raw),
+        Ok(None) => StampRead::Absent,
+        Err(e) => unreadable(e),
+    }
+}
+
+/// Every currency finding for the project at `root` against `binary`, with
+/// where the local marker was read from (the advisory names it).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
+)]
+pub(crate) fn read_currency(
+    root: &Path,
+    binary: &semver::Version,
+) -> (Vec<Currency>, MarkerSource) {
+    let (local, source) = read_install_marker(root);
+    (classify(&read_tracked_stamp(root), &local, binary), source)
 }
 
 // ── Tests: convergence shell (SL-281 PHASE-04) ────────────────
@@ -5789,5 +5960,219 @@ mod tests {
                 harness: Registry::default(),
             }
         }
+    }
+}
+
+// ── Tests: install currency stores (SL-282 PHASE-01) ──────────
+
+#[cfg(test)]
+mod tests_marker {
+    use super::*;
+    use crate::worktree::test_helpers::{git, init_repo};
+
+    fn v(s: &str) -> semver::Version {
+        semver::Version::parse(s).unwrap()
+    }
+
+    fn write_marker(root: &Path, body: &str) {
+        let path = root.join(INSTALL_MARKER_REL);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, body).unwrap();
+    }
+
+    fn marker(version: &str) -> String {
+        format!("version = \"{version}\"\nharnesses = [\"claude\"]\n")
+    }
+
+    /// A primary repo plus a linked worktree of it, both canonical.
+    fn primary_and_linked() -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("main"));
+        let linked = tmp.path().join("linked");
+        git(
+            &primary,
+            &["worktree", "add", "-q", linked.to_str().unwrap()],
+        );
+        let linked = fs::canonicalize(linked).unwrap();
+        (tmp, primary, linked)
+    }
+
+    #[test]
+    fn own_marker_wins_without_git() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_marker(tmp.path(), &marker("0.47.0"));
+        assert_eq!(
+            read_install_marker(tmp.path()),
+            (StampRead::Version(v("0.47.0")), MarkerSource::Checkout)
+        );
+    }
+
+    #[test]
+    fn no_marker_outside_git_is_absent_here() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(
+            read_install_marker(tmp.path()),
+            (StampRead::Absent, MarkerSource::Checkout)
+        );
+    }
+
+    #[test]
+    fn no_marker_in_a_primary_repo_is_absent_here() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(tmp.path());
+        assert_eq!(
+            read_install_marker(&repo),
+            (StampRead::Absent, MarkerSource::Checkout)
+        );
+    }
+
+    #[test]
+    fn linked_worktree_reads_the_main_worktrees_marker() {
+        let (_tmp, primary, linked) = primary_and_linked();
+        write_marker(&primary, &marker("0.46.0"));
+        assert_eq!(
+            read_install_marker(&linked),
+            (StampRead::Version(v("0.46.0")), MarkerSource::Main(primary))
+        );
+    }
+
+    #[test]
+    fn linked_worktree_whose_main_has_no_marker_is_absent_at_main() {
+        let (_tmp, primary, linked) = primary_and_linked();
+        assert_eq!(
+            read_install_marker(&linked),
+            (StampRead::Absent, MarkerSource::Main(primary))
+        );
+    }
+
+    #[test]
+    fn linked_worktrees_own_marker_wins_over_mains() {
+        let (_tmp, primary, linked) = primary_and_linked();
+        write_marker(&primary, &marker("0.46.0"));
+        write_marker(&linked, &marker("0.47.0"));
+        assert_eq!(
+            read_install_marker(&linked),
+            (StampRead::Version(v("0.47.0")), MarkerSource::Checkout)
+        );
+    }
+
+    /// OQ-5: the main marker sits under the same offset the doctrine root has
+    /// inside its repo.
+    #[test]
+    fn linked_worktree_applies_the_doctrine_root_prefix() {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = init_repo(&tmp.path().join("main"));
+        fs::create_dir_all(primary.join("proj")).unwrap();
+        fs::write(primary.join("proj/f"), "x").unwrap();
+        git(&primary, &["add", "."]);
+        git(&primary, &["commit", "-q", "-m", "proj"]);
+        let linked = tmp.path().join("linked");
+        git(
+            &primary,
+            &["worktree", "add", "-q", linked.to_str().unwrap()],
+        );
+        write_marker(&primary.join("proj"), &marker("0.46.0"));
+        assert_eq!(
+            read_install_marker(&linked.join("proj")),
+            (
+                StampRead::Version(v("0.46.0")),
+                MarkerSource::Main(primary.join("proj"))
+            )
+        );
+    }
+
+    #[test]
+    fn separate_git_dir_main_is_unlocated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let wt = tmp.path().join("wt");
+        let gd = tmp.path().join("gd");
+        fs::create_dir_all(&wt).unwrap();
+        git(
+            &wt,
+            &[
+                "init",
+                "-q",
+                "-b",
+                "main",
+                "--separate-git-dir",
+                gd.to_str().unwrap(),
+            ],
+        );
+        git(&wt, &["config", "user.email", "t@example.com"]);
+        git(&wt, &["config", "user.name", "Test"]);
+        git(&wt, &["commit", "-q", "--allow-empty", "-m", "base"]);
+        let linked = tmp.path().join("linked");
+        git(&wt, &["worktree", "add", "-q", linked.to_str().unwrap()]);
+        write_marker(&wt, &marker("0.46.0"));
+        assert_eq!(
+            read_install_marker(&linked),
+            (StampRead::Absent, MarkerSource::Unlocated)
+        );
+    }
+
+    #[test]
+    fn malformed_marker_is_unreadable_with_its_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        for body in ["not = [valid", "harnesses = []\n", "version = \"nope\"\n"] {
+            write_marker(tmp.path(), body);
+            let (stamp, source) = read_install_marker(tmp.path());
+            assert!(
+                matches!(&stamp, StampRead::Unreadable { path, .. }
+                    if *path == tmp.path().join(INSTALL_MARKER_REL)),
+                "{body}: {stamp:?}"
+            );
+            assert_eq!(source, MarkerSource::Checkout);
+        }
+    }
+
+    #[test]
+    fn gitfile_target_resolves_relative_and_absolute_pointers() {
+        let base = Path::new("/a/b");
+        assert_eq!(
+            gitfile_target("gitdir: ../gd\n", base),
+            Some(PathBuf::from("/a/b/../gd"))
+        );
+        assert_eq!(
+            gitfile_target("gitdir: /abs/gd\n", base),
+            Some(PathBuf::from("/abs/gd"))
+        );
+        assert_eq!(gitfile_target("garbage\n", base), None);
+    }
+
+    #[test]
+    fn read_currency_composes_both_stores() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join(".doctrine")).unwrap();
+        fs::write(
+            tmp.path().join(crate::config_file::DOCTRINE_TOML),
+            "[install]\ninstalled-version = \"0.46.0\"\n",
+        )
+        .unwrap();
+        write_marker(tmp.path(), &marker("0.48.0"));
+        let (findings, source) = read_currency(tmp.path(), &v("0.47.0"));
+        assert_eq!(
+            findings,
+            vec![
+                Currency::CheckoutNewer {
+                    checkout: v("0.48.0")
+                },
+                Currency::RepoOlder { repo: v("0.46.0") },
+            ]
+        );
+        assert_eq!(source, MarkerSource::Checkout);
+    }
+
+    #[test]
+    fn read_currency_reports_an_unparsable_tracked_stamp() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join(".doctrine")).unwrap();
+        let toml_path = tmp.path().join(crate::config_file::DOCTRINE_TOML);
+        fs::write(&toml_path, "[install]\ninstalled-version = \"x\"\n").unwrap();
+        write_marker(tmp.path(), &marker("0.47.0"));
+        let (findings, _source) = read_currency(tmp.path(), &v("0.47.0"));
+        assert!(
+            matches!(findings.as_slice(), [Currency::Unreadable { path, .. }] if *path == toml_path),
+            "{findings:?}"
+        );
     }
 }

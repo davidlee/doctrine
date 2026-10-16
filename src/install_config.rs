@@ -78,6 +78,11 @@ pub(crate) struct InstallConfig {
     /// write. Defaults to `Project` (SL-250 `OQ-1`).
     #[serde(default)]
     pub(crate) claude_settings_scope: ClaudeSettingsScope,
+    /// The doctrine version that last installed this repo (SL-282 `DEC-378`).
+    /// Raw text: the currency classifier parses it so a bad value is reported
+    /// rather than failing the whole config read.
+    #[serde(default)]
+    pub(crate) installed_version: Option<String>,
 }
 
 impl Default for InstallConfig {
@@ -85,8 +90,56 @@ impl Default for InstallConfig {
         Self {
             repo: default_repo(),
             claude_settings_scope: ClaudeSettingsScope::default(),
+            installed_version: None,
         }
     }
+}
+
+/// The `[install]` table name and the stamp key within it (STD-001).
+const INSTALL_TABLE: &str = "install";
+pub(crate) const INSTALLED_VERSION_KEY: &str = "installed-version";
+
+/// `text` with `[install] installed-version` set to `version` (PURE, text to
+/// text). A single-key `toml_edit` edit: every other byte is preserved, an
+/// existing value keeps its trailing comment, the table is created (appended)
+/// only when absent, and the input is returned unchanged when already current.
+/// The key is inserted through the `[install]` table, never at the document
+/// root — a root tail-insert lands inside the last subtable.
+///
+/// # Errors
+///
+/// Fails if `text` is not valid TOML, or `install` is not a table.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-282 PHASE-03 wires the install stamp write")
+)]
+pub(crate) fn write_installed_version(text: &str, version: &str) -> anyhow::Result<String> {
+    use toml_edit::{DocumentMut, Item, Table, Value};
+
+    let mut doc: DocumentMut = text.parse()?;
+    let mut stamp = Value::from(version);
+    match doc.get_mut(INSTALL_TABLE) {
+        None => {
+            let mut table = Table::new();
+            table.insert(INSTALLED_VERSION_KEY, Item::Value(stamp));
+            if !text.is_empty() {
+                table.decor_mut().set_prefix("\n");
+            }
+            doc.insert(INSTALL_TABLE, Item::Table(table));
+        }
+        Some(item) => {
+            let table = item.as_table_like_mut().ok_or_else(|| {
+                anyhow::anyhow!("`{INSTALL_TABLE}` in doctrine.toml is not a table")
+            })?;
+            match table.get(INSTALLED_VERSION_KEY) {
+                Some(old) if old.as_str() == Some(version) => return Ok(text.to_string()),
+                Some(Item::Value(old)) => *stamp.decor_mut() = old.decor().clone(),
+                Some(_) | None => {}
+            }
+            table.insert(INSTALLED_VERSION_KEY, Item::Value(stamp));
+        }
+    }
+    Ok(doc.to_string())
 }
 
 #[cfg(test)]
@@ -154,5 +207,99 @@ mod tests {
             "an unknown key must not bind — if this fails, the documented \
              spelling is being served by an alias rather than rename_all"
         );
+    }
+
+    #[test]
+    fn installed_version_key_binds_from_its_documented_spelling() {
+        let doc = crate::dtoml::parse("[install]\ninstalled-version = \"0.47.0\"\n").unwrap();
+        assert_eq!(doc.install.installed_version.as_deref(), Some("0.47.0"));
+    }
+
+    #[test]
+    fn absent_installed_version_is_none() {
+        let doc = crate::dtoml::parse("[install]\nrepo = \"acme/doctrine\"\n").unwrap();
+        assert_eq!(doc.install.installed_version, None);
+        let doc = crate::dtoml::parse("").unwrap();
+        assert_eq!(doc.install.installed_version, None);
+    }
+
+    #[test]
+    fn installed_version_underscore_spelling_does_not_bind() {
+        let doc = crate::dtoml::parse("[install]\ninstalled_version = \"0.47.0\"\n").unwrap();
+        assert_eq!(doc.install.installed_version, None);
+    }
+
+    const STAMP_LINE: &str = "installed-version = \"0.47.0\"\n";
+
+    fn stamped(text: &str) -> String {
+        write_installed_version(text, "0.47.0").unwrap()
+    }
+
+    fn reads_back(text: &str) -> Option<String> {
+        crate::dtoml::parse(text).unwrap().install.installed_version
+    }
+
+    /// This repo's own file: heavily commented, no `[install]` today. Structural
+    /// assertions only, so editing the file does not break the test.
+    #[test]
+    fn stamping_the_live_file_only_appends() {
+        let original = include_str!("../.doctrine/doctrine.toml");
+        let out = stamped(original);
+        if original.contains("\n[install]") {
+            assert_eq!(out.replace(STAMP_LINE, ""), original);
+        } else {
+            assert!(out.starts_with(original), "existing bytes must be a prefix");
+            assert_eq!(
+                out[original.len()..].trim_start_matches('\n'),
+                format!("[install]\n{STAMP_LINE}")
+            );
+        }
+        assert_eq!(reads_back(&out).as_deref(), Some("0.47.0"));
+    }
+
+    #[test]
+    fn stamping_an_existing_install_table_changes_only_the_inserted_line() {
+        let input = "# head\n[install]\n# which repo\nrepo = \"acme/doctrine\" # trailing\n\n# next table\n[other]\nx = 1\n";
+        let out = stamped(input);
+        assert_eq!(out.replace(STAMP_LINE, ""), input);
+        assert!(out.contains(STAMP_LINE));
+        assert_eq!(reads_back(&out).as_deref(), Some("0.47.0"));
+    }
+
+    #[test]
+    fn restamping_changes_only_the_value_bytes() {
+        let input = "[install]\ninstalled-version = \"0.46.0\" # pinned\nrepo = \"a/b\"\n";
+        let out = stamped(input);
+        assert_eq!(
+            out,
+            "[install]\ninstalled-version = \"0.47.0\" # pinned\nrepo = \"a/b\"\n"
+        );
+    }
+
+    #[test]
+    fn stamping_an_already_current_file_is_a_byte_identical_no_op() {
+        let input = "[install]\n  installed-version =   \"0.47.0\"\n";
+        assert_eq!(stamped(input), input);
+    }
+
+    #[test]
+    fn stamping_empty_input_makes_a_valid_install_table() {
+        let out = stamped("");
+        assert_eq!(out, format!("[install]\n{STAMP_LINE}"));
+        assert_eq!(reads_back(&out).as_deref(), Some("0.47.0"));
+    }
+
+    #[test]
+    fn stamping_inline_and_dotted_install_tables_stays_valid() {
+        for input in ["install = { repo = \"a/b\" }\n", "install.repo = \"a/b\"\n"] {
+            let out = stamped(input);
+            assert_eq!(reads_back(&out).as_deref(), Some("0.47.0"), "{input}");
+            assert!(out.contains("a/b"), "{input}");
+        }
+    }
+
+    #[test]
+    fn stamping_a_non_table_install_refuses_rather_than_corrupts() {
+        assert!(write_installed_version("install = 3\n", "0.47.0").is_err());
     }
 }

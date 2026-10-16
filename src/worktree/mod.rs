@@ -19,7 +19,7 @@ use std::path::PathBuf;
 use clap::Subcommand;
 
 mod shared;
-pub(crate) use shared::{classify_worktree_role, is_linked_worktree};
+pub(crate) use shared::{classify_worktree_role, is_linked_worktree, resolve_common_dir};
 
 mod allowlist;
 
@@ -106,7 +106,7 @@ pub(crate) use import::{Apply, classify_import};
 pub(crate) use import::Refusal;
 
 #[cfg(test)]
-mod test_helpers;
+pub(crate) mod test_helpers;
 
 #[cfg(test)]
 pub(crate) use crate::globmatch::glob_matches;

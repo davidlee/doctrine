@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1453d-bb85-7e91-89c5-e8a9f59cb296"
+recorded_at = "2026-10-16T15:03:56.037551243Z"
+kind = "friction"
+summary = "phase-plan: skill step 8 flips in_progress, conflicting with delegated capsule-phase-planner contract"
+detail = "SL-282 PHASE-01: /phase-plan says the planner flips the phase to in_progress; capsule-orchestrator owns that flip. Skill text should carve out the delegated-planner case."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

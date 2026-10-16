@@ -62,6 +62,7 @@ mod input;
 mod install;
 mod install_config;
 mod install_ownership;
+mod install_state;
 mod integrity;
 mod kinds;
 mod kitty;
