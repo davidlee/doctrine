@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1432b-2590-7f31-99e6-f9cc58079e83"
+recorded_at = "2026-10-16T05:24:23.568904497Z"
+kind = "friction"
+summary = "[execute; SL-281 PHASE-01] doctrine check gate red from jail git-guard, not the change"
+detail = "The jail's git is a guarded wrapper (/nix/store/...-git-guarded). It refuses 'git checkout -f main' and 'git reset --hard' inside test temp repos (slice close-integration, ledger trunk_integration, dispatch ingest, e2e_dispatch_candidate): 26 failures, 'would overwrite local modifications'. Gate unusable as a green signal; cargo test stops at first failing binary, so I had to rerun with --no-fail-fast to see the rest. Fixtures should set GIT_GUARD=off in their own Command env (they own the temp repo), or the guard should exempt repos outside the workspace."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
