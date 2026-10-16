@@ -76,3 +76,6 @@ execution-timeout-seconds = 900
 file-size-cap-mib = 512
 # Directly measured between SIGTERM and SIGKILL (`capsule/sandbox.sh:68`).
 execution-kill-grace-seconds = 5
+
+[install]
+installed-version = "0.46.6"
