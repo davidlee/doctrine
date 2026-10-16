@@ -37,6 +37,10 @@ PHASE-01 model + stores ──► PHASE-02 sites + guard
   reviewable and the existing install suites meaningful as a
   behaviour-preservation check. PHASE-05 then swaps the screen on a stable
   executor.
+- **PHASE-03 overran; PHASE-07 carries its downgrade gate.** PHASE-03's
+  EX-5 (downgrade gate, RV-421 F-17) is discharged by PHASE-07, which runs
+  after PHASE-03 and before PHASE-05 (the overview renders its warning).
+  Array order is execution order; ids are not renumbered.
 - **PHASE-04 before PHASE-05.** The overview renders legacy removal as a
   bullet and the hint lists removed starters, so the leg must exist first.
 - **PHASE-06 last.** Dogfooding needs the finished binary; it is also where
@@ -46,7 +50,7 @@ PHASE-01 model + stores ──► PHASE-02 sites + guard
 
 - RV-421 `control` findings are transcribed into exit criteria on the
   earliest satisfying phase: F-3 → PHASE-01, F-1 → PHASE-02, F-14 and F-17 →
-  PHASE-03, F-16 and F-18 → PHASE-04, F-10 → PHASE-05.
+  PHASE-03 (F-17 moved to PHASE-07), F-16 and F-18 → PHASE-04, F-10 → PHASE-05.
 - The REV across SPEC-009 / SPEC-011 / SPEC-023 (DEC-385) is drafted at
   reconcile, not in a phase.
 - Shared files: `src/install.rs` is touched by PHASE-01 (marker reader),

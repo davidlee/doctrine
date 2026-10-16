@@ -99,6 +99,25 @@ specs        = []
 requirements = []
 
 [[phase]]
+id        = "PHASE-07"
+name      = "Downgrade gate"
+objective = "Install classifies before executing: on RepoNewer or CheckoutNewer the overview warns, `-y` refuses naming --allow-downgrade, and --allow-downgrade proceeds with the tracked-stamp keep-when-newer rule. Carries PHASE-03/EX-5, split out when PHASE-03 overran."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete (install writes both stamps last)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The downgrade gate fires on RepoNewer or CheckoutNewer, before anything executes. Interactive install prints `! this project was installed by doctrine R; you are running B. Proceeding will downgrade generated files.` above `Proceed?`. `-y` refuses with that line plus `pass --allow-downgrade to proceed`, writes nothing, and exits non-zero. `--dry-run` prints the warning, does not refuse, writes nothing." },
+  { id = "EX-2", text = "RV-421 F-17 (control): --allow-downgrade with only the local marker newer writes an absent or older tracked stamp as B and keeps a newer one; the local marker records B. The candidate leaving an absent tracked stamp absent fails the e2e." },
+  { id = "EX-3", text = "`doctrine check gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "downgrade e2e: stamp newer + -y refuses; marker newer with tracked absent / older / newer under --allow-downgrade (RV-421 F-17); interactive warning shown", test_file = "tests/e2e_install_executor.rs", keywords = ["--allow-downgrade", "pass --allow-downgrade to proceed", "installed-version"], waived = false },
+  { id = "VT-2", expects = "downgrade_from / tracked_stamp_action unit rows", test_file = "src/install_state.rs", keywords = ["fn downgrade_from", "fn tracked_stamp_action"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
 id        = "PHASE-04"
 name      = "Hymn starters on demand"
 objective = "Delete the install starter leg, `[hymns].expose` and embedded_expose_set; add `doctrine prompt customise <slot>` (alias customize) that refuses unknown/sealed slots and pre-stamp repos and writes starter + self-replaces sidecar via project_starters; add identical_starters legacy removal, gated on an absent tracked stamp, running where the starter leg ran."
@@ -128,6 +147,7 @@ name      = "Overview, one prompt, commit hint"
 objective = "Replace the step-list first screen and per-step prompts with render_overview over InstallPlan and a single `Proceed? [y/N/d]` read by prompt_choice (prompt_confirm becomes its adapter); delete prompt_step and the per-step prompts; ask for harnesses once only when none detected interactively; print the path-limited commit hint from Touched, with the npx review line."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 and PHASE-04 complete (InstallPlan holds every leg, incl. legacy removal)." },
+  { id = "EN-2", text = "PHASE-07 complete (the overview renders the downgrade warning)." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "Interactive fresh install: overview, exactly one prompt, commit hint; `d` then `y` proceeds, `d` then `N` and `N` write nothing; -y prints the overview and asks nothing; --dry-run prints overview and details and writes nothing (digest check)." },
