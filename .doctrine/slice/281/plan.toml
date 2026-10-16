@@ -1,0 +1,161 @@
+# Implementation plan for SL-281 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-281"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber, so the id
+# sequence goes non-monotonic after a split and that is expected. Criterion ids
+# are local to their phase, bare, and equally immutable
+# (`lib:reference/glossary.md` § reference forms). The prefix is
+# the only mode marker; there is no mode field. Reference a criterion from
+# another phase phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
+[[phase]]
+id        = "PHASE-01"
+name      = "Ownership declaration and harness registry"
+objective = "Declare ownership once in install/manifest.toml — [framework] roots and the [harness.*] registry (detect, boot, agents, skills route) — parse it onto Manifest, and make harness detection, boot-adapter derivation and npx delegation read the registry (design sec-ownership; DEC-373, DEC-377). Agent-def and skills legs are not yet rewired."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (RV-418 concluded, 13/13 verified); slice status plan or later; plan approved." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/manifest.toml carries [framework] roots = [.doctrine/agents, .doctrine/skills, .doctrine/workflows] and [harness.claude|pi|codex|universal] per the design sec-ownership registry table. Manifest gains framework: FrameworkSection and harness: BTreeMap<String, HarnessSection>, both serde-defaulted." },
+  { id = "EX-2", text = "Loading a manifest whose harness table sets both skills and skills_via is refused with an error naming the harness." },
+  { id = "EX-3", text = "detect_agents reads each registered harness's detect dir instead of the hardcoded list; boot_harness_names is replaced by a registry lookup (boot field), so the codex | pi => codex and _ => continue arms are gone." },
+  { id = "EX-4", text = "install_harnesses derives the boot set from the resolved harness set through the registry in both the flagged and unflagged paths; the unflagged path no longer calls boot::resolve_harnesses(&[]) alone but unions its AGENTS.md-implies-codex result. A project with only .pi/ wires the codex boot adapter. The standalone doctrine boot verb's detection is unchanged." },
+  { id = "EX-5", text = "Non-claude skills delegation passes de-duplicated skills_via targets: --agent pi, --agent codex and --agent universal (alone or together) delegate --agent universal exactly once; pi is never passed as an npx target." },
+  { id = "EX-6", text = "An unregistered --agent name gets no agent defs and no links, keeps npx delegation under its own name, and install prints a line naming it unregistered (DEC-377)." },
+  { id = "EX-7", text = "DERIVED_RUNTIME (src/worktree/allowlist.rs) gains .doctrine/workflows/*; a unit test asserts every [framework] roots entry has a <root>/* glob in DERIVED_RUNTIME (STD-001)." },
+  { id = "EX-8", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "manifest + wiring unit tests: both-routes table refused; pi/codex delegate universal once; unregistered harness delegates and reports; detection and boot follow the registry with and without --agent, and a real non-alias AGENTS.md still adds codex", test_file = "src/install.rs", keywords = ["harness_table_with_both_skills_and_skills_via_is_refused", "pi_and_codex_delegate_universal_once", "unregistered_harness_delegates_skills_and_reports_unregistered", "detection_and_boot_follow_registry", "struct HarnessSection", "struct FrameworkSection"], waived = false },
+  { id = "VT-2", expects = "every framework root is classified derived-runtime", test_file = "src/worktree/allowlist.rs", keywords = ["framework_roots_are_classified_derived_runtime", ".doctrine/workflows/*"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Pure ownership plan"
+objective = "Add src/install_ownership.rs: the pure core that, from the declared roots, a Desired set and an on-disk Snapshot, decides every write, link, relink, unlink, prune and report action for framework-owned paths (design sec-convergence § Desired set, § Links, § Shape). No wiring; no user-visible change."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete and committed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/install_ownership.rs (declared in main.rs) defines Member, Desired { members, selected, new_links }, Snapshot { canon, links, prune_blocked }, LinkSeen { Symlink, Real }, Scope { Project, Global }, Action { WriteCanon, Link, Relink, Unlink, PruneCanon, Report }, Notice { Orphan, ForeignSymlink, Shadows, PruneBlocked, StaleStaging } and plan(roots, scope, want, seen) -> Vec<Action>. No clock, git, disk or env access (pure layer)." },
+  { id = "EX-2", text = "Doctrine-link recognition: a relative link value is joined to its link dir and normalised lexically (no filesystem follow); an absolute value counts only if it lies component-wise under <base>/<root>; anything else is foreign." },
+  { id = "EX-3", text = "Write set = selected members plus every member an existing doctrine link maps to; a mapped doctrine link is relinked to the current layout even when its harness is unselected; an unmapped one is unlinked (Project) or reported orphan (Global); new links are created for selected harnesses only." },
+  { id = "EX-4", text = "Canon entries not in the member set are pruned (Project) or reported orphan (Global); unselected members are left; entries carrying the staging prefix (a named constant) are never pruned and are reported as stale staging; directories in prune_blocked get no removals and a PruneBlocked report." },
+  { id = "EX-5", text = "Non-symlink entries in link dirs are never touched; one whose name matches a member yields a Shadows report. Actions are ordered canon writes, link writes, unlinks, canon prunes." },
+  { id = "EX-6", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "pure plan unit tests per design sec-verification", test_file = "src/install_ownership.rs", keywords = ["plan_writes_every_member_of_selected_set", "plan_prunes_canon_entry_not_in_catalog", "plan_keeps_unselected_member", "plan_relinks_stale_layout_symlink_into_framework_root", "plan_unlinks_doctrine_symlink_whose_member_is_gone", "plan_keeps_regular_file_and_flags_shadowing", "plan_keeps_foreign_symlink", "plan_repairs_unselected_harness_link_before_pruning_its_old_target", "plan_treats_absolute_link_under_root_as_doctrine_and_elsewhere_as_foreign", "plan_normalises_dotdot_link_values_lexically", "plan_never_prunes_staging_entries_and_reports_them", "plan_blocks_removals_under_symlinked_dir", "plan_global_scope_reports_orphans_and_prunes_nothing", "plan_prunes_workflow_not_shipped", "plan_orders_canon_writes_before_prunes"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Exclusive staging"
+objective = "Make every staged write — link and canon tree alike — create a unique staging name with an exclusive create, retry on EEXIST, write only inside what it created and remove only that on failure (design sec-convergence § Safety boundaries). Existing install behaviour otherwise unchanged."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete and committed (the staging-prefix constant lives there)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "staging_path yields .tmp-<name>.<pid>.<n> under the shared staging-prefix constant; write_link no longer removes a pre-existing .tmp-<name> and stages via symlink() (exclusive), retrying on EEXIST." },
+  { id = "EX-2", text = "materialise_canonical stages its tree with create_dir (not create_dir_all) at a unique name, retrying on EEXIST, and on failure removes only the directory it created." },
+  { id = "EX-3", text = "A pre-existing user file or directory at any legacy or candidate staging name survives a relink and a canon refresh, including when .doctrine is a symlink into another directory." },
+  { id = "EX-4", text = "Existing skills-symlink and agent-def suites stay green unchanged (behaviour-preservation gate). doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "staging never reuses or deletes a pre-existing entry, for links and canon trees, including under a symlinked .doctrine", test_file = "src/install.rs", keywords = ["staging_never_reuses_preexisting_entry", "create_dir("], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Convergence cutover"
+objective = "Replace the per-harness agent-def, workflows and skills legs with one desired-set builder, disk scan and executor driven by install_ownership::plan: every registered harness's full def set installed, canon layout .doctrine/agents/<harness>/<def>.md, project installs converge canon roots exactly, global installs report orphans, every action re-proven before mutation and reported (design sec-convergence, sec-code-impact; DEC-372, DEC-374, DEC-377)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete and committed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Desired is built from the registry, embedded_agent_defs filtered to install/agents/<harness>/ (the top-level agents/AGENTS.md publication asset is never a member), the install catalog from discover() (MARKETPLACE_ONLY_DOMAINS excluded), and embedded workflows; membership spans every registered harness, never only this run's --agent/--skill selection." },
+  { id = "EX-2", text = "The Snapshot scan covers every framework root and every registered harness's existing link dirs (project root or $HOME base). Before removals in a directory the shell lstats each ancestor component from the base; any symlink puts the directory in prune_blocked." },
+  { id = "EX-3", text = "The executor runs actions in plan order; WriteCanon bakes agent defs (bake_worker_def unchanged) or copies skills via materialise_canonical; before each mutation it re-reads the entry (and for removals re-lstats the ancestor chain) and skips plus reports any action whose observation changed (SPEC-010 REQ-178)." },
+  { id = "EX-4", text = "install_agents_for, install_agent_def, install_skills_direct and install_workflows_for collapse onto the executor; DISPATCH_WORKER_AGENT_ASSET{,_PI}, claude_agents_dir, pi_agents_dir and both _ => pi arms are deleted. Report lines extend linked / relinked / kept with pruned, orphan, prune blocked, stale staging and kept … (real file shadows doctrine def — remove it to receive updates)." },
+  { id = "EX-5", text = "--dry-run computes and prints the ownership plan, including would-prune actions, and mutates nothing." },
+  { id = "EX-6", text = "tests/e2e_claude_install.rs walks install/agents/claude/*.md and asserts each is a symlink into .doctrine/agents/claude/; tests/e2e_prompt_def_expansion.rs reads .doctrine/agents/claude/dispatch-worker.md. Existing e2e_skills_symlink cases stay green." },
+  { id = "EX-7", text = "New real-binary e2e cases, each absence assertion paired with a positive control that the path existed before the run: re-install restores an edited canon copy while a doctrine.toml edit survives; a planted stale-layout link is relinked, a planted regular file kept and reported, a planted orphan canon file pruned; a planted orphan skill canon dir and its .claude/skills link are pruned together; --dry-run over an orphan lists would-prune and changes nothing; a write under a symlinked .doctrine refreshes member paths only, a planted non-member survives and prune blocked is reported; --global under a temp $HOME reports a planted orphan and keeps it; --agent pi with no npx/bunx on PATH still writes pi's defs." },
+  { id = "EX-8", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "fresh claude install links every embedded claude def, capsule defs included, into .doctrine/agents/claude/", test_file = "tests/e2e_claude_install.rs", keywords = ["install/agents/claude", ".doctrine/agents/claude", "capsule-worker"], waived = false },
+  { id = "VT-2", expects = "convergence e2e: refresh, relink stale layout, keep and report real file, prune orphan canon and orphan skill with its link, dry-run inert, symlinked .doctrine prune blocked, global reports orphans, pi without npx", test_file = "tests/e2e_claude_install.rs", keywords = ["pruned", "orphan", "prune blocked", "shadows doctrine def", "--dry-run", "--global", "retired-skill"], waived = false },
+  { id = "VT-3", expects = "marketplace-only skills are never desired members", test_file = "src/install.rs", keywords = ["plan_excludes_marketplace_only_skills_from_members"], waived = false },
+  { id = "VT-4", expects = "prompt-def expansion reads the new claude canon path", test_file = "tests/e2e_prompt_def_expansion.rs", keywords = [".doctrine/agents/claude/dispatch-worker.md"], waived = false },
+  { id = "VA-1", text = "grep src/ for DISPATCH_WORKER_AGENT_ASSET, claude_agents_dir, pi_agents_dir, install_agents_for, install_skills_direct, install_workflows_for returns nothing, with a positive control grep for install_ownership::plan returning its call site." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Managed gitignore block"
+objective = "Replace the appended [gitignore] entries with one managed block in the project .gitignore, derived from the ownership declaration and a post-run re-scan, rewritten in full on each project install (design sec-gitignore; DEC-375)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete and committed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install_ownership gains pure render_block (runtime entries, then <root>/* per framework root, then one anchored line per doctrine link present after the run; no npx-written .agents/skills copies, no user-owned path) and splice_block (one start then one end marker → replace inclusive; no markers → append, adding a final newline if missing; anything else → SpliceRefusal::Malformed { starts, ends }; block uses the file's line ending)." },
+  { id = "EX-2", text = "The block is written last, after every install step, from a re-scan of registered link dirs; Step::Gitignore and its base-plan items are removed. A malformed file is left untouched and the marker counts reported. --dry-run prints the block and writes nothing; --global writes no block. Install discloses that npx-written skill copies are not listed." },
+  { id = "EX-3", text = "[gitignore].entries keeps runtime entries only (.doctrine/skills/* dropped — now derived from roots)." },
+  { id = "EX-4", text = "ensure_gitignored no-ops when its line already sits inside the block and adds a final newline before appending to an unterminated file." },
+  { id = "EX-5", text = "e2e: after two installs .gitignore carries exactly one managed block, byte-identical across runs, with a user ! line placed after it intact; --agent pi with no npx/bunx writes a block reflecting what landed." },
+  { id = "EX-6", text = "doctrine check gate green." },
+]
+verification = [
+  { id = "VT-1", expects = "render/splice unit tests per design sec-verification", test_file = "src/install_ownership.rs", keywords = ["splice_block_replaces_between_markers", "splice_block_appends_when_absent", "splice_block_preserves_user_negations_after_block", "splice_block_refuses_lone_or_duplicate_markers", "splice_block_adds_newline_to_unterminated_file", "splice_block_keeps_crlf", "render_block_lists_runtime_entries_roots_and_links", "render_block_omits_npx_written_skill_copies", "render_block_omits_user_owned_paths"], waived = false },
+  { id = "VT-2", expects = "ensure_gitignored honours the block and the final-newline guard", test_file = "src/install.rs", keywords = ["ensure_gitignored_noops_when_line_in_block", "ensure_gitignored_adds_newline_before_append"], waived = false },
+  { id = "VT-3", expects = "block stable across installs; user negation after it survives", test_file = "tests/e2e_claude_install.rs", keywords = ["doctrine managed", "!"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Dogfood"
+objective = "Bring this repo onto the new contract: drop the pre-minimal-projection relic, carry the generated block in .gitignore, and let install link the capsule defs (scope objective 6)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete and committed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "git rm .doctrine/agents/AGENTS.md; the !.doctrine/agents/AGENTS.md negation and loose lines the block now owns are dropped from the repo .gitignore; the repo's deliberate /.claude/*, /.agents and /.pi/* rules stay outside the block." },
+  { id = "EX-2", text = "The repo .gitignore carries the block as written by the fresh dev binary's install (inspected via --dry-run first); a unit test asserts the block's static part (runtime entries and root globs) is present in it." },
+  { id = "EX-3", text = "The hand-copied .claude/agents/capsule-*.md files are deleted (after confirming they are untracked) and a project install replaces them with symlinks into .doctrine/agents/claude/." },
+  { id = "EX-4", text = "doctrine check gate green (fresh binary at close per the project close ritual)." },
+]
+verification = [
+  { id = "VT-1", expects = "repo .gitignore contains every static block entry", test_file = "src/install.rs", keywords = ["repo_gitignore_contains_static_block_entries"], waived = false },
+  { id = "VA-1", text = "ls -l .claude/agents shows each claude def as a symlink into .doctrine/agents/claude/, capsule defs included; git ls-files .doctrine/agents is empty." },
+]
+specs        = []
+requirements = []
