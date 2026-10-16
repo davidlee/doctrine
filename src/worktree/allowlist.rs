@@ -96,7 +96,11 @@ pub(crate) const WITHHELD: &[Withhold] = &[
         reason = "classification authority; only the .gitignore parity test reads it so far (SL-029)"
     )
 )]
-pub(crate) const DERIVED_RUNTIME: &[&str] = &[".doctrine/skills/*", ".doctrine/agents/*"];
+pub(crate) const DERIVED_RUNTIME: &[&str] = &[
+    ".doctrine/skills/*",
+    ".doctrine/agents/*",
+    ".doctrine/workflows/*",
+];
 
 // ---------------------------------------------------------------------------
 // Allowlist (the documented `glob` subset, design §3 M6)
@@ -251,6 +255,24 @@ pub(crate) fn allowlist_violations(allow: &Allowlist) -> Vec<Violation> {
 
 #[cfg(test)]
 mod tests {
+    /// Every framework-owned canon root `install` converges is classified
+    /// derived, so the two lists cannot drift (SL-281, STD-001).
+    #[test]
+    fn framework_roots_are_classified_derived_runtime() {
+        let roots = crate::install::framework_roots().unwrap();
+        assert!(
+            !roots.is_empty(),
+            "positive control: the manifest declares roots"
+        );
+        for root in roots {
+            let glob = format!("{root}/*");
+            assert!(
+                super::DERIVED_RUNTIME.contains(&glob.as_str()),
+                "{glob} missing from DERIVED_RUNTIME"
+            );
+        }
+    }
+
     use super::*;
 
     // --- T1: parse_allowlist (SL-029 PHASE-03, VT-1) ---

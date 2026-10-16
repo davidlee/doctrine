@@ -4,7 +4,7 @@
     reason = "rust-embed derive generates conflicting method names"
 )]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -69,7 +69,56 @@ struct Manifest {
 
     #[serde(default)]
     hymns: HymnsSection,
+
+    #[serde(default)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "read by the convergence executor, SL-281 PHASE-04"
+        )
+    )]
+    framework: FrameworkSection,
+
+    /// The harness registry (SL-281, DEC-373): install's harness vocabulary.
+    #[serde(default)]
+    harness: Registry,
 }
+
+/// Framework-owned canon roots (SL-281, ADR-019 "owned"). Everything outside
+/// them that is not a doctrine link is user-owned.
+#[derive(Debug, Default, Deserialize)]
+struct FrameworkSection {
+    #[serde(default)]
+    roots: Vec<String>,
+}
+
+/// One `[harness.<name>]` table. Carries at most one skills route: `skills`
+/// (doctrine links into that dir) or `skills_via` (an `npx skills` target).
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HarnessSection {
+    /// The dir whose presence implies this harness when no `--agent` is given.
+    detect: Option<String>,
+    /// The boot adapter name; absent means no boot leg.
+    boot: Option<String>,
+    /// The link dir for the def set under `install/agents/<harness>/`.
+    #[expect(
+        dead_code,
+        reason = "read by the convergence executor, SL-281 PHASE-04"
+    )]
+    agents: Option<String>,
+    skills: Option<String>,
+    skills_via: Option<String>,
+    #[expect(
+        dead_code,
+        reason = "read by the convergence executor, SL-281 PHASE-04"
+    )]
+    workflows: Option<String>,
+}
+
+/// Harness name → its registry table, in name order.
+type Registry = BTreeMap<String, HarnessSection>;
 
 fn default_target() -> String {
     ".doctrine".to_string()
@@ -187,7 +236,7 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
 
     // ── Stage 1: base install ──
     if args.dry_run {
-        print_forward_summary(&project_root, args)?;
+        print_forward_summary(&project_root, args, &manifest.harness)?;
         return Ok(());
     }
 
@@ -202,7 +251,7 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
 
     // ── Stage 2: forward steps ──
     let exec = crate::boot::resolve_exec()?;
-    run_forward_steps(&project_root, &exec, args)?;
+    run_forward_steps(&project_root, &exec, args, &manifest.harness)?;
     Ok(())
 }
 
@@ -255,23 +304,20 @@ fn seed_authoring_memories(root: &Path, manifest: &Manifest) -> anyhow::Result<(
     Ok(())
 }
 
-/// The boot harnesses an explicit `--agent` set implies.
-///
-/// `install`'s agent vocabulary is the SKILLS one — `claude`, `codex`, `pi`,
-/// `universal` — while boot wires two harnesses. `pi` rides the codex arm (the
-/// `AGENTS.md` @-import and the `.pi/` extensions are installed there), and
-/// `universal` has no boot surface at all. Duplicates collapse; first-seen order
-/// is preserved.
-fn boot_harness_names(agents: &[String]) -> Vec<String> {
+/// The boot adapters a harness set implies, read from the registry's `boot`
+/// field. `pi` rides the codex adapter; `universal` and unregistered names have
+/// none. Duplicates collapse; first-seen order is preserved.
+fn boot_names(agents: &[String], registry: &Registry) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
     for agent in agents {
-        let harness = match agent.to_lowercase().as_str() {
-            "claude" => "claude",
-            "codex" | "pi" => "codex",
-            _ => continue,
+        let Some(boot) = registry
+            .get(&agent.to_lowercase())
+            .and_then(|h| h.boot.as_ref())
+        else {
+            continue;
         };
-        if !names.iter().any(|n| n == harness) {
-            names.push(harness.to_string());
+        if !names.contains(boot) {
+            names.push(boot.clone());
         }
     }
     names
@@ -279,8 +325,10 @@ fn boot_harness_names(agents: &[String]) -> Vec<String> {
 
 /// The boot harnesses this install wires. An explicit `--agent` set is a
 /// DIRECTIVE — honoured even in a project with no harness directory yet, and
-/// honoured when it implies none. With no flags, directory detection governs, as
-/// before.
+/// honoured when it implies none. With no flags, the registry's detect dirs
+/// govern, unioned with `boot::resolve_harnesses`' detection for its one extra
+/// rule (a real, non-alias `AGENTS.md` implies codex). Both paths map names to
+/// adapters through the registry (SL-281).
 ///
 /// SL-250 PHASE-04: this used to be `resolve_harnesses(&[], root)`, which
 /// discarded the `--agent` the operator had just typed. In a fresh project
@@ -289,21 +337,79 @@ fn boot_harness_names(agents: &[String]) -> Vec<String> {
 /// hooks and reported only "no harness directories detected — skipped". That is
 /// the silent-inertness failure class this slice exists to end, one layer above
 /// the one it was chartered to fix.
-fn install_harnesses(agents: &[String], root: &Path) -> Vec<crate::boot::Harness> {
+fn install_harnesses(
+    agents: &[String],
+    root: &Path,
+    registry: &Registry,
+) -> Vec<crate::boot::Harness> {
+    let names = boot_names(&detect_agents(agents, root, registry), registry);
+    let mut harnesses = if names.is_empty() {
+        Vec::new()
+    } else {
+        crate::boot::resolve_harnesses(&names, root).unwrap_or_default()
+    };
     if agents.is_empty() {
-        return crate::boot::resolve_harnesses(&[], root).unwrap_or_default();
+        for h in crate::boot::resolve_harnesses(&[], root).unwrap_or_default() {
+            if !harnesses.contains(&h) {
+                harnesses.push(h);
+            }
+        }
     }
-    let names = boot_harness_names(agents);
-    if names.is_empty() {
-        return Vec::new();
+    harnesses
+}
+
+/// Where non-linked skills go: each registered harness's `skills_via` target,
+/// or an unregistered name itself. De-duplicated, first-seen order. Harnesses
+/// with a doctrine `skills` route are not delegated.
+#[derive(Debug, PartialEq, Eq)]
+struct DelegateTargets {
+    targets: Vec<String>,
+    unregistered: Vec<String>,
+}
+
+fn delegate_targets(agents: &[String], registry: &Registry) -> DelegateTargets {
+    let mut d = DelegateTargets {
+        targets: Vec::new(),
+        unregistered: Vec::new(),
+    };
+    for agent in agents {
+        let target = match registry.get(agent) {
+            Some(h) if h.skills.is_some() => continue,
+            Some(h) => h.skills_via.clone().unwrap_or_else(|| agent.clone()),
+            None => {
+                if !d.unregistered.contains(agent) {
+                    d.unregistered.push(agent.clone());
+                }
+                agent.clone()
+            }
+        };
+        if !d.targets.contains(&target) {
+            d.targets.push(target);
+        }
     }
-    crate::boot::resolve_harnesses(&names, root).unwrap_or_default()
+    d
+}
+
+/// Disclose each unregistered harness (DEC-377): it gets no agent defs or
+/// links, only npx skills delegation under its own name.
+fn report_unregistered(names: &[String], out: &mut dyn Write) -> io::Result<()> {
+    for name in names {
+        writeln!(
+            out,
+            "  {name}: unregistered harness — skills delegated to npx under its own name"
+        )?;
+    }
+    Ok(())
 }
 
 /// Print the forward-step summary (dry-run or live).
-fn print_forward_summary(root: &Path, args: &InstallArgs<'_>) -> anyhow::Result<()> {
-    let agents = detect_agents(args.agents, root);
-    let harnesses = install_harnesses(args.agents, root);
+fn print_forward_summary(
+    root: &Path,
+    args: &InstallArgs<'_>,
+    registry: &Registry,
+) -> anyhow::Result<()> {
+    let agents = detect_agents(args.agents, root, registry);
+    let harnesses = install_harnesses(args.agents, root, registry);
 
     let mut stdout = io::stdout();
     if args.dry_run {
@@ -367,11 +473,16 @@ fn print_forward_summary(root: &Path, args: &InstallArgs<'_>) -> anyhow::Result<
 /// Run the forward steps: memory sync → boot wire → skills per agent.
 /// Each step is individually prompted (unless `--yes`). Partial failure
 /// is non-fatal — errors are printed and the next step proceeds.
-fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow::Result<()> {
-    let agents = detect_agents(args.agents, root);
-    let harnesses = install_harnesses(args.agents, root);
+fn run_forward_steps(
+    root: &Path,
+    exec: &Path,
+    args: &InstallArgs<'_>,
+    registry: &Registry,
+) -> anyhow::Result<()> {
+    let agents = detect_agents(args.agents, root, registry);
+    let harnesses = install_harnesses(args.agents, root, registry);
 
-    print_forward_summary(root, args)?;
+    print_forward_summary(root, args, registry)?;
 
     let mut all_yes = false;
 
@@ -507,12 +618,15 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
         }
     }
 
-    // Batch-delegate all confirmed non-Claude agents to a single npx invocation.
-    if !non_claude_agents.is_empty() {
+    // Batch-delegate all confirmed non-Claude agents to a single npx invocation,
+    // one de-duplicated target per skills route (pi + codex → `universal` once).
+    let delegate = delegate_targets(&non_claude_agents, registry);
+    report_unregistered(&delegate.unregistered, &mut io::stdout())?;
+    if !delegate.targets.is_empty() {
         let mut out = io::stdout();
         if let Err(e) = install_for_other(
             &InstallOtherArgs {
-                agent_names: &non_claude_agents,
+                agent_names: &delegate.targets,
                 selected: &selected,
                 global: args.global,
                 repo,
@@ -1044,8 +1158,33 @@ fn load_manifest() -> anyhow::Result<Manifest> {
     let data = crate::asset_source::read_bytes("manifest.toml")
         .context("install/manifest.toml is missing from embedded assets")?;
     let text = std::str::from_utf8(&data).context("install/manifest.toml is not valid UTF-8")?;
+    parse_manifest(text)
+}
+
+/// The `[framework] roots` the embedded manifest declares (SL-281).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "read by the convergence executor, SL-281 PHASE-04"
+    )
+)]
+pub(crate) fn framework_roots() -> anyhow::Result<Vec<String>> {
+    Ok(load_manifest()?.framework.roots)
+}
+
+/// Parse and validate manifest text. A harness table may carry only one skills
+/// route.
+fn parse_manifest(text: &str) -> anyhow::Result<Manifest> {
     let manifest: Manifest =
         toml::from_str(text).context("Failed to parse install/manifest.toml")?;
+    for (name, h) in &manifest.harness {
+        if h.skills.is_some() && h.skills_via.is_some() {
+            bail!(
+                "install/manifest.toml [harness.{name}] sets both `skills` and `skills_via`; pick one"
+            );
+        }
+    }
     Ok(manifest)
 }
 
@@ -1223,24 +1362,15 @@ pub(crate) fn prompt_confirm(prompt: &str) -> anyhow::Result<bool> {
 /// of erroring when no `.claude/` dir and no `--agent` flags — the
 /// consolidated install path treats "no agents" as "skip skills steps"
 /// rather than a hard error.
-fn detect_agents(agents: &[String], root: &Path) -> Vec<String> {
+fn detect_agents(agents: &[String], root: &Path, registry: &Registry) -> Vec<String> {
     if !agents.is_empty() {
         return agents.to_vec();
     }
-    let mut detected: Vec<String> = Vec::new();
-    if root.join(".claude").exists() {
-        detected.push("claude".to_string());
-    }
-    if root.join(".codex").exists() {
-        detected.push("codex".to_string());
-    }
-    if root.join(".pi").exists() {
-        detected.push("pi".to_string());
-    }
-    if root.join(".agents").exists() {
-        detected.push("universal".to_string());
-    }
-    detected
+    registry
+        .iter()
+        .filter(|(_, h)| h.detect.as_ref().is_some_and(|d| root.join(d).exists()))
+        .map(|(name, _)| name.clone())
+        .collect()
 }
 
 /// Prompt a single forward step. Returns `true` if the user wants to
@@ -3895,7 +4025,7 @@ mod tests {
         execute_plan(&build_plan(&manifest, dir.path())).unwrap();
         // …yet the harness is still detected, so the adapter leg fires.
         assert_eq!(
-            detect_agents(&[], dir.path()),
+            detect_agents(&[], dir.path(), &registry()),
             vec!["claude".to_string()],
             "a detected harness must still resolve for adapter install after the flip"
         );
@@ -3928,26 +4058,6 @@ mod tests {
     // only "no harness directories detected — skipped".
 
     #[test]
-    fn boot_harness_names_maps_the_skills_vocabulary() {
-        let names = |v: &[&str]| {
-            boot_harness_names(&v.iter().map(|s| (*s).into()).collect::<Vec<String>>())
-        };
-        assert_eq!(names(&["claude"]), vec!["claude".to_string()]);
-        assert_eq!(names(&["codex"]), vec!["codex".to_string()]);
-        // pi rides the codex arm — the AGENTS.md import and the `.pi/`
-        // extensions are wired there, not by a third harness.
-        assert_eq!(names(&["pi"]), vec!["codex".to_string()]);
-        // `universal` is a skills-only agent with no boot surface.
-        assert!(names(&["universal"]).is_empty());
-        // codex + pi collapse to ONE harness, in first-seen order — else boot
-        // would wire the same arm twice.
-        assert_eq!(
-            names(&["pi", "claude", "codex"]),
-            vec!["codex".to_string(), "claude".to_string()]
-        );
-    }
-
-    #[test]
     fn an_explicit_agent_reaches_the_boot_leg_in_a_bare_project() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
@@ -3960,21 +4070,21 @@ mod tests {
         );
         // …but an explicit flag is a DIRECTIVE, so the boot leg still fires.
         assert_eq!(
-            install_harnesses(&["claude".to_string()], root).len(),
+            install_harnesses(&["claude".to_string()], root, &registry()).len(),
             1,
             "--agent claude wires the claude harness with no .claude/ on disk"
         );
         // A skills-only agent implies no harness — and must not silently fall
         // back to detection, which would wire something the user did not name.
-        assert!(install_harnesses(&["universal".to_string()], root).is_empty());
+        assert!(install_harnesses(&["universal".to_string()], root, &registry()).is_empty());
         // No flags: unchanged — detection governs.
-        assert!(install_harnesses(&[], root).is_empty());
+        assert!(install_harnesses(&[], root, &registry()).is_empty());
     }
 
     #[test]
     fn detect_agents_empty_when_no_agent_dirs_and_no_flags() {
         let dir = tempfile::tempdir().unwrap();
-        let agents = detect_agents(&[], dir.path());
+        let agents = detect_agents(&[], dir.path(), &registry());
         assert!(agents.is_empty());
     }
 
@@ -3982,7 +4092,7 @@ mod tests {
     fn detect_agents_returns_claude_when_dir_present() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".claude")).unwrap();
-        let agents = detect_agents(&[], dir.path());
+        let agents = detect_agents(&[], dir.path(), &registry());
         assert_eq!(agents, vec!["claude".to_string()]);
     }
 
@@ -3990,7 +4100,7 @@ mod tests {
     fn detect_agents_returns_pi_when_dir_present() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".pi")).unwrap();
-        let agents = detect_agents(&[], dir.path());
+        let agents = detect_agents(&[], dir.path(), &registry());
         assert_eq!(agents, vec!["pi".to_string()]);
     }
 
@@ -3998,7 +4108,7 @@ mod tests {
     fn detect_agents_returns_codex_when_dir_present() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".codex")).unwrap();
-        let agents = detect_agents(&[], dir.path());
+        let agents = detect_agents(&[], dir.path(), &registry());
         assert_eq!(agents, vec!["codex".to_string()]);
     }
 
@@ -4006,7 +4116,7 @@ mod tests {
     fn detect_agents_returns_universal_for_dot_agents_dir() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".agents")).unwrap();
-        let agents = detect_agents(&[], dir.path());
+        let agents = detect_agents(&[], dir.path(), &registry());
         assert_eq!(agents, vec!["universal".to_string()]);
     }
 
@@ -4015,7 +4125,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".claude")).unwrap();
         fs::create_dir(dir.path().join(".pi")).unwrap();
-        let agents = detect_agents(&[], dir.path());
+        let agents = detect_agents(&[], dir.path(), &registry());
         assert_eq!(agents, vec!["claude".to_string(), "pi".to_string()]);
     }
 
@@ -4023,15 +4133,154 @@ mod tests {
     fn detect_agents_uses_explicit_over_detection() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".claude")).unwrap();
-        let agents = detect_agents(&["pi".to_string()], dir.path());
+        let agents = detect_agents(&["pi".to_string()], dir.path(), &registry());
         assert_eq!(agents, vec!["pi".to_string()]);
     }
 
     #[test]
     fn detect_agents_returns_multiple_explicit() {
         let dir = tempfile::tempdir().unwrap();
-        let agents = detect_agents(&["claude".to_string(), "pi".to_string()], dir.path());
+        let agents = detect_agents(
+            &["claude".to_string(), "pi".to_string()],
+            dir.path(),
+            &registry(),
+        );
         assert_eq!(agents, vec!["claude".to_string(), "pi".to_string()]);
+    }
+
+    // --- harness registry (SL-281 PHASE-01) ---
+
+    fn registry() -> Registry {
+        load_manifest().unwrap().harness
+    }
+
+    fn strings(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    fn boot_labels(harnesses: &[crate::boot::Harness]) -> Vec<&'static str> {
+        harnesses.iter().map(crate::boot::harness_label).collect()
+    }
+
+    #[test]
+    fn harness_table_with_both_skills_and_skills_via_is_refused() {
+        let text = "[harness.odd]\nskills = \".odd/skills\"\nskills_via = \"universal\"\n";
+        let err = parse_manifest(text).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("odd"), "names the harness: {msg}");
+        // Positive control: either route alone parses.
+        parse_manifest("[harness.odd]\nskills = \".odd/skills\"\n").unwrap();
+        parse_manifest("[harness.odd]\nskills_via = \"universal\"\n").unwrap();
+    }
+
+    #[test]
+    fn embedded_manifest_declares_framework_roots_and_registry() {
+        let m = load_manifest().unwrap();
+        assert_eq!(
+            m.framework.roots,
+            strings(&[
+                ".doctrine/agents",
+                ".doctrine/skills",
+                ".doctrine/workflows"
+            ])
+        );
+        let names: Vec<&str> = m.harness.keys().map(String::as_str).collect();
+        assert_eq!(names, vec!["claude", "codex", "pi", "universal"]);
+    }
+
+    #[test]
+    fn detection_and_boot_follow_registry() {
+        let reg = registry();
+        let boot_for = |dirs: &[&str], agents: &[&str]| {
+            let dir = tempfile::tempdir().unwrap();
+            for d in dirs {
+                fs::create_dir(dir.path().join(d)).unwrap();
+            }
+            boot_labels(&install_harnesses(&strings(agents), dir.path(), &reg))
+        };
+        // No --agent: the registry's detect dirs govern.
+        assert_eq!(
+            boot_for(&[".pi"], &[]),
+            vec!["codex"],
+            ".pi alone wires codex"
+        );
+        assert_eq!(boot_for(&[".codex"], &[]), vec!["codex"]);
+        assert_eq!(boot_for(&[".claude"], &[]), vec!["claude"]);
+        assert!(
+            boot_for(&[".agents"], &[]).is_empty(),
+            "universal has no boot"
+        );
+        assert_eq!(
+            boot_for(&[".claude", ".pi", ".codex"], &[]),
+            vec!["claude", "codex"],
+            "pi and codex collapse to one codex adapter"
+        );
+        // With --agent: the registry maps names, detection is ignored.
+        assert_eq!(boot_for(&[".claude"], &["pi"]), vec!["codex"]);
+        assert!(boot_for(&[], &["universal"]).is_empty());
+        assert!(
+            boot_for(&[], &["cursor"]).is_empty(),
+            "unregistered: no boot"
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        assert_eq!(
+            detect_agents(&[], root, &reg),
+            Vec::<String>::new(),
+            "bare project detects nothing"
+        );
+        // A real AGENTS.md (not Claude's alias) still implies codex.
+        fs::write(root.join("AGENTS.md"), "x").unwrap();
+        assert_eq!(
+            boot_labels(&install_harnesses(&[], root, &reg)),
+            vec!["codex"]
+        );
+    }
+
+    #[test]
+    fn detection_skips_an_aliased_agents_md() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir(root.join(".claude")).unwrap();
+        fs::write(root.join("CLAUDE.md"), "x").unwrap();
+        std::os::unix::fs::symlink("CLAUDE.md", root.join("AGENTS.md")).unwrap();
+        assert_eq!(
+            boot_labels(&install_harnesses(&[], root, &registry())),
+            vec!["claude"]
+        );
+    }
+
+    #[test]
+    fn pi_and_codex_delegate_universal_once() {
+        let reg = registry();
+        for agents in [
+            &["pi"][..],
+            &["codex"],
+            &["universal"],
+            &["pi", "codex", "universal"],
+        ] {
+            let d = delegate_targets(&strings(agents), &reg);
+            assert_eq!(d.targets, strings(&["universal"]), "{agents:?}");
+            assert!(d.unregistered.is_empty());
+        }
+        // claude links its own skills: never delegated.
+        let d = delegate_targets(&strings(&["claude", "pi"]), &reg);
+        assert_eq!(d.targets, strings(&["universal"]));
+    }
+
+    #[test]
+    fn unregistered_harness_delegates_skills_and_reports_unregistered() {
+        let d = delegate_targets(&strings(&["cursor", "pi", "cursor"]), &registry());
+        assert_eq!(d.targets, strings(&["cursor", "universal"]));
+        assert_eq!(d.unregistered, strings(&["cursor"]));
+        let mut out = Vec::new();
+        report_unregistered(&d.unregistered, &mut out).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(
+            out.contains("cursor") && out.contains("unregistered"),
+            "{out}"
+        );
     }
 
     // prompt_step: true for y, a, when yes=true, when all_yes=true
@@ -4141,6 +4390,8 @@ mod tests {
                 root_markers: RootMarkersSection::default(),
                 memory: MemorySection::default(),
                 hymns: HymnsSection::default(),
+                framework: FrameworkSection::default(),
+                harness: Registry::default(),
             }
         }
     }
