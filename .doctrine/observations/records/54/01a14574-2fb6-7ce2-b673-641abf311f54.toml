@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14574-2fb6-7ce2-b673-641abf311f54"
+recorded_at = "2026-10-16T16:03:24.726052044Z"
+kind = "friction"
+summary = "execute: memory mem_019f139f1dc071829a885949da8203a3 names skills::resolve_agents but src/skills.rs no longer exists"
+detail = "SL-282 PHASE-03 worker: phase sheet distilled a stale memory; the memory needs updating."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

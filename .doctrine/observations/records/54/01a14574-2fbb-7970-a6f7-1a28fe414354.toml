@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14574-2fbb-7970-a6f7-1a28fe414354"
+recorded_at = "2026-10-16T16:03:24.731333353Z"
+kind = "friction"
+summary = "execute: write_installed_version puts [install] above a comment-only doctrine.toml, tripping prefix-preservation checks"
+detail = "SL-282 PHASE-03 worker: original-is-prefix assertion fails on comment-only fixtures; use a fixture with a real table."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

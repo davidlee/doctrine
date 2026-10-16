@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14574-2fc0-7a62-bc50-f2f8469bdee3"
+recorded_at = "2026-10-16T16:03:24.736600141Z"
+kind = "friction"
+summary = "execute: doctrine check gate dumps the whole boot-snapshot JSON into its output"
+detail = "SL-282 PHASE-03 worker: redirect gate to a file and read the exit code; tailing is unreliable."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

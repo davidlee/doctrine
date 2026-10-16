@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14574-13b4-7641-b938-b01194cc70c2"
+recorded_at = "2026-10-16T16:03:17.556854854Z"
+kind = "friction"
+summary = "capsule-orchestrator: phase completion attributes a following plan-amendment commit to the phase"
+detail = "SL-282 PHASE-03: committing the PHASE-07 plan append before flipping PHASE-03 completed made the phase boundary span both commits; needed slice record-delta to tighten. Order: flip completed before committing plan amendments."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
