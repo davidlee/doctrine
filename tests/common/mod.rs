@@ -102,6 +102,25 @@ pub(crate) fn doctrine_cmd(cwd: &std::path::Path) -> std::process::Command {
     cmd
 }
 
+/// Run `cmd` with `input` piped to its stdin (then closed); output captured.
+pub(crate) fn output_with_stdin(
+    mut cmd: std::process::Command,
+    input: &str,
+) -> std::process::Output {
+    use std::io::Write as _;
+    cmd.stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let mut child = cmd.spawn().expect("spawn command");
+    child
+        .stdin
+        .take()
+        .expect("piped stdin")
+        .write_all(input.as_bytes())
+        .expect("write stdin");
+    child.wait_with_output().expect("wait for command")
+}
+
 /// A temp base whose ancestry to `/` carries no project marker
 /// (`.git`/`.jj`/`.project`/`Cargo.toml`), for tests exercising the **no-root**
 /// path: `root::find` (src/root.rs) walks CWD up to `/`, so a stray marker above

@@ -142,9 +142,19 @@ fn is_empty(status: &Status) -> bool {
 
 /// Render the status dashboard as human-readable text (10–20 lines).
 pub(crate) fn render_human(status: &Status) -> String {
-    // Design §4 output shape. Empty state → single line.
+    // Design §4 output shape. Empty state → single line, plus any currency
+    // advisory (SL-282: an idle repo still says it is not installed).
     if is_empty(status) {
-        return "No active work.\n".to_string();
+        let mut text = "No active work.\n".to_string();
+        let advisory = status.boot.currency.lines();
+        if !advisory.is_empty() {
+            text.push('\n');
+        }
+        for line in advisory {
+            text.push_str(&line);
+            text.push('\n');
+        }
+        return text;
     }
 
     let mut parts: Vec<String> = Vec::new();
@@ -594,6 +604,31 @@ mod tests {
             lines[0]
         );
         assert!(output.ends_with(&block), "{output}");
+    }
+
+    /// SL-282 PHASE-02/EX-1: an idle repo still carries the currency advisory.
+    #[test]
+    fn idle_text_carries_the_currency_advisory() {
+        let report = currency(vec![Currency::CheckoutNotInstalled]);
+        let lines = report.lines();
+        let boot = BootSection {
+            currency: report,
+            ..fresh_boot()
+        };
+        let status = assemble_status(
+            empty_counts(),
+            empty_backlog(),
+            empty_next(),
+            empty_rfcs(),
+            empty_blocked(),
+            empty_blocked(),
+            boot,
+            no_commits(),
+        );
+        assert_eq!(
+            render_human(&status),
+            format!("No active work.\n\n{}\n", lines[0])
+        );
     }
 
     fn no_commits() -> Vec<CommitLine> {

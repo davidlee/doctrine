@@ -398,7 +398,6 @@ fn the_warning_precedes_the_interactive_prompt() {
     if common::under_worker_marker() {
         return;
     }
-    use std::io::Write as _;
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     write_stamp(root, NEWER);
@@ -413,18 +412,13 @@ fn the_warning_precedes_the_interactive_prompt() {
         "code-review",
         "-p",
     ])
-    .arg(root)
-    .stdin(std::process::Stdio::piped())
-    .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::piped());
-    let mut child = cmd.spawn().expect("spawn doctrine");
-    child.stdin.take().unwrap().write_all(b"n\n").unwrap();
-    let out = child.wait_with_output().unwrap();
+    .arg(root);
+    let out = common::output_with_stdin(cmd, "n\n");
     let stdout = String::from_utf8(out.stdout).unwrap();
 
     let warned = stdout.find(WARNING).unwrap_or_else(|| panic!("{stdout}"));
     let asked = stdout
-        .find("Proceed? [y/N]")
+        .find("Proceed? [y/N/d]")
         .unwrap_or_else(|| panic!("{stdout}"));
     assert!(warned < asked, "{stdout}");
     assert!(stdout.contains("Aborted."), "{stdout}");

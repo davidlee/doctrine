@@ -309,6 +309,18 @@ fn status_text_renders_the_line_under_the_boot_line() {
     assert_eq!(lines.next().unwrap(), format!("  {NOT_INSTALLED}"));
 }
 
+/// An idle repo (no active work) still carries the advisory under its one line.
+#[test]
+fn idle_status_text_carries_the_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = not_installed_repo(dir.path());
+    let text = run_ok(&root, &["status"]);
+    assert_eq!(
+        text.trim_end(),
+        format!("No active work.\n\n{NOT_INSTALLED}")
+    );
+}
+
 // ── linked worktrees (RV-421 F-1) ───────────────────────────────────────────
 
 /// A primary repo with a committed, current tracked stamp (so a fork checks out

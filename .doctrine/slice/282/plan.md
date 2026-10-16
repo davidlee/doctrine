@@ -7,7 +7,7 @@ authored in the TOML. Use this for the plan's rationale and sequencing.
 
 ## Overview
 
-Six phases, bottom-up: the pure currency model first, then its readers, then
+Seven phases, bottom-up: the pure currency model first, then its readers, then
 the install executor that writes the stamps, then the hymn changes that depend
 on the stamp, then the user-facing install screen that renders everything,
 then dogfood.
@@ -15,7 +15,7 @@ then dogfood.
 ```
 PHASE-01 model + stores ──► PHASE-02 sites + guard
         │
-        └──► PHASE-03 executor ──► PHASE-04 hymns ──► PHASE-05 overview/hint ──► PHASE-06 dogfood
+        └──► PHASE-03 executor ──► PHASE-07 downgrade ──► PHASE-04 hymns ──► PHASE-05 overview/hint ──► PHASE-06 dogfood
 ```
 
 ## Sequencing & Rationale

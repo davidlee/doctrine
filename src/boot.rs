@@ -3449,6 +3449,20 @@ pub(crate) fn apply_wire(
 }
 
 /// The file an import outcome wrote, if any: created, or the ref added.
+/// The root-relative import files wiring `harnesses` would create or edit —
+/// the same plan `apply_wire` runs, computed without writing (SL-282 overview).
+pub(crate) fn planned_imports(root: &Path, harnesses: &[Harness]) -> anyhow::Result<Vec<PathBuf>> {
+    let targets: Vec<PathBuf> = harnesses
+        .iter()
+        .flat_map(|h| import_targets(h, root))
+        .collect();
+    Ok(ensure_boot_import(&targets, &format!("@{BOOT_REL}"), true)?
+        .into_iter()
+        .filter_map(|outcome| import_touched(root, outcome))
+        .map(|t| t.path)
+        .collect())
+}
+
 fn import_touched(root: &Path, outcome: RefOutcome) -> Option<Touched> {
     match outcome {
         RefOutcome::Created(path) => Some(Touched::under(root, &path, Change::Created)),
@@ -5163,6 +5177,24 @@ mod tests {
     }
 
     // --- T1: ensure_boot_import (imperative) ---
+
+    #[test]
+    fn planned_imports_lists_only_files_wiring_would_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let both = [Harness::Claude, Harness::Codex];
+        assert_eq!(
+            planned_imports(root, &both).unwrap(),
+            vec![PathBuf::from("CLAUDE.md"), PathBuf::from("AGENTS.md")]
+        );
+        assert!(!root.join("CLAUDE.md").exists(), "planning writes nothing");
+        let reference = format!("@{BOOT_REL}");
+        ensure_boot_import(&[root.join("CLAUDE.md")], &reference, false).unwrap();
+        assert_eq!(
+            planned_imports(root, &both).unwrap(),
+            vec![PathBuf::from("AGENTS.md")]
+        );
+    }
 
     #[test]
     fn ensure_boot_import_creates_prepends_and_is_idempotent() {
