@@ -125,3 +125,9 @@ blocker.
 - F-6 — ISS-353: on close, resolve as fixed **for doctrine-linked harnesses**
   only, with the npx-written `.agents/skills` remainder pointed at IMP-406.
   This is a backlog transition, not a spec write.
+
+### Governance/spec (REV) — addendum
+- F-17 — SPEC-009 and SPEC-010 residual passages (toml responsibilities,
+  D5/D4 headings, SPEC-010 overview, dual-path routing, D2, hypotheses) →
+  second REV "SL-281 spec residuals", `modify` rows, excerpts aligned to
+  REV-071's landed text.

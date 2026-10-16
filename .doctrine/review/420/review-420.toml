@@ -10,7 +10,7 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
-concluded = true
+concluded = false
 
 [[review.turn]]
 act = "conclude"
@@ -533,6 +533,38 @@ Block lines cannot carry comments; rationale lives in install/manifest.toml [git
 act = "verify"
 role = "raiser"
 note = "rationale accepted"
+
+[[finding]]
+id = "F-17"
+status = "verified"
+severity = "minor"
+title = "Expected: SPEC-009/SPEC-010 internally consistent after REV-071; observed: residual passages outside REV-071's rows contradict the landed text"
+detail = """
+Found while landing REV-071 (234c9b2da). Unrevised text now contradicting the landed rows:
+- SPEC-009 toml responsibilities #3 ("gitignore lines to append"), #5 (never-overwrite; "re-install is a safe no-op"); D5 heading ("skills distribution … not absorbed").
+- SPEC-010 Overview para 1 ("does not own the skill tree"); Dual-path routing section, D2, toml responsibility #3 ("every other agent is delegated"); D4 heading ("derived and self-ignored"); Hypotheses ("ownership provable by link value"; "install is additive … remove/update out of scope").
+"""
+disposition = "design-wrong"
+response = """
+User chose to fix now (2026-10-16, "fix it now"). Reconcile: a second REV ("SL-281 spec residuals") with modify rows for SPEC-009 and SPEC-010, excerpts consistent with REV-071's landed D2/D5/D7 text; reviewed by the user before approval. Brief entry appended.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+User chose to fix now (2026-10-16, "fix it now"). Reconcile: a second REV ("SL-281 spec residuals") with modify rows for SPEC-009 and SPEC-010, excerpts consistent with REV-071's landed D2/D5/D7 text; reviewed by the user before approval. Brief entry appended.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "brief addendum exists"
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
