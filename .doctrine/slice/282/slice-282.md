@@ -24,7 +24,8 @@ The complement is a checkout that hasn't run install, or ran an older one
 (IMP-514). SL-281 gitignores framework-owned paths, so a fresh clone lacks them
 until someone installs, and nothing tells an agent which of three states it is
 in: no binary; binary but checkout not installed; install older than the
-binary.
+binary; install *newer* than the binary (an older doctrine on `PATH` than the
+one that last installed — e.g. a stale `~/.cargo/bin` shadowing a newer one).
 
 Both are the same concern seen from two moments: install's account of what it
 does and what to do next, and the rest of doctrine's account of what install
@@ -56,8 +57,12 @@ whether it's in place" should be shared.
    - Install records the binary version that last ran it, in a derived,
      gitignored stamp.
    - Doctrine surfaces (boot, `status`, session hook — design picks which)
-     compare the stamp to their own version and print one line on absence or
-     mismatch: run, or re-run, `doctrine install`.
+     compare the stamp to their own version and print one line:
+     - absent → run `doctrine install`;
+     - stamp older than binary → re-run `doctrine install`;
+     - stamp newer than binary → this binary is older than the one that last
+       installed the checkout; upgrade it (or fix `PATH`). Re-installing would
+       downgrade framework-owned files, so the advice is *not* "re-run install".
    - The no-binary state can only be served by a tracked surface: one short
      line in the managed `CLAUDE.md` / `AGENTS.md` section pointing at the
      install docs when `.doctrine/state/boot.md` is absent. One line at most;
@@ -114,6 +119,9 @@ whether it's in place" should be shared.
   enough to be compared; runtime state is `rm -rf`-able by contract, and a
   wiped stamp reads as "not installed". Decide whether that false positive is
   acceptable (it is at least correct advice: re-run install).
+- **Install by an older binary.** When install itself finds a newer stamp,
+  should it warn, require confirmation (and refuse under `-y`?), or proceed and
+  downgrade? Design decides; the downgrade must at least not be silent.
 - **Where the staleness check runs.** Every invocation costs latency; boot or
   the session hook may be enough. Each surface that prints it costs tokens.
 - **Testing interactive output.** `prompt_step` already has stdin-driven tests;
@@ -128,7 +136,9 @@ whether it's in place" should be shared.
   contract (ISS-210 closed).
 - On-demand starter verb writes a user-provenance starter for a named slot.
 - Stamp absent → boot/status prints the install line; stamp older than the
-  binary → prints the reinstall line; current → silent.
+  binary → prints the reinstall line; stamp newer than the binary → prints the
+  upgrade-binary line; current → silent.
+- Install run by a binary older than the stamp does not downgrade silently.
 - With no `.doctrine/state/boot.md`, the tracked managed section tells an agent
   doctrine isn't installed for this checkout.
 - SPEC-009 reconciled via REV; IMP-516, IMP-513, ISS-210, IMP-514 resolved.
