@@ -441,7 +441,18 @@ pub(crate) fn run(path: Option<PathBuf>, command_map: fn() -> String) -> anyhow:
     } else {
         "Unchanged"
     };
-    writeln!(io::stdout(), "{verb} {}", dest.display())?;
+    let mut out = io::stdout();
+    writeln!(out, "{verb} {}", dest.display())?;
+    write_currency(&root, &mut out)
+}
+
+/// Append the install-currency advisories (SL-282, DEC-380) after a boot
+/// verb's own output: one line per finding, nothing when current.
+fn write_currency(root: &Path, out: &mut impl io::Write) -> anyhow::Result<()> {
+    let report = crate::install::read_currency(root, &crate::install::binary_version()?);
+    for line in report.lines() {
+        writeln!(out, "{line}")?;
+    }
     Ok(())
 }
 
@@ -457,7 +468,6 @@ pub(crate) fn run_check(path: Option<PathBuf>, command_map: fn() -> String) -> a
     let mut out = io::stdout();
     if report.is_clean() {
         writeln!(out, "clean {} — on-disk snapshot in sync", dest.display())?;
-        return Ok(());
     }
     if report.stale {
         writeln!(
@@ -473,7 +483,8 @@ pub(crate) fn run_check(path: Option<PathBuf>, command_map: fn() -> String) -> a
             report.marker_sections.join(", ")
         )?;
     }
-    Ok(())
+    // Advisory only: `--check`'s exit status never depends on currency.
+    write_currency(&root, &mut out)
 }
 
 /// `doctrine boot --emit` — regenerate the governance snapshot AND emit its
@@ -811,12 +822,25 @@ const BOOT_REF_LINE: &str = "@.doctrine/state/boot.md";
 /// Together with `BOOT_REF_LINE` it forms a multi-line block that tells the
 /// agent whether the boot snapshot is already in-context and it can skip the
 /// disk read (MUST NOT read) or MUST read it now (has not seen the sentinel).
+/// The last sentence (DEC-383) covers a checkout where doctrine was never
+/// installed, so the referenced file does not exist.
 const BOOT_REF_GUARD: &str = "\
 If you have NOT seen `BOOT-SENTINEL: doctrine-governance-snapshot` anywhere \
 in your context (system prompt or preceding messages), you MUST read the file \
 referenced above now. If you HAVE seen it, you MUST NOT — the content is \
-already in context.\
+already in context. If that file does not exist, doctrine is not set up in \
+this checkout: tell the user to install doctrine and run `doctrine install`.\
 ";
+
+/// Earlier `BOOT_REF_GUARD` texts, verbatim, oldest first. A block carrying one
+/// is upgraded in place to the current guard. Each guard edit appends the
+/// outgoing text here.
+const PRIOR_BOOT_REF_GUARDS: &[&str] = &["\
+If you have NOT seen `BOOT-SENTINEL: doctrine-governance-snapshot` anywhere \
+in your context (system prompt or preceding messages), you MUST read the file \
+referenced above now. If you HAVE seen it, you MUST NOT — the content is \
+already in context.\
+"];
 
 /// The full two-line boot-import block written into committed targets.
 fn boot_guard_block() -> String {
@@ -837,16 +861,34 @@ fn upgrade_bare_boot_ref(content: &str) -> String {
     content.to_string()
 }
 
+/// Replace a prior-guard block (`BOOT_REF_LINE` + a `PRIOR_BOOT_REF_GUARDS`
+/// text) with the current one; `None` when there is none. Newest first: a guard
+/// usually grows, so an older text can be a prefix of a newer one.
+fn upgrade_prior_guard(content: &str) -> Option<String> {
+    PRIOR_BOOT_REF_GUARDS.iter().rev().find_map(|prior| {
+        let block = format!("{BOOT_REF_LINE}\n{prior}");
+        content
+            .contains(&block)
+            .then(|| content.replacen(&block, &boot_guard_block(), 1))
+    })
+}
+
 /// Pure decision for one target's current content. Returns the action and the
 /// new file body to write (`None` when nothing should be written). Idempotent:
-/// a body already carrying the full guard block plans no write; a body with
-/// only the bare `@` ref line (old-style, pre-guard) plans an upgrade to the
-/// full sentinel-aware block.
+/// a body already carrying the current guard block plans no write; a prior
+/// guard block, or only the bare `@` ref line (old-style, pre-guard), plans an
+/// upgrade to the current block. A sentinel-bearing guard of unknown text (hand
+/// edited) is left alone.
 fn plan_boot_import(existing: Option<&str>, reference: &str) -> (RefAction, Option<String>) {
     match existing {
         None => (RefAction::Create, Some(format!("{}\n", boot_guard_block()))),
         Some(content) if content.lines().any(|l| l.trim() == reference) => {
-            if content.contains(BOOT_SENTINEL) {
+            // Current first: every prior guard is a prefix of the current one.
+            if content.contains(&boot_guard_block()) {
+                (RefAction::Present, None)
+            } else if let Some(upgraded) = upgrade_prior_guard(content) {
+                (RefAction::Add, Some(upgraded))
+            } else if content.contains(BOOT_SENTINEL) {
                 (RefAction::Present, None)
             } else {
                 // Old-style bare `@` line — upgrade to the full guard block.
@@ -4931,6 +4973,28 @@ mod tests {
         // new guard block present (has sentinel) → no write.
         let guard_content = format!("{}\nrest\n", boot_guard_block());
         let (action, body) = plan_boot_import(Some(&guard_content), REF);
+        assert!(matches!(action, RefAction::Present));
+        assert!(body.is_none());
+    }
+
+    /// DEC-383: the guard tells an agent what to do when the snapshot file is
+    /// missing, and an earlier guard is upgraded in place. The outgoing guard
+    /// is a prefix of the current one, so a comparator that matched a prior
+    /// guard first would rewrite (or never upgrade) the current block.
+    #[test]
+    fn plan_boot_import_upgrades_a_prior_guard_in_place() {
+        assert!(boot_guard_block().contains("doctrine is not set up in this checkout"));
+
+        for prior in PRIOR_BOOT_REF_GUARDS {
+            let (action, body) =
+                plan_boot_import(Some(&format!("{BOOT_REF_LINE}\n{prior}\nrest\n")), REF);
+            assert!(matches!(action, RefAction::Add));
+            assert_eq!(body.unwrap(), format!("{}\nrest\n", boot_guard_block()));
+        }
+
+        // A hand-edited guard (sentinel present, text unknown) is left alone.
+        let edited = format!("{BOOT_REF_LINE}\nRead it if `{BOOT_SENTINEL}` is unseen.\nrest\n");
+        let (action, body) = plan_boot_import(Some(&edited), REF);
         assert!(matches!(action, RefAction::Present));
         assert!(body.is_none());
     }

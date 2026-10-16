@@ -134,8 +134,19 @@ pub(crate) fn dispatch(cmd: PromptCommand, command_map: fn() -> String) -> anyho
             let universal = crate::boot::resolve_universal_snapshot(&root, &exec, command_map)?;
             let ctx = build_ctx(&role, harness, model, arm.as_deref(), stage, &band)?;
             let hymns = crate::hymns::resolve(&ctx, &corpus, &sealed)?;
+            // The full (session-hook) resolve also carries install-currency
+            // advisories (SL-282, DEC-380): after the cascade, outside the boot
+            // snapshot bytes, before the `--json` branch so both forms agree.
             let cascade = if band.is_empty() {
-                format!("{}\n{hymns}", universal.trim_end())
+                let full = format!("{}\n{hymns}", universal.trim_end());
+                let advisories =
+                    crate::install::read_currency(&root, &crate::install::binary_version()?)
+                        .lines();
+                if advisories.is_empty() {
+                    full
+                } else {
+                    format!("{}\n\n{}", full.trim_end(), advisories.join("\n"))
+                }
             } else {
                 hymns
             };

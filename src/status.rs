@@ -13,6 +13,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
+use crate::install_state::CurrencyReport;
 use crate::listing::Format;
 
 // ---------------------------------------------------------------------------
@@ -67,12 +68,14 @@ pub(crate) struct BlockedItem {
     pub(crate) blocked_by: Vec<String>,
 }
 
-/// Boot snapshot staleness.
+/// Boot snapshot staleness, and the install-currency findings (SL-282,
+/// DEC-380): structured in JSON, advisory lines in text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct BootSection {
     pub(crate) staleness: String,
     pub(crate) age_seconds: u64,
     pub(crate) commit: String,
+    pub(crate) currency: CurrencyReport,
 }
 
 /// One recent commit line.
@@ -229,6 +232,9 @@ pub(crate) fn render_human(status: &Status) -> String {
 
     // Boot.
     parts.push(format!("\nBoot\n  boot.md {}", boot_line(&status.boot)));
+    for line in status.boot.currency.lines() {
+        parts.push(format!("  {line}\n"));
+    }
 
     // Recent commits.
     if !status.recent_commits.is_empty() {
@@ -438,6 +444,7 @@ pub(crate) fn run(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::
         staleness,
         age_seconds,
         commit,
+        currency: crate::install::read_currency(&root, &crate::install::binary_version()?),
     };
 
     // --- Recent commits ---
@@ -490,6 +497,7 @@ fn parse_git_log(root: &std::path::Path) -> Vec<CommitLine> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::install_state::{Currency, MarkerSource};
 
     fn counts(active: usize, blocked: usize, total: usize) -> SliceCounts {
         SliceCounts {
@@ -520,7 +528,72 @@ mod tests {
             staleness: "fresh".to_string(),
             age_seconds: 120,
             commit: "a3f7b2c".to_string(),
+            currency: currency(vec![]),
         }
+    }
+
+    /// A currency report for `findings` from this checkout's own marker.
+    fn currency(findings: Vec<Currency>) -> CurrencyReport {
+        CurrencyReport {
+            findings,
+            source: MarkerSource::Checkout,
+            binary: semver::Version::new(0, 47, 0),
+        }
+    }
+
+    fn status_with_boot(boot: BootSection) -> Status {
+        assemble_status(
+            counts(1, 0, 1),
+            empty_backlog(),
+            empty_next(),
+            empty_rfcs(),
+            empty_blocked(),
+            empty_blocked(),
+            boot,
+            no_commits(),
+        )
+    }
+
+    fn json_of(status: &Status) -> serde_json::Value {
+        serde_json::from_str(&render_json(status).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn json_boot_currency_is_empty_when_current() {
+        let v = json_of(&status_with_boot(fresh_boot()));
+        assert_eq!(v["boot"]["currency"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn json_boot_currency_carries_structured_findings() {
+        let findings = vec![Currency::RepoOlder {
+            repo: semver::Version::new(0, 46, 0),
+        }];
+        let boot = BootSection {
+            currency: currency(findings.clone()),
+            ..fresh_boot()
+        };
+        let v = json_of(&status_with_boot(boot));
+        assert_eq!(
+            v["boot"]["currency"],
+            serde_json::to_value(&findings).unwrap()
+        );
+    }
+
+    #[test]
+    fn text_renders_currency_lines_under_the_boot_line() {
+        let report = currency(vec![Currency::CheckoutNotInstalled]);
+        let lines = report.lines();
+        let boot = BootSection {
+            currency: report,
+            ..fresh_boot()
+        };
+        let output = render_human(&status_with_boot(boot));
+        let block = format!(
+            "\nBoot\n  boot.md fresh (2 min ago) from commit a3f7b2c\n  {}\n\n",
+            lines[0]
+        );
+        assert!(output.ends_with(&block), "{output}");
     }
 
     fn no_commits() -> Vec<CommitLine> {
@@ -692,6 +765,7 @@ mod tests {
             staleness: "stale".to_string(),
             age_seconds: 3600,
             commit: "deadbee".to_string(),
+            currency: currency(vec![]),
         };
         let status = assemble_status(
             counts(1, 0, 1),
@@ -713,6 +787,7 @@ mod tests {
             staleness: "missing".to_string(),
             age_seconds: 0,
             commit: String::new(),
+            currency: currency(vec![]),
         };
         let status = assemble_status(
             counts(1, 0, 1),

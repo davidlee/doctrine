@@ -17,7 +17,7 @@ use crate::git;
 use crate::install_ownership::{
     Action, Desired, LinkSeen, Member, MemberKind, Notice, Scope, Snapshot, SpliceRefusal,
 };
-use crate::install_state::{Currency, MarkerSource, StampRead, classify, parse_stamp};
+use crate::install_state::{CurrencyReport, MarkerSource, StampRead, classify, parse_stamp};
 use crate::memory::MemoryType;
 
 /// Embedded skill plugins — everything under `plugins/`.
@@ -2560,18 +2560,10 @@ impl Baker<'_> {
 
 /// The local install marker, relative to the doctrine root. Covered by the
 /// `.doctrine/state/` gitignore entry; written by install (precedent: `BOOT_REL`).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
-)]
 pub(crate) const INSTALL_MARKER_REL: &str = ".doctrine/state/install.toml";
 
 /// The marker's shape, as far as reading needs (`harnesses` is install's own
 /// record and is ignored here).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
-)]
 #[derive(Deserialize)]
 struct InstallMarker {
     version: String,
@@ -2579,10 +2571,6 @@ struct InstallMarker {
 
 /// Read one marker file: absent when it does not exist, `Unreadable` (path +
 /// reason) when it exists but cannot be read or parsed (STD-003).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
-)]
 fn read_marker_file(path: &Path) -> StampRead {
     let unreadable = |reason: String| StampRead::Unreadable {
         path: path.to_path_buf(),
@@ -2600,10 +2588,6 @@ fn read_marker_file(path: &Path) -> StampRead {
 
 /// The git directory a `.git` file points at (PURE): its `gitdir: <p>` line,
 /// resolved against the directory holding the file.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
-)]
 fn gitfile_target(text: &str, base_dir: &Path) -> Option<PathBuf> {
     let target = text.lines().find_map(|l| l.strip_prefix("gitdir:"))?;
     Some(base_dir.join(target.trim()))
@@ -2611,10 +2595,6 @@ fn gitfile_target(text: &str, base_dir: &Path) -> Option<PathBuf> {
 
 /// `candidate` is the main worktree of the repo whose shared git dir is `common`
 /// when its `.git` is that directory, or a gitfile pointing to it.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
-)]
 fn owns_common_dir(candidate: &Path, common: &Path) -> bool {
     let dot_git = candidate.join(".git");
     let git_dir = if dot_git.is_dir() {
@@ -2637,10 +2617,6 @@ fn owns_common_dir(candidate: &Path, common: &Path) -> bool {
 /// really is the common dir. `git::primary_worktree` is deliberately not used:
 /// under a separate git dir it can name a path that is not a checkout. The
 /// doctrine root's offset inside the repo (`--show-prefix`) is carried over.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
-)]
 fn linked_main_root(root: &Path) -> Option<MarkerSource> {
     let dirs = git::git_opt(root, &["rev-parse", "--git-dir", "--git-common-dir"]).ok()??;
     let mut lines = dirs.lines();
@@ -2659,7 +2635,9 @@ fn linked_main_root(root: &Path) -> Option<MarkerSource> {
                 .flatten()
                 .map(|(_top, prefix)| prefix)
                 .unwrap_or_default();
-            MarkerSource::Main(main.join(prefix))
+            // Re-collect components: joining an empty (or `/`-terminated)
+            // prefix leaves a trailing separator the advisory would print.
+            MarkerSource::Main(main.join(prefix).components().collect())
         }
         None => MarkerSource::Unlocated,
     })
@@ -2669,10 +2647,6 @@ fn linked_main_root(root: &Path) -> Option<MarkerSource> {
 /// own `INSTALL_MARKER_REL`, else — for a linked worktree, which never receives
 /// `.doctrine/state/` — the main worktree's (read via `git-common-dir`), else
 /// absent. See [`linked_main_root`] for the layouts that cannot be located.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
-)]
 pub(crate) fn read_install_marker(root: &Path) -> (StampRead, MarkerSource) {
     let own = read_marker_file(&root.join(INSTALL_MARKER_REL));
     if own != StampRead::Absent {
@@ -2690,10 +2664,6 @@ pub(crate) fn read_install_marker(root: &Path) -> (StampRead, MarkerSource) {
 
 /// The tracked stamp: `installed-version` from `doctrine.toml`. A file that
 /// cannot be read or parsed, or a value that is not semver, is `Unreadable`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
-)]
 fn read_tracked_stamp(root: &Path) -> StampRead {
     let path = root.join(crate::config_file::DOCTRINE_TOML);
     let unreadable = |e: anyhow::Error| StampRead::Unreadable {
@@ -2713,16 +2683,19 @@ fn read_tracked_stamp(root: &Path) -> StampRead {
 
 /// Every currency finding for the project at `root` against `binary`, with
 /// where the local marker was read from (the advisory names it).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
-)]
-pub(crate) fn read_currency(
-    root: &Path,
-    binary: &semver::Version,
-) -> (Vec<Currency>, MarkerSource) {
+pub(crate) fn read_currency(root: &Path, binary: &semver::Version) -> CurrencyReport {
     let (local, source) = read_install_marker(root);
-    (classify(&read_tracked_stamp(root), &local, binary), source)
+    CurrencyReport {
+        findings: classify(&read_tracked_stamp(root), &local, binary),
+        source,
+        binary: binary.clone(),
+    }
+}
+
+/// The running binary's version, parsed once by each currency site.
+pub(crate) fn binary_version() -> anyhow::Result<semver::Version> {
+    semver::Version::parse(env!("CARGO_PKG_VERSION"))
+        .context("parsing the running doctrine version")
 }
 
 // ── Tests: convergence shell (SL-281 PHASE-04) ────────────────
@@ -5968,6 +5941,7 @@ mod tests {
 #[cfg(test)]
 mod tests_marker {
     use super::*;
+    use crate::install_state::Currency;
     use crate::worktree::test_helpers::{git, init_repo};
 
     fn v(s: &str) -> semver::Version {
@@ -6041,8 +6015,21 @@ mod tests_marker {
         let (_tmp, primary, linked) = primary_and_linked();
         assert_eq!(
             read_install_marker(&linked),
-            (StampRead::Absent, MarkerSource::Main(primary))
+            (StampRead::Absent, MarkerSource::Main(primary.clone()))
         );
+    }
+
+    /// The advisory prints the main root, so it must be byte-exact: `PathBuf`
+    /// equality ignores a trailing separator that joining an empty
+    /// `--show-prefix` would add.
+    #[test]
+    fn main_root_carries_no_trailing_separator() {
+        let (_tmp, primary, linked) = primary_and_linked();
+        let (_read, source) = read_install_marker(&linked);
+        let MarkerSource::Main(main) = source else {
+            panic!("expected the main worktree, got {source:?}");
+        };
+        assert_eq!(main.as_os_str(), primary.as_os_str());
     }
 
     #[test]
@@ -6149,9 +6136,9 @@ mod tests_marker {
         )
         .unwrap();
         write_marker(tmp.path(), &marker("0.48.0"));
-        let (findings, source) = read_currency(tmp.path(), &v("0.47.0"));
+        let report = read_currency(tmp.path(), &v("0.47.0"));
         assert_eq!(
-            findings,
+            report.findings,
             vec![
                 Currency::CheckoutNewer {
                     checkout: v("0.48.0")
@@ -6159,7 +6146,8 @@ mod tests_marker {
                 Currency::RepoOlder { repo: v("0.46.0") },
             ]
         );
-        assert_eq!(source, MarkerSource::Checkout);
+        assert_eq!(report.source, MarkerSource::Checkout);
+        assert_eq!(report.binary, v("0.47.0"));
     }
 
     #[test]
@@ -6169,7 +6157,7 @@ mod tests_marker {
         let toml_path = tmp.path().join(crate::config_file::DOCTRINE_TOML);
         fs::write(&toml_path, "[install]\ninstalled-version = \"x\"\n").unwrap();
         write_marker(tmp.path(), &marker("0.47.0"));
-        let (findings, _source) = read_currency(tmp.path(), &v("0.47.0"));
+        let findings = read_currency(tmp.path(), &v("0.47.0")).findings;
         assert!(
             matches!(findings.as_slice(), [Currency::Unreadable { path, .. }] if *path == toml_path),
             "{findings:?}"

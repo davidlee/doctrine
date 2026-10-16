@@ -10,14 +10,10 @@
 //! caller prints for a [`Currency`] finding is built here, so the wording has one
 //! owner and one test.
 
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-282 PHASE-02/03 wire the call sites")
-)]
-
 use std::path::{Path, PathBuf};
 
 use semver::Version;
+use serde::Serialize;
 
 /// What one stamp store yielded. `Unreadable` is never folded into `Absent`
 /// (STD-003): a stamp that exists but cannot be understood is reported.
@@ -29,8 +25,10 @@ pub(crate) enum StampRead {
 }
 
 /// One way the install disagrees with the running binary. No `Current` variant:
-/// an empty finding list means current.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// an empty finding list means current. Serialised tagged by `kind`, carrying
+/// its versions or path.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum Currency {
     /// The local marker is absent: doctrine was never installed in this checkout.
     CheckoutNotInstalled,
@@ -64,6 +62,29 @@ pub(crate) enum MarkerSource {
     Main(PathBuf),
     /// A linked worktree whose main worktree could not be located.
     Unlocated,
+}
+
+/// Every finding for one project, with what its advisories need: where the
+/// local marker was read from and the running binary's version. Serialises as
+/// the bare findings array (empty when current).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub(crate) struct CurrencyReport {
+    pub(crate) findings: Vec<Currency>,
+    #[serde(skip)]
+    pub(crate) source: MarkerSource,
+    #[serde(skip)]
+    pub(crate) binary: Version,
+}
+
+impl CurrencyReport {
+    /// One advisory line per finding, in order; empty when current.
+    pub(crate) fn lines(&self) -> Vec<String> {
+        self.findings
+            .iter()
+            .map(|c| advisory(c, &self.binary, &self.source))
+            .collect()
+    }
 }
 
 /// Parse a stamp's raw text (PURE). Invalid semver is `Unreadable`, never `Absent`.
@@ -349,6 +370,74 @@ mod tests {
         assert_eq!(
             line(&Currency::CheckoutNotInstalled, &MarkerSource::Unlocated),
             "doctrine isn't installed in this checkout: run `doctrine install` (main worktree not located)"
+        );
+    }
+
+    fn report(findings: Vec<Currency>) -> CurrencyReport {
+        CurrencyReport {
+            findings,
+            source: MarkerSource::Checkout,
+            binary: binary(),
+        }
+    }
+
+    #[test]
+    fn report_lines_are_empty_when_current() {
+        assert!(report(vec![]).lines().is_empty());
+    }
+
+    #[test]
+    fn report_lines_are_one_advisory_per_finding_in_order() {
+        let findings = vec![checkout_older(), repo_newer()];
+        let want: Vec<String> = findings
+            .iter()
+            .map(|f| line(f, &MarkerSource::Checkout))
+            .collect();
+        assert_eq!(report(findings).lines(), want);
+    }
+
+    /// The JSON shape is the bare findings array, each tagged by `kind`; marker
+    /// source and binary stay out (design: "kind plus versions or path").
+    #[test]
+    fn report_serialises_as_kind_tagged_findings() {
+        let rows = [
+            (
+                Currency::CheckoutNotInstalled,
+                serde_json::json!({"kind": "checkout_not_installed"}),
+            ),
+            (
+                checkout_older(),
+                serde_json::json!({"kind": "checkout_older", "checkout": "0.46.0"}),
+            ),
+            (
+                checkout_newer(),
+                serde_json::json!({"kind": "checkout_newer", "checkout": "0.48.0"}),
+            ),
+            (
+                Currency::RepoUnstamped,
+                serde_json::json!({"kind": "repo_unstamped"}),
+            ),
+            (
+                repo_older(),
+                serde_json::json!({"kind": "repo_older", "repo": "0.46.0"}),
+            ),
+            (
+                repo_newer(),
+                serde_json::json!({"kind": "repo_newer", "repo": "0.48.0"}),
+            ),
+            (
+                unreadable_finding_of("a/b.toml"),
+                serde_json::json!({"kind": "unreadable", "path": "a/b.toml", "reason": "bad"}),
+            ),
+        ];
+        let (findings, want): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
+        assert_eq!(
+            serde_json::to_value(report(findings)).unwrap(),
+            serde_json::Value::Array(want)
+        );
+        assert_eq!(
+            serde_json::to_value(report(vec![])).unwrap(),
+            serde_json::json!([])
         );
     }
 
