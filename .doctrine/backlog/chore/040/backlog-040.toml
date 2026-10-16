@@ -5,10 +5,10 @@ id = 40
 slug = "repoint-pi-dispatch-worker-symlink-to-pi-not-codex"
 title = "Repoint pi dispatch-worker symlink to pi/, not codex/"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-06"
-updated = "2026-07-06"
+updated = "2026-10-16"
 tags = ["area:agents", "area:dispatch", "area:governance"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

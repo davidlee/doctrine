@@ -69,3 +69,10 @@ defect already fails — with the second as a cheap companion.
 - `RV-356` `F-1` — the same class of defect, one tier up, in the authored corpus.
 - `ISS-352` — the mirror-image gap: forks never *gain* the derived tier. Together
   these two say the derived tier has no lifecycle at either end.
+
+## Resolution (SL-281, 2026-10-16)
+
+Fixed for doctrine-linked harnesses: project installs converge the canon roots
+and prune retired skills/defs with their links (SL-281 PHASE-04). Not covered:
+the npx-written `.agents/skills` tree (universal / skills_via harnesses), which
+install neither ignores nor prunes — owned by IMP-406 (RV-420 F-6).
