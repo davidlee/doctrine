@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14562-f105-7dc1-a1fb-77ef4e0a8954"
+recorded_at = "2026-10-16T15:44:34.56598476Z"
+kind = "friction"
+summary = "retrieve-memory: doctrine memory retrieve prints ~12 metadata lines per memory before the body"
+detail = "SL-282 PHASE-03 planner: scope/anchor/body-guard metadata dominated planning token cost for ~6 useful facts across three retrievals."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

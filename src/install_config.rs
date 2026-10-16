@@ -109,10 +109,6 @@ pub(crate) const INSTALLED_VERSION_KEY: &str = "installed-version";
 /// # Errors
 ///
 /// Fails if `text` is not valid TOML, or `install` is not a table.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-282 PHASE-03 wires the install stamp write")
-)]
 pub(crate) fn write_installed_version(text: &str, version: &str) -> anyhow::Result<String> {
     use toml_edit::{DocumentMut, Item, Table, Value};
 

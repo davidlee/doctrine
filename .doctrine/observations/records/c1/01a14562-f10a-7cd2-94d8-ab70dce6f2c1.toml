@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14562-f10a-7cd2-94d8-ab70dce6f2c1"
+recorded_at = "2026-10-16T15:44:34.570305578Z"
+kind = "friction"
+summary = "phase-plan: doctrine slice phases prints only 'Phases up to date.' with no per-phase status"
+detail = "SL-282 PHASE-03 planner had to check EN-1 (prior phases complete) from git log instead."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

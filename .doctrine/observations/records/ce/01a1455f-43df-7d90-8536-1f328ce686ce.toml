@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1455f-43df-7d90-8536-1f328ce686ce"
+recorded_at = "2026-10-16T15:40:33.631279872Z"
+kind = "friction"
+summary = "execute: PathBuf equality ignores trailing separators, masking a printed-path defect"
+detail = "SL-282 PHASE-01 unit tests compared PathBuf values; Main('<primary>/') passed while the advisory printed a trailing slash. Caught only by PHASE-02 e2e string assertion. Printed paths need as_os_str or end-to-end string assertions."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

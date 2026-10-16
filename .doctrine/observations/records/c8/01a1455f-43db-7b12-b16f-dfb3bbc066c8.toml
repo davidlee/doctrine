@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1455f-43db-7b12-b16f-dfb3bbc066c8"
+recorded_at = "2026-10-16T15:40:33.627766182Z"
+kind = "friction"
+summary = "execute: doctrine check quick/gate bury the result under ~67 lines of unrelated corpus warnings"
+detail = "SL-282 PHASE-02 worker: lib-citation and coord-hook warnings precede the verdict on every run; result must be found by grep or exit code."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

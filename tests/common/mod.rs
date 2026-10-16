@@ -26,6 +26,36 @@ pub(crate) use kind_dirs::{REVIEW_DIR, SLICE_DIR};
 /// integration tests can't import from a binary-only crate).
 pub(crate) const DOCTRINE_TOML: &str = ".doctrine/doctrine.toml";
 
+/// The local install marker, relative to the project root — mirrors
+/// `install::INSTALL_MARKER_REL` (SL-282).
+pub(crate) const INSTALL_MARKER: &str = ".doctrine/state/install.toml";
+
+/// The project's `doctrine.toml`, which carries the tracked install stamp.
+pub(crate) fn doctrine_toml(root: &std::path::Path) -> std::path::PathBuf {
+    root.join(DOCTRINE_TOML)
+}
+
+/// Plant the local marker install writes, recording `version` for claude.
+pub(crate) fn write_marker(root: &std::path::Path, version: &str) {
+    let path = root.join(INSTALL_MARKER);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        path,
+        format!("version = \"{version}\"\nharnesses = [\"claude\"]\n"),
+    )
+    .unwrap();
+}
+
+/// Plant the tracked stamp: a `doctrine.toml` carrying only
+/// `[install] installed-version`.
+pub(crate) fn write_stamp(root: &std::path::Path, version: &str) {
+    std::fs::write(
+        doctrine_toml(root),
+        format!("[install]\ninstalled-version = \"{version}\"\n"),
+    )
+    .unwrap();
+}
+
 /// The digest convention the shell uses (`crate::git::sha256`), mirrored so a
 /// test can declare what a content binding must match. Byte-identical to it,
 /// and to `contentset`'s own copy — the shape a leaf owns directly rather than

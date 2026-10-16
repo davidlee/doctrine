@@ -22,7 +22,7 @@ use serde_json::{Value, json};
 
 mod common;
 
-use common::{doctrine_cmd, git, init_repo, linked_fork};
+use common::{doctrine_cmd, doctrine_toml, git, init_repo, linked_fork, write_marker, write_stamp};
 
 /// The running binary's version: what a current install records.
 const B: &str = env!("CARGO_PKG_VERSION");
@@ -32,30 +32,6 @@ const NEWER: &str = "999.0.0";
 const NOT_INSTALLED: &str = "doctrine isn't installed in this checkout: run `doctrine install`";
 
 // ── fixture writers ─────────────────────────────────────────────────────────
-
-/// The local marker install writes (`.doctrine/state/install.toml`).
-fn write_marker(root: &Path, version: &str) {
-    let state = root.join(".doctrine/state");
-    fs::create_dir_all(&state).unwrap();
-    fs::write(
-        state.join("install.toml"),
-        format!("version = \"{version}\"\nharnesses = [\"claude\"]\n"),
-    )
-    .unwrap();
-}
-
-fn doctrine_toml(root: &Path) -> PathBuf {
-    root.join(".doctrine/doctrine.toml")
-}
-
-/// The tracked stamp: `installed-version` in `doctrine.toml`.
-fn write_stamp(root: &Path, version: &str) {
-    fs::write(
-        doctrine_toml(root),
-        format!("[install]\ninstalled-version = \"{version}\"\n"),
-    )
-    .unwrap();
-}
 
 fn make_current(root: &Path) {
     write_marker(root, B);

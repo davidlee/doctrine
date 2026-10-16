@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
 use rust_embed::RustEmbed;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::git;
 use crate::install_ownership::{
@@ -192,10 +192,6 @@ pub(crate) struct InstallArgs<'a> {
     pub(crate) agents: &'a [String],
     pub(crate) skills: &'a [String],
     pub(crate) domains: &'a [String],
-    #[expect(
-        dead_code,
-        reason = "wired in PHASE-03 (--only-memory subset derivation)"
-    )]
     pub(crate) only_memory: bool,
     pub(crate) global: bool,
     pub(crate) dry_run: bool,
@@ -210,16 +206,17 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     let manifest = load_manifest()?;
     let project_root =
         detect_project_root(project_path, &manifest).context("Could not find project root")?;
-    let plan = build_plan(&manifest, &project_root);
+    let plan = InstallPlan::build(&manifest, &project_root, args);
+    let root = plan.base.project_root.as_path();
 
-    print_plan(&plan)?;
+    print_plan(&plan.base)?;
 
     // ── Stage 1: base install ──
     if args.dry_run {
-        print_forward_summary(&project_root, args, &manifest.harness)?;
-        let planned = print_ownership_plan(&project_root, args, &manifest)?;
-        if !args.global {
-            write_gitignore_block(&project_root, &manifest, &planned, true)?;
+        print_forward_summary(&plan, args, &manifest.harness)?;
+        let planned = print_ownership_plan(&plan, args, &manifest)?;
+        if plan.write_gitignore {
+            write_gitignore_block(root, &manifest, &planned, true)?;
         }
         return Ok(());
     }
@@ -229,18 +226,49 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
         return Ok(());
     }
 
-    execute_plan(&plan)?;
-    seed_authoring_memories(&project_root, &manifest)?;
+    execute_plan(&plan.base)?;
+    seed_authoring_memories(root, &manifest)?;
     stdout_line("Done.")?;
 
     // ── Stage 2: forward steps ──
     let exec = crate::boot::resolve_exec()?;
-    run_forward_steps(&project_root, &exec, args, &manifest)?;
+    let mut outcomes = run_forward_steps(&plan, &exec, args, &manifest)?;
     // Last: the block reflects what is now on disk, whatever the steps did.
-    if !args.global {
-        write_gitignore_block(&project_root, &manifest, &[], false)?;
+    if plan.write_gitignore {
+        let gitignore = write_gitignore_block(root, &manifest, &[], false)?;
+        outcomes.push((Leg::Gitignore, gitignore));
     }
-    Ok(())
+    record_version(&plan, &outcomes)
+}
+
+/// What `doctrine install` will do, composed from what the runner already
+/// computes (SL-282 DEC-379) — resolved once, read by every printer and leg.
+struct InstallPlan {
+    /// The base steps (`build_plan`).
+    base: Plan,
+    /// The harness set, as registry names (`resolve_install_harnesses`).
+    harnesses: Vec<String>,
+    /// The boot adapters the set wires.
+    boot: Vec<crate::boot::Harness>,
+    /// The managed `.gitignore` block is written (not under `--global`).
+    write_gitignore: bool,
+    /// A full project install: the only kind that records its version.
+    is_project_install: bool,
+}
+
+impl InstallPlan {
+    fn build(manifest: &Manifest, project_root: &Path, args: &InstallArgs<'_>) -> Self {
+        let base = build_plan(manifest, project_root);
+        let harnesses = resolve_install_harnesses(args.agents, project_root, &manifest.harness);
+        let boot = boot_harnesses(&harnesses, project_root, &manifest.harness);
+        Self {
+            base,
+            harnesses,
+            boot,
+            write_gitignore: !args.global,
+            is_project_install: !args.global && !args.only_memory,
+        }
+    }
 }
 
 /// The post-install next-step hint (SL-018 OQ-C): point the user at the standalone
@@ -311,39 +339,36 @@ fn boot_names(agents: &[String], registry: &Registry) -> Vec<String> {
     names
 }
 
-/// The boot harnesses this install wires. An explicit `--agent` set is a
-/// DIRECTIVE — honoured even in a project with no harness directory yet, and
-/// honoured when it implies none. With no flags, the registry's detect dirs
-/// govern, unioned with `boot::resolve_harnesses`' detection for its one extra
-/// rule (a real, non-alias `AGENTS.md` implies codex). Both paths map names to
-/// adapters through the registry (SL-281).
-///
-/// SL-250 PHASE-04: this used to be `resolve_harnesses(&[], root)`, which
-/// discarded the `--agent` the operator had just typed. In a fresh project
-/// `.claude/` does not exist when the leg is resolved (framework convergence creates
-/// it later), so `doctrine install --agent claude` wired no @-import and no
-/// hooks and reported only "no harness directories detected — skipped". That is
-/// the silent-inertness failure class this slice exists to end, one layer above
-/// the one it was chartered to fix.
-fn install_harnesses(
-    agents: &[String],
-    root: &Path,
-    registry: &Registry,
-) -> Vec<crate::boot::Harness> {
-    let names = boot_names(&detect_agents(agents, root, registry), registry);
-    let mut harnesses = if names.is_empty() {
-        Vec::new()
-    } else {
-        crate::boot::resolve_harnesses(&names, root).unwrap_or_default()
-    };
-    if agents.is_empty() {
-        for h in crate::boot::resolve_harnesses(&[], root).unwrap_or_default() {
-            if !harnesses.contains(&h) {
-                harnesses.push(h);
-            }
-        }
+/// The harness set this install covers, as registry names (SL-282 DEC-381) —
+/// the one resolver every leg consumes. An explicit `--agent` set is a
+/// DIRECTIVE: exactly those names, honoured even in a project with no harness
+/// directory yet (SL-250 PHASE-04: dropping it left a fresh `--agent claude`
+/// install with no @-import and no hooks). With no flags, each registry
+/// harness whose `detect` path exists, plus codex when `AGENTS.md` is a codex
+/// surface (`boot::agents_md_implies_codex`, the rule `boot install` uses).
+fn resolve_install_harnesses(explicit: &[String], root: &Path, registry: &Registry) -> Vec<String> {
+    if !explicit.is_empty() {
+        return explicit.to_vec();
     }
-    harnesses
+    let detected = |h: &HarnessSection| h.detect.as_ref().is_some_and(|d| root.join(d).exists());
+    let claude = crate::boot::harness_label(&crate::boot::Harness::Claude);
+    let codex = crate::boot::harness_label(&crate::boot::Harness::Codex);
+    let codex_by_agents_md =
+        crate::boot::agents_md_implies_codex(root, registry.get(claude).is_some_and(detected));
+    registry
+        .iter()
+        .filter(|(name, h)| detected(h) || (codex_by_agents_md && name.as_str() == codex))
+        .map(|(name, _)| name.clone())
+        .collect()
+}
+
+/// The boot adapters a harness set wires, through the registry's `boot` field.
+fn boot_harnesses(set: &[String], root: &Path, registry: &Registry) -> Vec<crate::boot::Harness> {
+    let names = boot_names(set, registry);
+    if names.is_empty() {
+        return Vec::new();
+    }
+    crate::boot::resolve_harnesses(&names, root).unwrap_or_default()
 }
 
 /// Where non-linked skills go: each registered harness's `skills_via` target,
@@ -446,12 +471,12 @@ fn report_unregistered(names: &[String], out: &mut dyn Write) -> io::Result<()> 
 
 /// Print the forward-step summary (dry-run or live).
 fn print_forward_summary(
-    root: &Path,
+    plan: &InstallPlan,
     args: &InstallArgs<'_>,
     registry: &Registry,
 ) -> anyhow::Result<()> {
-    let agents = detect_agents(args.agents, root, registry);
-    let harnesses = install_harnesses(args.agents, root, registry);
+    let agents = &plan.harnesses;
+    let harnesses = &plan.boot;
 
     let mut stdout = io::stdout();
     if args.dry_run {
@@ -493,7 +518,7 @@ fn print_forward_summary(
             "skills"
         )?;
     } else {
-        for agent in &agents {
+        for agent in agents {
             writeln!(
                 stdout,
                 "  {agent:<12} install {}",
@@ -545,21 +570,20 @@ fn with_wanted<R>(
 /// `--dry-run`: survey the disk and print the ownership plan, returning its
 /// actions. Mutates nothing.
 fn print_ownership_plan(
-    root: &Path,
+    plan: &InstallPlan,
     args: &InstallArgs<'_>,
     manifest: &Manifest,
 ) -> anyhow::Result<Vec<Action>> {
-    let agents = detect_agents(args.agents, root, &manifest.harness);
-    if agents.is_empty() {
+    if plan.harnesses.is_empty() {
         return Ok(Vec::new());
     }
     let catalog = discover()?;
     let selected = select_for_install(&catalog, args.skills, args.domains)?;
     with_wanted(
-        root,
+        &plan.base.project_root,
         args,
         manifest,
-        &agents,
+        &plan.harnesses,
         &catalog,
         &selected,
         |cx, wanted| {
@@ -577,22 +601,27 @@ fn print_ownership_plan(
 
 /// Run the forward steps: memory sync → boot wire → skills per agent.
 /// Each step is individually prompted (unless `--yes`). Partial failure
-/// is non-fatal — errors are printed and the next step proceeds.
+/// is non-fatal — errors are printed, the next step proceeds, and each leg's
+/// outcome is returned (SL-282: a caught failure must block the stamps).
 fn run_forward_steps(
-    root: &Path,
+    plan: &InstallPlan,
     exec: &Path,
     args: &InstallArgs<'_>,
     manifest: &Manifest,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<(Leg, LegOutcome)>> {
+    let root = plan.base.project_root.as_path();
     let registry = &manifest.harness;
-    let agents = detect_agents(args.agents, root, registry);
-    let harnesses = install_harnesses(args.agents, root, registry);
+    let agents = &plan.harnesses;
+    let harnesses = &plan.boot;
+    let mut outcomes: Vec<(Leg, LegOutcome)> = Vec::new();
 
-    print_forward_summary(root, args, registry)?;
+    print_forward_summary(plan, args, registry)?;
 
     let mut all_yes = false;
 
-    // 1. Memory sync
+    // 1. Memory sync — the shipped corpus lands under the ignore contract, so
+    // the leg reports no touched paths.
+    let mut memory = LegOutcome::done();
     if prompt_step(
         "Materialize shipped memory corpus? [y/N/a]",
         args.yes,
@@ -612,11 +641,15 @@ fn run_forward_steps(
             }
             Err(e) => {
                 writeln!(io::stdout(), "  memory sync failed: {e:#}")?;
+                memory = LegOutcome::failed(&e);
             }
         }
     }
+    outcomes.push((Leg::MemorySync, memory));
 
-    // 2. Boot wire — skipped when no harnesses detected.
+    // 2. Boot wire — skipped when no harnesses detected. Any harness whose
+    // refresh failed fails the leg (RV-421 F-14).
+    let mut boot = LegOutcome::done();
     if !harnesses.is_empty()
         && prompt_step(
             "Wire @-import + session hooks for detected harnesses? [y/N/a]",
@@ -624,10 +657,18 @@ fn run_forward_steps(
             &mut all_yes,
         )?
     {
-        if let Err(e) = crate::boot::wire(root, exec, &harnesses, false) {
-            writeln!(io::stdout(), "  boot wire failed: {e:#}")?;
-        }
+        boot = match crate::boot::apply_wire(root, exec, harnesses, false) {
+            Ok(report) => match report.touched() {
+                Ok(touched) => LegOutcome::Done(touched),
+                Err(failed) => LegOutcome::Failed(failed),
+            },
+            Err(e) => {
+                writeln!(io::stdout(), "  boot wire failed: {e:#}")?;
+                LegOutcome::failed(&e)
+            }
+        };
     }
+    outcomes.push((Leg::BootWiring, boot));
 
     // Forward-step 4 (nominal label): project the exposed-slot starter twins +
     // self-`replaces` sidecars onto disk. Placement is EARLY, not last (design F5):
@@ -636,6 +677,7 @@ fn run_forward_steps(
     // already be on disk when it renders, or install is non-idempotent (the ISS-206
     // double-emit). Establish the disk corpus (incl. user-override sidecars) here,
     // before anything renders from it. Non-fatal on error (matches sibling steps).
+    let mut starters = LegOutcome::done();
     if prompt_step(
         "Project exposed hymn starters? [y/N/a]",
         args.yes,
@@ -648,33 +690,44 @@ fn run_forward_steps(
                 match project_starters(&disk, &embedded, &seal, &expose.0, args.dry_run) {
                     Ok(written) => {
                         writeln!(io::stdout(), "  projected {} hymn file(s)", written.len())?;
+                        starters = LegOutcome::Done(
+                            written
+                                .iter()
+                                .map(|p| Touched::under(root, p, Change::Created))
+                                .collect(),
+                        );
                     }
                     Err(e) => {
                         writeln!(io::stdout(), "  hymn projection failed: {e:#}")?;
+                        starters = LegOutcome::failed(&e);
                     }
                 }
             }
             (Err(e), _) | (_, Err(e)) => {
                 writeln!(io::stdout(), "  hymn projection failed: {e:#}")?;
+                starters = LegOutcome::failed(&e);
             }
         }
     }
+    outcomes.push((Leg::HymnStarters, starters));
 
     // 3. Framework artefacts per confirmed harness, then npx delegation. The
     // answers form this run's selection; one convergence covers every
     // confirmed harness (SL-281 D3) — none confirmed, nothing converges.
+    // Convergence reports per action, not per path: no touched paths.
     let catalog = discover()?;
     let selected = select_for_install(&catalog, args.skills, args.domains)?;
     let (runner_name, runner) = resolve_runner();
     let repo = &crate::dtoml::load_doctrine_toml(root)?.install.repo;
 
     let mut confirmed: Vec<String> = Vec::new();
-    for agent in &agents {
+    for agent in agents {
         let question = install_question(agent, registry, install_scope(args.global));
         if prompt_step(&question, args.yes, &mut all_yes)? {
             confirmed.push(agent.clone());
         }
     }
+    let mut convergence = LegOutcome::done();
     if !confirmed.is_empty() {
         let mut out = io::stdout();
         let result = with_wanted(
@@ -688,14 +741,17 @@ fn run_forward_steps(
         );
         if let Err(e) = result {
             writeln!(out, "  framework install failed: {e:#}")?;
+            convergence = LegOutcome::failed(&e);
         }
     }
+    outcomes.push((Leg::Convergence, convergence));
 
     // Batch-delegate every confirmed harness without a doctrine `skills` route
     // to a single npx invocation, one de-duplicated target per skills route
-    // (pi + codex → `universal` once).
+    // (pi + codex → `universal` once). npx reports no paths.
     let delegate = delegate_targets(&confirmed, registry);
     report_unregistered(&delegate.unregistered, &mut io::stdout())?;
+    let mut skills = LegOutcome::done();
     if !delegate.targets.is_empty() {
         let mut out = io::stdout();
         if let Err(e) = install_for_other(
@@ -710,10 +766,205 @@ fn run_forward_steps(
             &mut out,
         ) {
             writeln!(io::stdout(), "  non-Claude skills install failed: {e:#}")?;
+            skills = LegOutcome::failed(&e);
         }
     }
+    outcomes.push((Leg::Skills, skills));
 
+    Ok(outcomes)
+}
+
+// ---------------------------------------------------------------------------
+// Leg outcomes and the version stamps (SL-282 PHASE-03)
+// ---------------------------------------------------------------------------
+
+/// How a file was touched by an install leg.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Change {
+    Created,
+    Changed,
+    #[expect(dead_code, reason = "SL-282 PHASE-04 removes legacy starters")]
+    Removed,
+}
+
+/// One file an install leg wrote, relative to the project root when under it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Touched {
+    pub(crate) path: PathBuf,
+    pub(crate) change: Change,
+}
+
+impl Touched {
+    pub(crate) const fn new(path: PathBuf, change: Change) -> Self {
+        Self { path, change }
+    }
+
+    /// `path` made relative to `root` (as given, or canonical) when under it.
+    pub(crate) fn under(root: &Path, path: &Path, change: Change) -> Self {
+        let canonical = fs::canonicalize(root).ok();
+        let rel = path
+            .strip_prefix(root)
+            .ok()
+            .or_else(|| canonical.as_deref().and_then(|c| path.strip_prefix(c).ok()))
+            .unwrap_or(path);
+        Self::new(rel.to_path_buf(), change)
+    }
+}
+
+/// What one install leg came to. Nothing to do, or deliberately skipped, is
+/// `Done` with no touched paths.
+#[derive(Debug, PartialEq, Eq)]
+enum LegOutcome {
+    Done(Vec<Touched>),
+    /// The leg declined to write (e.g. malformed managed-block markers).
+    Refused(String),
+    /// The leg errored; the error was printed.
+    Failed(String),
+}
+
+impl LegOutcome {
+    const fn done() -> Self {
+        Self::Done(Vec::new())
+    }
+
+    fn failed(e: &anyhow::Error) -> Self {
+        Self::Failed(format!("{e:#}"))
+    }
+}
+
+/// The install legs, in run order. `name` is the label `install incomplete`
+/// prints.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Leg {
+    MemorySync,
+    BootWiring,
+    HymnStarters,
+    Convergence,
+    Skills,
+    Gitignore,
+    VersionStamp,
+}
+
+impl Leg {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::MemorySync => "memory sync",
+            Self::BootWiring => "boot wiring",
+            Self::HymnStarters => "hymn starters",
+            Self::Convergence => "convergence",
+            Self::Skills => "skills",
+            Self::Gitignore => "gitignore",
+            Self::VersionStamp => "version stamp",
+        }
+    }
+}
+
+/// PURE. The legs that did not finish (`Refused` or `Failed`), in run order.
+fn incomplete_legs(outcomes: &[(Leg, LegOutcome)]) -> Vec<Leg> {
+    outcomes
+        .iter()
+        .filter(|(_, o)| !matches!(o, LegOutcome::Done(_)))
+        .map(|(leg, _)| *leg)
+        .collect()
+}
+
+/// PURE. Every path the legs touched, in run order.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-282 PHASE-05 renders touched paths in the commit hint"
+    )
+)]
+fn touched(outcomes: &[(Leg, LegOutcome)]) -> Vec<&Touched> {
+    outcomes
+        .iter()
+        .flat_map(|(_, o)| match o {
+            LegOutcome::Done(t) => t.as_slice(),
+            LegOutcome::Refused(_) | LegOutcome::Failed(_) => &[],
+        })
+        .collect()
+}
+
+/// Whether this install records its version.
+#[derive(Debug, PartialEq, Eq)]
+enum StampDecision {
+    /// Not a project install (`--global`, `--only-memory`): no stamps, no line.
+    Skip,
+    /// Every leg is `Done`: write both stamps.
+    Write,
+    /// These legs did not finish: write neither, say so.
+    Incomplete(Vec<Leg>),
+}
+
+/// PURE. Stamps are the last step and recorded only when every leg is `Done`.
+fn stamp_decision(outcomes: &[(Leg, LegOutcome)], is_project_install: bool) -> StampDecision {
+    if !is_project_install {
+        return StampDecision::Skip;
+    }
+    let incomplete = incomplete_legs(outcomes);
+    if incomplete.is_empty() {
+        StampDecision::Write
+    } else {
+        StampDecision::Incomplete(incomplete)
+    }
+}
+
+/// The line an incomplete install prints instead of recording its version.
+fn incomplete_line(legs: &[Leg]) -> String {
+    let names: Vec<&str> = legs.iter().map(|l| l.name()).collect();
+    format!(
+        "install incomplete: {}; version not recorded",
+        names.join(", ")
+    )
+}
+
+/// The last step: record the binary's version in both stamps when every leg
+/// finished, else say which legs did not and record nothing.
+fn record_version(plan: &InstallPlan, outcomes: &[(Leg, LegOutcome)]) -> anyhow::Result<()> {
+    let legs = match stamp_decision(outcomes, plan.is_project_install) {
+        StampDecision::Skip => return Ok(()),
+        StampDecision::Write => {
+            let binary = binary_version()?;
+            match write_stamps(&plan.base.project_root, &binary, &plan.harnesses) {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    writeln!(io::stdout(), "  version stamp failed: {e:#}")?;
+                    vec![Leg::VersionStamp]
+                }
+            }
+        }
+        StampDecision::Incomplete(legs) => legs,
+    };
+    writeln!(io::stdout(), "\n{}", incomplete_line(&legs))?;
     Ok(())
+}
+
+/// Write the tracked stamp (`doctrine.toml` `installed-version`, only when its
+/// bytes change) and the local marker. Both texts are computed first, so a
+/// `doctrine.toml` that cannot be read or edited writes neither stamp and is
+/// never overwritten.
+fn write_stamps(root: &Path, binary: &semver::Version, harnesses: &[String]) -> anyhow::Result<()> {
+    let version = binary.to_string();
+    let tracked_path = root.join(crate::config_file::DOCTRINE_TOML);
+    let tracked = crate::config_file::read_doctrine_toml_text(root)?;
+    let current = tracked.as_deref().unwrap_or_default();
+    let stamped = crate::install_config::write_installed_version(current, &version)
+        .with_context(|| format!("Failed to stamp {}", tracked_path.display()))?;
+    let marker = toml::to_string(&InstallMarker {
+        version,
+        harnesses: harnesses.to_vec(),
+    })?;
+
+    if tracked.as_deref() != Some(stamped.as_str()) {
+        crate::fsutil::write_atomic(&tracked_path, stamped.as_bytes())?;
+    }
+    let marker_path = root.join(INSTALL_MARKER_REL);
+    if let Some(parent) = marker_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create {}", parent.display()))?;
+    }
+    crate::fsutil::write_atomic(&marker_path, marker.as_bytes())
 }
 
 // ---------------------------------------------------------------------------
@@ -1367,42 +1618,59 @@ fn gitignore_block(
 
 /// Splice the managed block into the project `.gitignore` (or, under
 /// `dry_run`, print it and write nothing). A malformed file is left untouched
-/// and reported — the install still succeeds (D2).
+/// and reported — the install still exits 0 (D2), but the leg is `Refused`, so
+/// the version is not recorded (RV-421 F-14).
 fn write_gitignore_block(
     root: &Path,
     manifest: &Manifest,
     planned: &[Action],
     dry_run: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<LegOutcome> {
     let block = gitignore_block(root, manifest, planned)?;
     let path = root.join(".gitignore");
     let existing = match fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
+        Ok(text) => Some(text),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
         Err(e) => return Err(e).with_context(|| format!("Failed to read {}", path.display())),
     };
     let mut out = io::stdout();
-    match crate::install_ownership::splice_block(&existing, &block) {
+    let outcome = match crate::install_ownership::splice_block(
+        existing.as_deref().unwrap_or(""),
+        &block,
+    ) {
         Ok(_) if dry_run => {
             writeln!(out, "\nGitignore block (not written under --dry-run):")?;
             for line in &block {
                 writeln!(out, "  {line}")?;
             }
+            LegOutcome::done()
         }
         Ok(text) => {
             crate::fsutil::write_atomic(&path, text.as_bytes())?;
             let rest = format!(".gitignore (managed block, {} lines)", block.len());
             writeln!(out, "\n{}", row("gitignore", &rest))?;
+            let change = match &existing {
+                None => Some(Change::Created),
+                Some(old) if *old != text => Some(Change::Changed),
+                Some(_) => None,
+            };
+            LegOutcome::Done(
+                change
+                    .map(|c| Touched::under(root, &path, c))
+                    .into_iter()
+                    .collect(),
+            )
         }
         Err(SpliceRefusal::Malformed { starts, ends }) => {
             let rest = format!(
                 ".gitignore left untouched: found {starts} start / {ends} end managed-block markers (expected one of each, or none)"
             );
             writeln!(out, "\n{}", row("gitignore", &rest))?;
+            LegOutcome::Refused(rest)
         }
-    }
+    };
     writeln!(out, "{NPX_SKILLS_NOTE}")?;
-    Ok(())
+    Ok(outcome)
 }
 
 // ---------------------------------------------------------------------------
@@ -1455,22 +1723,6 @@ pub(crate) fn prompt_confirm(prompt: &str) -> anyhow::Result<bool> {
 // ---------------------------------------------------------------------------
 // Forward-step helpers (PHASE-02)
 // ---------------------------------------------------------------------------
-
-/// Detect target agents for the forward-step summary. A relaxed resolver
-/// distinct from `skills::resolve_agents()`: returns an empty `Vec` instead
-/// of erroring when no `.claude/` dir and no `--agent` flags — the
-/// consolidated install path treats "no agents" as "skip skills steps"
-/// rather than a hard error.
-fn detect_agents(agents: &[String], root: &Path, registry: &Registry) -> Vec<String> {
-    if !agents.is_empty() {
-        return agents.to_vec();
-    }
-    registry
-        .iter()
-        .filter(|(_, h)| h.detect.as_ref().is_some_and(|d| root.join(d).exists()))
-        .map(|(name, _)| name.clone())
-        .collect()
-}
 
 /// Prompt a single forward step. Returns `true` if the user wants to
 /// proceed. `all_yes` is set to `true` when the user picks "a" (yes to
@@ -2562,11 +2814,13 @@ impl Baker<'_> {
 /// `.doctrine/state/` gitignore entry; written by install (precedent: `BOOT_REL`).
 pub(crate) const INSTALL_MARKER_REL: &str = ".doctrine/state/install.toml";
 
-/// The marker's shape, as far as reading needs (`harnesses` is install's own
-/// record and is ignored here).
-#[derive(Deserialize)]
+/// The marker's shape: the version install recorded and the harness set it
+/// covered (registry names). Reading needs only `version`.
+#[derive(Serialize, Deserialize)]
 struct InstallMarker {
     version: String,
+    #[serde(default)]
+    harnesses: Vec<String>,
 }
 
 /// Read one marker file: absent when it does not exist, `Unreadable` (path +
@@ -5529,10 +5783,10 @@ mod tests {
 
     /// VT-5 / NF-004 — the minimal-projection flip is orthogonal to harness adapter
     /// installation: a base-only projection installs no agent defs in leg 2, yet
-    /// `detect_agents` still resolves a present harness dir, so the forward-step
+    /// `resolve_install_harnesses` still resolves a present harness dir, so the forward-step
     /// adapter leg still fires after the flip.
     #[test]
-    fn detect_agents_is_independent_of_the_base_projection_flip() {
+    fn resolve_install_harnesses_is_independent_of_the_base_projection_flip() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".claude")).unwrap();
         // A base-only install projects just the three backings (no agent defs)…
@@ -5540,7 +5794,7 @@ mod tests {
         execute_plan(&build_plan(&manifest, dir.path())).unwrap();
         // …yet the harness is still detected, so the adapter leg fires.
         assert_eq!(
-            detect_agents(&[], dir.path(), &registry()),
+            resolve_install_harnesses(&[], dir.path(), &registry()),
             vec!["claude".to_string()],
             "a detected harness must still resolve for adapter install after the flip"
         );
@@ -5565,7 +5819,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // PHASE-02: detect_agents + prompt_step
+    // PHASE-02 (SL-282 PHASE-03: one resolver): resolve_install_harnesses
     // ---------------------------------------------------------------
 
     // SL-250 PHASE-04. An explicit `--agent` used to be DROPPED on the way to
@@ -5585,82 +5839,260 @@ mod tests {
         );
         // …but an explicit flag is a DIRECTIVE, so the boot leg still fires.
         assert_eq!(
-            install_harnesses(&["claude".to_string()], root, &registry()).len(),
+            install_boot(&["claude".to_string()], root, &registry()).len(),
             1,
             "--agent claude wires the claude harness with no .claude/ on disk"
         );
         // A skills-only agent implies no harness — and must not silently fall
         // back to detection, which would wire something the user did not name.
-        assert!(install_harnesses(&["universal".to_string()], root, &registry()).is_empty());
+        assert!(install_boot(&["universal".to_string()], root, &registry()).is_empty());
         // No flags: unchanged — detection governs.
-        assert!(install_harnesses(&[], root, &registry()).is_empty());
+        assert!(install_boot(&[], root, &registry()).is_empty());
     }
 
     #[test]
-    fn detect_agents_empty_when_no_agent_dirs_and_no_flags() {
+    fn resolve_install_harnesses_empty_when_no_agent_dirs_and_no_flags() {
         let dir = tempfile::tempdir().unwrap();
-        let agents = detect_agents(&[], dir.path(), &registry());
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry());
         assert!(agents.is_empty());
     }
 
     #[test]
-    fn detect_agents_returns_claude_when_dir_present() {
+    fn resolve_install_harnesses_returns_claude_when_dir_present() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".claude")).unwrap();
-        let agents = detect_agents(&[], dir.path(), &registry());
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry());
         assert_eq!(agents, vec!["claude".to_string()]);
     }
 
     #[test]
-    fn detect_agents_returns_pi_when_dir_present() {
+    fn resolve_install_harnesses_returns_pi_when_dir_present() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".pi")).unwrap();
-        let agents = detect_agents(&[], dir.path(), &registry());
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry());
         assert_eq!(agents, vec!["pi".to_string()]);
     }
 
     #[test]
-    fn detect_agents_returns_codex_when_dir_present() {
+    fn resolve_install_harnesses_returns_codex_when_dir_present() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".codex")).unwrap();
-        let agents = detect_agents(&[], dir.path(), &registry());
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry());
         assert_eq!(agents, vec!["codex".to_string()]);
     }
 
     #[test]
-    fn detect_agents_returns_universal_for_dot_agents_dir() {
+    fn resolve_install_harnesses_returns_universal_for_dot_agents_dir() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".agents")).unwrap();
-        let agents = detect_agents(&[], dir.path(), &registry());
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry());
         assert_eq!(agents, vec!["universal".to_string()]);
     }
 
     #[test]
-    fn detect_agents_detects_multiple_agent_dirs() {
+    fn resolve_install_harnesses_detects_multiple_agent_dirs() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".claude")).unwrap();
         fs::create_dir(dir.path().join(".pi")).unwrap();
-        let agents = detect_agents(&[], dir.path(), &registry());
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry());
         assert_eq!(agents, vec!["claude".to_string(), "pi".to_string()]);
     }
 
     #[test]
-    fn detect_agents_uses_explicit_over_detection() {
+    fn resolve_install_harnesses_uses_explicit_over_detection() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".claude")).unwrap();
-        let agents = detect_agents(&["pi".to_string()], dir.path(), &registry());
+        let agents = resolve_install_harnesses(&["pi".to_string()], dir.path(), &registry());
         assert_eq!(agents, vec!["pi".to_string()]);
     }
 
     #[test]
-    fn detect_agents_returns_multiple_explicit() {
+    fn resolve_install_harnesses_returns_multiple_explicit() {
         let dir = tempfile::tempdir().unwrap();
-        let agents = detect_agents(
+        let agents = resolve_install_harnesses(
             &["claude".to_string(), "pi".to_string()],
             dir.path(),
             &registry(),
         );
         assert_eq!(agents, vec!["claude".to_string(), "pi".to_string()]);
+    }
+
+    // SL-282 PHASE-03: the AGENTS.md rule is `boot::resolve_harnesses`' own,
+    // so install's skills legs and boot wiring see one set.
+
+    #[test]
+    fn resolve_install_harnesses_adds_codex_for_a_lone_agents_md() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("AGENTS.md"), "x").unwrap();
+        assert_eq!(
+            resolve_install_harnesses(&[], dir.path(), &registry()),
+            strings(&["codex"])
+        );
+    }
+
+    #[test]
+    fn resolve_install_harnesses_skips_claudes_aliased_agents_md() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir(root.join(".claude")).unwrap();
+        fs::write(root.join("CLAUDE.md"), "x").unwrap();
+        std::os::unix::fs::symlink("CLAUDE.md", root.join("AGENTS.md")).unwrap();
+        assert_eq!(
+            resolve_install_harnesses(&[], root, &registry()),
+            strings(&["claude"])
+        );
+    }
+
+    #[test]
+    fn resolve_install_harnesses_keeps_codex_for_a_lone_symlinked_pair() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::write(root.join("CLAUDE.md"), "x").unwrap();
+        std::os::unix::fs::symlink("CLAUDE.md", root.join("AGENTS.md")).unwrap();
+        assert_eq!(
+            resolve_install_harnesses(&[], root, &registry()),
+            strings(&["codex"])
+        );
+    }
+
+    #[test]
+    fn install_plan_resolves_the_set_once_for_boot_and_skills() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("AGENTS.md"), "x").unwrap();
+        let manifest = load_manifest().unwrap();
+        let args = InstallArgs {
+            agents: &[],
+            skills: &[],
+            domains: &[],
+            only_memory: false,
+            global: false,
+            dry_run: false,
+            yes: true,
+        };
+        let plan = InstallPlan::build(&manifest, dir.path(), &args);
+        assert_eq!(plan.harnesses, strings(&["codex"]));
+        assert_eq!(boot_labels(&plan.boot), vec!["codex"]);
+        assert!(plan.is_project_install && plan.write_gitignore);
+
+        let only_memory = InstallArgs {
+            only_memory: true,
+            ..args
+        };
+        let plan = InstallPlan::build(&manifest, dir.path(), &only_memory);
+        assert!(!plan.is_project_install, "--only-memory records no version");
+        assert!(plan.write_gitignore);
+        let global = InstallArgs {
+            global: true,
+            ..args
+        };
+        let plan = InstallPlan::build(&manifest, dir.path(), &global);
+        assert!(!plan.is_project_install && !plan.write_gitignore);
+    }
+
+    // --- leg outcomes and stamps (SL-282 PHASE-03) ---
+
+    fn touched_at(path: &str) -> Touched {
+        Touched::new(PathBuf::from(path), Change::Changed)
+    }
+
+    #[test]
+    fn all_done_legs_record_the_version() {
+        let outcomes = vec![
+            (Leg::MemorySync, LegOutcome::done()),
+            (
+                Leg::BootWiring,
+                LegOutcome::Done(vec![touched_at("CLAUDE.md")]),
+            ),
+            (
+                Leg::Gitignore,
+                LegOutcome::Done(vec![touched_at(".gitignore")]),
+            ),
+        ];
+        assert!(incomplete_legs(&outcomes).is_empty());
+        assert_eq!(stamp_decision(&outcomes, true), StampDecision::Write);
+        assert_eq!(
+            touched(&outcomes),
+            vec![&touched_at("CLAUDE.md"), &touched_at(".gitignore")],
+            "plan order"
+        );
+    }
+
+    #[test]
+    fn a_refused_or_failed_leg_blocks_the_stamps_and_is_named() {
+        let outcomes = vec![
+            (Leg::MemorySync, LegOutcome::done()),
+            (Leg::BootWiring, LegOutcome::Failed("claude: boom".into())),
+            (Leg::Skills, LegOutcome::Done(vec![touched_at("x")])),
+            (Leg::Gitignore, LegOutcome::Refused("malformed".into())),
+        ];
+        let incomplete = vec![Leg::BootWiring, Leg::Gitignore];
+        assert_eq!(incomplete_legs(&outcomes), incomplete);
+        assert_eq!(
+            stamp_decision(&outcomes, true),
+            StampDecision::Incomplete(incomplete.clone())
+        );
+        assert_eq!(
+            incomplete_line(&incomplete),
+            "install incomplete: boot wiring, gitignore; version not recorded"
+        );
+        assert_eq!(touched(&outcomes), vec![&touched_at("x")]);
+    }
+
+    #[test]
+    fn a_non_project_install_never_stamps() {
+        let failed = vec![(Leg::Skills, LegOutcome::Failed("x".into()))];
+        assert_eq!(stamp_decision(&failed, false), StampDecision::Skip);
+        assert_eq!(stamp_decision(&[], false), StampDecision::Skip);
+    }
+
+    #[test]
+    fn touched_under_is_root_relative() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let canonical = fs::canonicalize(root).unwrap();
+        for base in [root, canonical.as_path()] {
+            assert_eq!(
+                Touched::under(root, &base.join("CLAUDE.md"), Change::Created).path,
+                PathBuf::from("CLAUDE.md")
+            );
+        }
+        let outside = Path::new("/elsewhere/x");
+        assert_eq!(Touched::under(root, outside, Change::Created).path, outside);
+    }
+
+    #[test]
+    fn write_stamps_records_both_and_leaves_an_unparseable_toml_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let binary = semver::Version::new(9, 8, 7);
+        fs::create_dir_all(root.join(".doctrine")).unwrap();
+        let toml_path = root.join(crate::config_file::DOCTRINE_TOML);
+        fs::write(&toml_path, "# keep me\n[install]\nrepo = \"x\"\n").unwrap();
+
+        write_stamps(root, &binary, &strings(&["claude"])).unwrap();
+        let tracked = fs::read_to_string(&toml_path).unwrap();
+        assert!(
+            tracked.starts_with("# keep me\n[install]\nrepo = \"x\"\n"),
+            "{tracked}"
+        );
+        assert!(
+            tracked.contains("installed-version = \"9.8.7\""),
+            "{tracked}"
+        );
+        let marker: InstallMarker =
+            toml::from_str(&fs::read_to_string(root.join(INSTALL_MARKER_REL)).unwrap()).unwrap();
+        assert_eq!(marker.version, "9.8.7");
+        assert_eq!(marker.harnesses, strings(&["claude"]));
+
+        // An unparseable doctrine.toml: neither stamp, file untouched.
+        let marker_before = fs::read(root.join(INSTALL_MARKER_REL)).unwrap();
+        fs::write(&toml_path, "not = = toml").unwrap();
+        assert!(write_stamps(root, &semver::Version::new(9, 9, 0), &[]).is_err());
+        assert_eq!(fs::read_to_string(&toml_path).unwrap(), "not = = toml");
+        assert_eq!(
+            fs::read(root.join(INSTALL_MARKER_REL)).unwrap(),
+            marker_before
+        );
     }
 
     // --- harness registry (SL-281 PHASE-01) ---
@@ -5671,6 +6103,12 @@ mod tests {
 
     fn strings(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    /// The boot adapters an install wires for `agents` — the resolver then
+    /// the registry's boot mapping, as `InstallPlan::build` composes them.
+    fn install_boot(agents: &[String], root: &Path, reg: &Registry) -> Vec<crate::boot::Harness> {
+        boot_harnesses(&resolve_install_harnesses(agents, root, reg), root, reg)
     }
 
     fn boot_labels(harnesses: &[crate::boot::Harness]) -> Vec<&'static str> {
@@ -5711,7 +6149,7 @@ mod tests {
             for d in dirs {
                 fs::create_dir(dir.path().join(d)).unwrap();
             }
-            boot_labels(&install_harnesses(&strings(agents), dir.path(), &reg))
+            boot_labels(&install_boot(&strings(agents), dir.path(), &reg))
         };
         // No --agent: the registry's detect dirs govern.
         assert_eq!(
@@ -5741,16 +6179,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         assert_eq!(
-            detect_agents(&[], root, &reg),
+            resolve_install_harnesses(&[], root, &reg),
             Vec::<String>::new(),
             "bare project detects nothing"
         );
         // A real AGENTS.md (not Claude's alias) still implies codex.
         fs::write(root.join("AGENTS.md"), "x").unwrap();
-        assert_eq!(
-            boot_labels(&install_harnesses(&[], root, &reg)),
-            vec!["codex"]
-        );
+        assert_eq!(boot_labels(&install_boot(&[], root, &reg)), vec!["codex"]);
     }
 
     #[test]
@@ -5761,7 +6196,7 @@ mod tests {
         fs::write(root.join("CLAUDE.md"), "x").unwrap();
         std::os::unix::fs::symlink("CLAUDE.md", root.join("AGENTS.md")).unwrap();
         assert_eq!(
-            boot_labels(&install_harnesses(&[], root, &registry())),
+            boot_labels(&install_boot(&[], root, &registry())),
             vec!["claude"]
         );
     }

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14562-f100-7ca2-99b9-c5189cdf3630"
+recorded_at = "2026-10-16T15:44:34.560522342Z"
+kind = "friction"
+summary = "phase-plan: handover line numbers drifted 2-40 lines; every cite re-located by grep"
+detail = "SL-282 PHASE-03 planner: handover cited file:line terrain that drifted after PHASE-01/02; symbol-only cites would avoid the re-location cost."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
