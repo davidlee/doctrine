@@ -20,6 +20,17 @@ customised, so install contradicts its own spec; the list is stale (IMP-489) and
 ignores the installed harnesses; and the `role/worker` starter replaces the
 framework worker contract in every new project (ISS-210).
 
+The complement is a checkout that hasn't run install, or ran an older one
+(IMP-514). SL-281 gitignores framework-owned paths, so a fresh clone lacks them
+until someone installs, and nothing tells an agent which of three states it is
+in: no binary; binary but checkout not installed; install older than the
+binary.
+
+Both are the same concern seen from two moments: install's account of what it
+does and what to do next, and the rest of doctrine's account of what install
+hasn't done yet. The rendering differs; the model of "what install owns and
+whether it's in place" should be shared.
+
 ## Scope & Objectives
 
 1. **Plain-English overview first.** Before anything is written, say what will
@@ -41,12 +52,29 @@ framework worker contract in every new project (ISS-210).
    hymn files. Provide the replacement path: a `prompt` verb that materialises
    the framework body of a named slot as a user-provenance starter on demand.
    Resolves ISS-210 at the root.
-5. `-y` and `--dry-run` behaviour unchanged except for 4 (no starters written).
+5. **Detect a missing or stale install and say how to fix it** (IMP-514).
+   - Install records the binary version that last ran it, in a derived,
+     gitignored stamp.
+   - Doctrine surfaces (boot, `status`, session hook — design picks which)
+     compare the stamp to their own version and print one line on absence or
+     mismatch: run, or re-run, `doctrine install`.
+   - The no-binary state can only be served by a tracked surface: one short
+     line in the managed `CLAUDE.md` / `AGENTS.md` section pointing at the
+     install docs when `.doctrine/state/boot.md` is absent. One line at most;
+     it costs tokens every session.
+   - A library entry (install / recovery) carries the detail.
+6. **Shared model, separate renderings.** The install overview (2), the
+   commit hint (3) and the staleness line (5) draw on one description of what
+   install owns and whether it's present, rather than three ad-hoc lists.
+   Design decides its shape; ride the SL-281 harness registry and ownership
+   plan (`print_ownership_plan`) before adding anything new.
+7. `-y` and `--dry-run` behaviour unchanged except for 4 (no starters written)
+   and 5 (stamp written).
 
 ## Non-Goals
 
-- Install staleness / missing-install detection and its version stamp
-  (IMP-514) — separate item; this slice only prints the post-install next step.
+- Automatic reinstall or reseat on staleness: this slice reports, it does not
+  act.
 - Refreshing stale reference docs in already-installed clients (IDE-030,
   IMP-315, IMP-378).
 - Hymn model coverage and currency (IMP-489).
@@ -57,8 +85,12 @@ framework worker contract in every new project (ISS-210).
 ## Affected surface
 
 - `src/install.rs` — `run` (plan print, confirm, forward steps), `print_plan`,
-  `print_forward_summary`, `prompt_step`, the hymn-starter leg and
-  `project_starters` / `embedded_expose_set`.
+  `print_forward_summary`, `print_ownership_plan`, `prompt_step`, the
+  hymn-starter leg and `project_starters` / `embedded_expose_set`; stamp write.
+- `src/boot.rs` and the session hook / `status` path — stamp check and the
+  one-line recommendation.
+- `install/` — the managed `CLAUDE.md` / `AGENTS.md` section text; a library
+  entry for install recovery.
 - `install/manifest.toml` — `[hymns].expose`.
 - `src/hymns.rs`, `src/commands/prompt.rs` — on-demand starter verb.
 - `.doctrine/spec/tech/009` (SPEC-009, Install & distribution) — D8 and the
@@ -78,6 +110,12 @@ framework worker contract in every new project (ISS-210).
 - **Which prompts are real choices?** Assumption: memory sync and boot wiring
   are required; harness selection and skills subset are choices. Confirm in
   design.
+- **Stamp location.** It must be derived and gitignored, yet survive long
+  enough to be compared; runtime state is `rm -rf`-able by contract, and a
+  wiped stamp reads as "not installed". Decide whether that false positive is
+  acceptable (it is at least correct advice: re-run install).
+- **Where the staleness check runs.** Every invocation costs latency; boot or
+  the session hook may be enough. Each surface that prints it costs tokens.
 - **Testing interactive output.** `prompt_step` already has stdin-driven tests;
   the overview needs golden-style assertions on wording that won't be brittle.
 
@@ -89,12 +127,16 @@ framework worker contract in every new project (ISS-210).
 - `prompt resolve --role worker` on a fresh install yields the framework worker
   contract (ISS-210 closed).
 - On-demand starter verb writes a user-provenance starter for a named slot.
-- SPEC-009 reconciled via REV; IMP-516, IMP-513, ISS-210 resolved.
+- Stamp absent → boot/status prints the install line; stamp older than the
+  binary → prints the reinstall line; current → silent.
+- With no `.doctrine/state/boot.md`, the tracked managed section tells an agent
+  doctrine isn't installed for this checkout.
+- SPEC-009 reconciled via REV; IMP-516, IMP-513, ISS-210, IMP-514 resolved.
 
 ## Summary
 
 ## Follow-Ups
 
-- IMP-514 — stale/missing install guidance; shares the "say what to do next"
-  surface.
+- ISS-216-style reseat on stamp mismatch — the stamp gives a trigger; acting
+  on it is out of scope.
 - IMP-378 — migration to remove legacy projected starters from existing clients.

@@ -30,6 +30,14 @@ intent = "scope-relevant"
 selector = "tests/**"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "src/boot.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/**"
+intent = "scope-relevant"
+
 [[relation]]
 label = "fulfils"
 target = "IMP-516"
@@ -41,6 +49,10 @@ target = "IMP-513"
 [[relation]]
 label = "fulfils"
 target = "ISS-210"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-514"
 
 [[relation]]
 label = "governed_by"
@@ -57,12 +69,6 @@ label = "references"
 role = "concerns"
 descriptor = "harness registry and ownership convergence this builds on"
 target = "SL-281"
-
-[[relation]]
-label = "references"
-role = "concerns"
-descriptor = "shares the next-step guidance surface"
-target = "IMP-514"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis. Slices carry no typed STRUCTURAL
