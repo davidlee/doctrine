@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1438c-e1ed-7d03-a2c3-4f269124da33"
+recorded_at = "2026-10-16T07:11:08.781075549Z"
+kind = "friction"
+summary = "[execute; SL-281] verify-vt reports UNATTRIBUTABLE for a committed in_progress phase"
+detail = "slice verify-vt 281 reported PHASE-02 VT-1 UNATTRIBUTABLE ('not modified by this slice') after the code was committed, because attribution reads the phase's recorded boundary, which is only closed at --status completed. Checking VT before completing the phase is the natural order; the verdict didn't say it was waiting on the boundary. Also: verify-vt takes no phase arg (tried 'verify-vt 281 PHASE-02')."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
