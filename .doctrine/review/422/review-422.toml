@@ -1,0 +1,302 @@
+id    = 422
+slug  = "reconciliation-review-of-sl-282"
+title = "reconciliation review of SL-282"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Conformance audit of SL-282 (a2df6d6fe..e50b1a131) against the locked design, DEC-378..385, plan.toml EX/VT, RV-421 controls, ADR-001, STD-001, STD-003. Evidence: check gate exit 0 (pre- and post-fix), verify-vt all PASS, slice conformance algebra, adversarial codex-cli pass (gpt-6-sol high). 10 findings: 7 fixed in e50b1a131, 3 design-wrong routed via the Reconciliation Brief (F-4, F-6, F-8; F-5 also carries a DEC-382 REV).
+"""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-282"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Edited legacy starter must be preserved; install deletes a copy edited after planning"
+detail = """
+Expected: SL-282 design sec-hymns says legacy removal touches only byte-identical, unedited copies and edited files are never touched.
+Observed: InstallPlan::build scans and stores StarterCopy before the interactive Proceed prompt (src/install.rs:207-229, 373-378). remove_legacy_starters later deletes each stored path without comparing its current bytes (src/install.rs:1065-1085). I reproduced a pre-stamp repo with the framework role/worker starter and default sidecar: wait for Proceed?, append USER EDIT to the .md, answer y. The binary exits 0, prints "removed unedited starter", and the edited .md is gone. A concurrent agent editing between planning and removal has the same loss. Recheck identity immediately before each removal, or make the removal conditional on unchanged file identity, and add an interactive/concurrent-edit regression.
+"""
+disposition = "fix-now"
+response = "Confirmed: remove_legacy_starters deletes stored paths without rechecking (src/install.rs:1065). Fix in this audit: re-verify byte-identity (and default/absent sidecar) immediately before each removal; skip-and-report a changed file; regression test editing between plan and removal."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Confirmed: remove_legacy_starters deletes stored paths without rechecking (src/install.rs:1065). Fix in this audit: re-verify byte-identity (and default/absent sidecar) immediately before each removal; skip-and-report a changed file; regression test editing between plan and removal."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Fixed e50b1a131: remove_legacy_starters re-runs unedited_starter per file before deletion; test legacy_removal_keeps_a_starter_edited_after_planning (red observed)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Incomplete stamp write must preserve both versions; tracked version advances before marker failure"
+detail = """
+Expected: SL-282 design sec-flow and PHASE-03/EX-3 require an incomplete install to leave both stamps as they were; the local marker and tracked version must record the same successful install.
+Observed: write_stamps writes doctrine.toml first (src/install.rs:1410-1417), then creates/writes the local marker (src/install.rs:1418-1423). record_version catches a later marker error and reports "version not recorded" (src/install.rs:1366-1379), with no rollback. Reproduced in a scratch git repo by making .doctrine/state/install.toml a directory: doctrine install -y exits 0 and reports "install incomplete: version stamp; version not recorded", yet doctrine.toml contains installed-version. A marker write permission or rename failure has the same effect, and the tracked team pin falsely advances. Ensure failure of either write leaves the previous tracked stamp intact, or stage/recover the two writes, and test a forced marker-write failure.
+"""
+disposition = "fix-now"
+response = "Confirmed: write_stamps writes doctrine.toml before the marker (src/install.rs:1410-1423). Fix: write the runtime marker first, then the tracked stamp; on tracked failure restore/remove the marker so neither advances; test a forced marker failure leaves doctrine.toml untouched."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Confirmed: write_stamps writes doctrine.toml before the marker (src/install.rs:1410-1423). Fix: write the runtime marker first, then the tracked stamp; on tracked failure restore/remove the marker so neither advances; test a forced marker failure leaves doctrine.toml untouched."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Fixed e50b1a131: marker written first, restored on tracked failure; tests a_failed_marker_write_leaves_the_tracked_stamp_alone (red observed), a_failed_tracked_write_restores_the_marker."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Failed linked-worktree lookup must be disclosed; reader reports checkout not installed"
+detail = """
+Expected: STD-003 and SL-282 design sec-currency require a degraded linked-worktree marker lookup to be disclosed, with Unlocated when the main root cannot be found.
+Observed: linked_main_root maps git query, path canonicalisation and missing output failures to None (src/install.rs:3491-3495), while a later prefix query failure silently substitutes an empty prefix (src/install.rs:3503-3508). read_install_marker maps None to StampRead::Absent and MarkerSource::Checkout (src/install.rs:3521-3533), which advisory renders as "doctrine isn't installed in this checkout" (src/install_state.rs:153-160). In a linked checkout with no local marker but a current main marker, a failed rev-parse query or common-dir canonicalisation therefore reports a false fresh-checkout condition rather than the lookup failure; for a nested project, a failed prefix query can read the wrong main-root marker. Distinguish a confirmed ordinary/non-git checkout from failed linked-worktree discovery, and disclose the latter.
+"""
+disposition = "fix-now"
+response = "Confirmed (STD-003). Fix: distinguish confirmed non-linked checkout from failed linked-worktree discovery; failed discovery yields the Unlocated / main-not-located advisory, not Absent; prefix-query failure disclosed, not defaulted to empty."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Confirmed (STD-003). Fix: distinguish confirmed non-linked checkout from failed linked-worktree discovery; failed discovery yields the Unlocated / main-not-located advisory, not Absent; prefix-query failure disclosed, not defaulted to empty."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Fixed e50b1a131: locate_main yields Unlocated on failed discovery; test a_failed_linked_worktree_lookup_is_unlocated. Note: git unavailable now also reads Unlocated (STD-003 disclosure)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Boot wire plan should cover per-file wiring edits; plan_wire covers imports only"
+detail = """
+Expected: SL-282 locked design sec-flow and PHASE-03/EX-2 split boot::wire into plan_wire (the per-file edits it would make) plus apply_wire; InstallPlan's boot-wiring plan should account for the hook/registration files as well as imports.
+Observed: plan_wire only maps plan_boot_import over @-import target content (src/boot.rs:1021-1039). apply_wire separately runs install_refresh for every harness and writes hook/registration files (src/boot.rs:3217-3258), while planned_imports exposes only the import subset (src/boot.rs:3451-3463). For an existing CLAUDE.md whose import is current but stale .claude/settings.json hook, plan_wire says no edit although apply_wire rewrites the settings file. This is the narrower implementer ruling, not the locked split; either extend the plan to cover those edits or reconcile the design and PHASE-03 criterion explicitly.
+"""
+disposition = "design-wrong"
+response = "Accept the implementation: plan_wire is pure over @-import edits; hook/registration refresh does harness I/O and stays in apply_wire. Reconcile: per-slice direct edit of design.md sec-flow / code-impact to state the narrower split. PHASE-03 EX-2 text is immutable; the brief notes the divergence rather than editing plan.toml."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Accept the implementation: plan_wire is pure over @-import edits; hook/registration refresh does harness I/O and stays in apply_wire. Reconcile: per-slice direct edit of design.md sec-flow / code-impact to state the narrower split. PHASE-03 EX-2 text is immutable; the brief notes the divergence rather than editing plan.toml."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Brief entry: Per-slice F-4."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Commit hint should use the managed ignore contract; implementation queries user gitignore"
+detail = """
+Expected: SL-282 locked design sec-flow Commit hint says derive paths from Touched minus the install-managed ignore contract, with no git ignore query; a path the user ignores under their own rules may remain listed and git add refuses visibly (DEC-382).
+Observed: after filtering by the install contract, print_commit_hint invokes git::ignored_among and removes every untracked path ignored by the project's own rules (src/install.rs:1253-1263; src/git.rs:1040-1065). For a fresh CLAUDE.md excluded by a user .gitignore line, the hint omits a path doctrine just created, contrary to the canonical path rule. If check-ignore errors after both stamps have been written, the successful install returns an error before printing any handoff hint. Tests/e2e_install_flow.rs:454-473 explicitly lock in the divergent filtering. Either restore the specified no-query handoff or reconcile DEC-382/design with the new behavior and its failure policy.
+"""
+disposition = "design-wrong"
+response = "User ruling 2026-10-17 (option A): keep the check-ignore filter; DEC-382 amended at reconcile (REV) to state the hint omits paths git ignores. Code part fixed now: a check-ignore failure must not fail a stamped install — disclose it and print the unfiltered hint."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "User ruling 2026-10-17 (option A): keep the check-ignore filter; DEC-382 amended at reconcile (REV) to state the hint omits paths git ignores. Code part fixed now: a check-ignore failure must not fail a stamped install — disclose it and print the unfiltered hint."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Code part fixed e50b1a131 (drop_git_ignored; a_failed_ignore_query_lists_every_path_and_says_so). DEC-382 amendment carried in the Reconciliation Brief (REV)."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Design selectors should cover delivered paths; conformance reports undeclared implementation files"
+detail = """
+Expected: SL-282 locked design sec-code-impact says design-target selectors record exactly the delivered path set; audit conformance should therefore account for all implementation files.
+Observed: doctrine slice conformance 282 reports 33 undeclared paths in the recorded deltas, including changed src/git.rs, src/commands/guard.rs, src/main.rs, src/worktree/{mod,shared}.rs, tests/common/mod.rs and tests/e2e_prompt_resolve_golden.rs; it reports src/dtoml.rs undelivered. The dtoml selector is allowed by the design's "or install_config.rs" alternative, but the undeclared code/test paths are real work on this slice (git diff a2df6d6fe..71ebbfe86). A future selector-driven prime or conformance pass can miss these changes. Reconcile the selector registry with the delivered source and its design table, treating observations and authored dogfood files according to their actual scope.
+"""
+disposition = "design-wrong"
+response = "Reconcile via selector registry: doctrine slice selector add for src/git.rs, src/commands/guard.rs, src/main.rs, src/worktree/{mod,shared}.rs, tests/common/mod.rs, tests/e2e_prompt_resolve_golden.rs, tests/e2e_claude_install.rs; rm src/dtoml.rs; design.md sec-code-impact mirrors it. Observations, dogfood (AGENTS.md, CLAUDE.md, doctrine.toml, README.md) and shipped-memory doc sweep are incidental, not design targets."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Reconcile via selector registry: doctrine slice selector add for src/git.rs, src/commands/guard.rs, src/main.rs, src/worktree/{mod,shared}.rs, tests/common/mod.rs, tests/e2e_prompt_resolve_golden.rs, tests/e2e_claude_install.rs; rm src/dtoml.rs; design.md sec-code-impact mirrors it. Observations, dogfood (AGENTS.md, CLAUDE.md, doctrine.toml, README.md) and shipped-memory doc sweep are incidental, not design targets."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Brief entry: Per-slice F-6 (selector registry verbs)."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "Incomplete boot wiring must block stamps; fallback hooks still mark install current"
+detail = """
+Expected: SL-282 design sec-flow and PHASE-03/EX-3 require stamps only after every required leg succeeded; RV-421 F-14 specifically forbids a caught boot-wiring failure from authorizing Current.
+Observed: malformed or foreign Claude hook settings produce RefreshOutcome::PrintedFallback, which leaves hooks unwritten and prints manual repair instructions (src/boot.rs:1655-1664, 3269-3275). apply_wire still pushes Ok(touched) for that harness (src/boot.rs:3434-3437); WireReport::touched only checks Err (src/boot.rs:3198-3213), so install records BootWiring Done (src/install.rs:974-989) and writes both stamps. Reproduced with a scratch git repo containing malformed .claude/settings.json and `doctrine install -y -a claude`: four "settings.json is malformed — add this hook manually" lines print, settings remains unchanged, but both installed-version and the local marker are written and no "install incomplete" line appears. The next currency read is Current even though session hooks are absent. Carry PrintedFallback/other refused wiring outcomes into a non-Done install leg while preserving boot install's soft-failure behavior; add this fixture to the RV-421 F-14 control suite.
+"""
+disposition = "fix-now"
+response = "Confirmed: PrintedFallback pushes Ok(touched) (src/boot.rs:3434), so install records BootWiring Done. Fix: carry fallback/refused wiring as a non-Done install leg (boot install keeps its soft-failure behaviour); add the malformed-settings fixture to the RV-421 F-14 control suite."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Confirmed: PrintedFallback pushes Ok(touched) (src/boot.rs:3434), so install records BootWiring Done. Fix: carry fallback/refused wiring as a non-Done install leg (boot install keeps its soft-failure behaviour); add the malformed-settings fixture to the RV-421 F-14 control suite."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Fixed e50b1a131: refused_wiring marks the harness Err; install records boot wiring incomplete; e2e malformed_claude_settings_block_both_stamps in the F-14 control suite (red observed). boot install output unchanged."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "Spec/governance must describe starters-on-demand; SPEC-023, REQ-322/329, DEC-384 still describe expose projection"
+detail = """
+Expected: governance describes the delivered starter model — install projects no hymn starters; `doctrine prompt customise <slot>` writes one on demand; a one-time legacy pass removes byte-identical unedited copies.
+Observed: SPEC-023 (§ hymn projection, roughly lines 50-60 and 113-158), REQ-322, REQ-329 and DEC-384 still describe `[hymns].expose` and install-time starter projection. Also behavioural: install no longer back-fills a missing sidecar beside an edited starter, so such a starter now appends to the framework text rather than replacing it (the self-`replaces` sidecar was the suppression mechanism). REQ-322/REQ-329 must state this. SPEC-023 `interactions.toml` should be swept for the same terms.
+Source: PHASE-04 and PHASE-06 orchestrator hand-backs; `grep -n expose .doctrine/spec/tech/023/`.
+"""
+disposition = "design-wrong"
+response = "Reconcile via REV: SPEC-023 starter/expose sections, REQ-322, REQ-329, DEC-384 rewritten to starters-on-demand (prompt customise, legacy removal), including the edited-starter-without-sidecar append behaviour; sweep SPEC-023 interactions.toml."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Reconcile via REV: SPEC-023 starter/expose sections, REQ-322, REQ-329, DEC-384 rewritten to starters-on-demand (prompt customise, legacy removal), including the edited-starter-without-sidecar append behaviour; sweep SPEC-023 interactions.toml."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Brief entry: Governance/spec F-8."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "nit"
+title = "Install output/internals should drop retired-model residue; three leftovers remain"
+detail = """
+Expected: install's terminal output and internals carry no residue of the retired per-step / projection model.
+Observed (reported by PHASE-05/06 orchestrators, confirm before fixing):
+1. After `Nothing to commit.`, install still prints the "also review .agents/skills/" line.
+2. Under `d` (details) on a real run, section headings still read "(not executed under --dry-run)".
+3. `project_starters`'s `dry_run` parameter is now always false at its sole production call site — dead parameter.
+"""
+disposition = "fix-now"
+response = "Cosmetic residue; fix alongside the other items after confirming each."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Cosmetic residue; fix alongside the other items after confirming each."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Fixed (2) and (3) in e50b1a131. (1) not residue: the .agents/skills note is the deliberate npx skills disclosure (NPX_SKILLS_NOTE) — kept."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "Commit hint should be shell-neutral; one-line && chain fails in nushell"
+detail = """
+Expected: the printed commit hint runs as-is in the user's shell, whatever it is.
+Observed: the hint is one `[cd <root> &&] git add -- <paths> && git commit -m <msg> -- <paths>` line. `&&` chaining is bash/zsh syntax; nushell (the user's default shell) rejects it, so the hint cannot be pasted. It is also hard to read when the path list is long.
+Fix: print one command per line (`cd <root>` when needed, then `git add -- …`, then `git commit -m … -- …`), with no shell-specific operators. Quoting must stay valid for both POSIX shells and nu (single-quoted paths only when needed).
+Source: user, in session 2026-10-17.
+"""
+disposition = "fix-now"
+response = "User-requested: one command per line, no && chaining."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "User-requested: one command per line, no && chaining."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Fixed e50b1a131: hint prints Next: then one command per line, no &&; quoting valid in POSIX and nu; worker ran it under nu by hand; F-10 control still proves path-limited commit."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

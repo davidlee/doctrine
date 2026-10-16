@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1471b-b002-7e90-9be4-df8a581e84a4"
+recorded_at = "2026-10-16T23:45:59.298421977Z"
+kind = "friction"
+summary = "capsule-driver/audit: slice left at ready after all phases completed"
+detail = "SL-282: capsule orchestrators flipped every phase to completed but never moved the slice lifecycle off ready; /audit's 'slice status reconcile' then refused (reachable only from audit). Had to walk ready -> audit (recorded as [skip]) -> reconcile. Neither capsule-driver nor capsule-orchestrator names the slice-level in_progress/audit transitions."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

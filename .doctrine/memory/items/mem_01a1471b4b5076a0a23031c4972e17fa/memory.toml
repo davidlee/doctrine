@@ -1,0 +1,42 @@
+memory_uid = "mem_01a1471b4b5076a0a23031c4972e17fa"
+memory_key = "mem.pattern.rust.pathbuf-eq-ignores-trailing-separator"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "PathBuf equality ignores a trailing separator — compare as_os_str() when output text matters"
+summary = 'Path/PathBuf == normalises components, so Main("/repo/") == Main("/repo"); a test asserting a rendered path must compare as_os_str() or the rendered string.'
+created = "2026-10-16"
+updated = "2026-10-16"
+
+[scope]
+paths = ["src/install.rs"]
+globs = []
+commands = []
+tags = ["rust", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "bc9e85063f90397b4a8bbec0a8690d0ee3a68844"
+ref_name = "refs/heads/edge"
+checkout_state_id = "f7058501e9d2d6a13408c2f00e1ea500a94b56d2650ac295e40542f6448b1447"
+base_commit = "e50b1a1310497c95b8999faf44ad30228d80b3a8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+

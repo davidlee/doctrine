@@ -25,18 +25,34 @@ design read:
   (linked, `--separate-git-dir`, non-git);
 - legacy-starter removal touching only the seven identical copies here.
 
+## Implementation notes (audit harvest from phase sheets)
+
+- Boot-guard upgrade iterates `PRIOR_BOOT_REF_GUARDS` newest-first: guards grow
+  by appended sentences, so an older prior can be a prefix of a newer one.
+- `Touched` coverage is best-effort: hook/MCP writes report `Changed` even when
+  created; memory sync, convergence and npx skills report no paths by
+  construction — the commit hint inherits those gaps.
+- Refused boot wiring (settings fallback, MCP fallback, foreign pi extension)
+  fails the install leg (RV-422 F-7); a conflicting `worktree.baseRef` does not —
+  it is a respected user override.
+- Linked-worktree marker lookup: only a non-git `rev-parse` exit or
+  `git_dir == common` is "ordinary checkout"; every other failure is Unlocated
+  (RV-422 F-3).
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-17 · ready · 46d68889d
+fresh-as-of: 2026-10-17 · audit · e50b1a131
 
 ### Produced
-- design locked after RV-421 (19 findings, all verified; commits 4e2387bc3..b2669cf3e)
-- amended on user rulings: DEC-379 — linked-worktree marker fallback; DEC-382 — hint covers doctrine's own writes; DEC-384 — one-time cleanup, customise refuses pre-stamp
-- plan: PHASE-01..06 authored and materialised (b19bd71ab, d015f38c3)
-- minted: ISS-522 — root-marker divergence install vs readers; ISS-523 — `--only-memory` unwired; ISS-524 — `--global` runs the project install
+- PHASE-01..07 implemented (43dbc692c..71ebbfe86); PHASE-07 appended for the downgrade gate split from PHASE-03
+- audit RV-422: 10 findings; fixes e50b1a131 (F-1, F-2, F-3, F-5, F-7, F-9, F-10); F-4, F-5, F-6, F-8 to reconcile
+- design locked after RV-421; DEC-379, DEC-382, DEC-384 amended on user rulings
+- minted: ISS-522 — root-marker divergence install vs readers; ISS-523 — `--only-memory` unwired; ISS-524 — `--global` runs the project install; CHR-180 — two stale memories
 
 ### Learned
-- mem.pattern.design-run.review-disposition-route-and-vocab — severe design-review findings need `--route` at dispose or the lock refuses (hit here; existing memory not retrieved beforehand)
+- mem.pattern.design-run.review-disposition-route-and-vocab — severe design-review findings need `--route` at dispose
+- mem.pattern.rust.pathbuf-eq-ignores-trailing-separator — PathBuf equality hid a rendered trailing `/`
 
 ### Open
-- none — DEC-378..385 settled; deferred work is on ISS-522..524
+- DEC-382 — amend: hint omits git-ignored paths, one command per line (RV-422 F-5, F-10)
+- PHASE-06 VH-1 — user's interactive scratch-repo readability check pending
