@@ -101,3 +101,33 @@ Standing risks:
   slots) plus the one-time legacy removal of byte-identical copies. State that
   install no longer back-fills a missing sidecar beside an edited starter, so
   such a starter appends to the framework text instead of replacing it.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- design.md sec-flow + code-impact `src/boot.rs` row: `plan_wire` is pure over
+  `@`-import edits; harness refresh and the refused-wiring report stay in
+  `apply_wire` (F-4, F-7).
+- design.md § Commit hint + e2e bullet: one command per line, no `&&`,
+  leading `cd <root>` line; git-ignored paths dropped via `check-ignore` with a
+  disclosed fallback (F-5, F-10).
+- Selector registry: `slice selector add --intent design-target` for
+  `src/git.rs`, `src/commands/guard.rs`, `src/main.rs`, `src/worktree/mod.rs`,
+  `src/worktree/shared.rs`, `tests/common/mod.rs`,
+  `tests/e2e_prompt_resolve_golden.rs`, `tests/e2e_claude_install.rs`;
+  `selector rm src/dtoml.rs`. design.md code-impact table and layering diagram
+  mirror it. `slice conformance 282`: undelivered 0; remaining undeclared paths
+  are observations, dogfood files and the doc/memory sweep — incidental (F-6).
+- DEC-382 (knowledge record) amended via `knowledge edit decision`: check-ignore
+  filter with disclosed fallback, one command per line (F-5, F-10).
+
+### REVs completed
+- REV-073 (`reconcile-sl-282`): done — SPEC-023 prose and `interactions.toml`,
+  REQ-322, REQ-329 rewritten from install-time expose projection to
+  `prompt customise` starters, naming the edited-legacy-starter-without-sidecar
+  doubling case (F-8). Rationale in revision-073.md.
+
+### Brief corrections
+- DEC-384 (named under F-8) already states the delivered model; no change.
+
+Reconcile pass complete — handoff to /close.

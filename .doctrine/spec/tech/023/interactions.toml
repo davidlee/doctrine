@@ -1,7 +1,7 @@
 [[edge]]
 target = "SPEC-009"
 type = "uses"
-notes = "rust_embed asset root, install-time projection of exposed starters, the impure corpus loader home (src/install.rs), and the worker-def bake (expand_worker_marker)"
+notes = "rust_embed asset root, on-demand starters via prompt customise, the impure corpus loader home (src/install.rs), and the worker-def bake (expand_worker_marker)"
 
 [[edge]]
 target = "SPEC-011"

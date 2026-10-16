@@ -15,7 +15,7 @@ in a CLI verb, harness-identical).
 
 It sits beneath the whole-system root (SPEC-003), realising PRD-007's
 per-context session-instruction intent. It rides the install container
-(SPEC-009) for its embedded assets and install-time projection, and is consumed
+(SPEC-009) for its embedded assets and stamped-repo guard, and is consumed
 by the boot snapshot (SPEC-011) and dispatch (SPEC-012/SPEC-021) delivery
 surfaces. This spec owns the corpus model, the selection algebra, the
 precedence/specificity order, the classification layer, and the `prompt` verb
@@ -47,7 +47,7 @@ superseded **per-axis** by an optional sidecar `<file>.toml`. Two roots layer:
 
 ```
 install/hymns/     compile-embedded (rust_embed), framework-authored, the superset
-.doctrine/hymns/   on-disk, user-authored + projected editable starters
+.doctrine/hymns/   on-disk, user-authored + customised starters
 ```
 
 The loader (the one impurity, in `src/install.rs`) unions both roots at read
@@ -56,9 +56,9 @@ time; **provenance is derived from the source root**, never stored. The
 a user-provenance snippet whose slot is sealed is dropped *before matching* —
 sealed framework content wins by active exclusion of disk twins. Sealed slots are
 enumerated in the manifest's `[hymns].seal`; `stage/design` is one, sealing the
-invariant stage fragment of the managed design workflow (PRD-019). **Expose is
-the symmetric complement**: at an unsealed slot the projected editable starter
-is kept and carries a self-`replaces` on its own slot, so the user overlay
+invariant stage fragment of the managed design workflow (PRD-019). **Customise
+is the symmetric complement**: at an unsealed slot, `doctrine prompt customise
+<slot>` writes the framework body as a user starter, which is kept and carries a self-`replaces` on its own slot, so the user overlay
 suppresses its framework origin (§ Suppression) and the slot still resolves
 single-emit — the user wins by suppression, not by ordering.
 
@@ -110,9 +110,9 @@ band → specificity → provenance(framework < user) → alpha(full slot path)
 
 Specificity dominates provenance: a framework exact-trait snippet outranks a
 user broad one. The same-slot provenance tiebreak is **ordering only** — it
-reorders the twins, it does not suppress. An exposed projected editable starter
+reorders the twins, it does not suppress. A customised starter
 therefore *overrides* its framework origin not by this tiebreak but by carrying
-a self-`replaces` (§ Suppression, the expose-side mirror of seal); that is where
+a self-`replaces` (§ Suppression, the customise-side mirror of seal); that is where
 "the legitimate customisation wins" is actually delivered. Within a band,
 specificity leads with the **band's namesake
 axis**, then the sum of other pinned axis depths — lexicographic
@@ -148,17 +148,20 @@ user snippet (user is never lower in the order).
 
 A `replaces` **may target its own slot** (a self-edge, excluded from the cycle
 graph): it suppresses every other active member of the slot but not itself.
-This is the mechanism behind **expose**. When the projector writes an exposed
-editable starter to disk, it also writes the sidecar `replaces = <own slot>`;
-the projected user snippet is the unique strict top of its slot (provenance
+This is the mechanism behind **customise**. When `doctrine prompt customise`
+writes a starter to disk, it also writes the sidecar `replaces = <own slot>`;
+the customised user snippet is the unique strict top of its slot (provenance
 breaks the same-slot tie), so it validates as the legal replacer and suppresses
-the framework twin. Seal and expose are thus the two sides of one coin — seal
-drops the user twin before matching (framework wins), expose has the user twin
+the framework twin. Seal and customise are thus the two sides of one coin — seal
+drops the user twin before matching (framework wins), customise has the user twin
 self-`replaces` the framework twin (user wins) — both single-emit. Note the
-boundary: a **hand-authored** snippet at an exposed slot that carries no such
-sidecar is not covered — it doubles, and is out of scope for the projection
+boundary: a **hand-authored** snippet at an unsealed slot that carries no such
+sidecar is not covered — it doubles, and is out of scope for the customise
 mechanism (it would require making same-slot override implicit, which this spec
-does not do).
+does not do). That includes a starter projected by a pre-SL-282 install and
+later edited without its sidecar: install no longer projects or back-fills
+sidecars, so such a starter appends to the framework text rather than
+replacing it.
 
 ### The classification layer
 
@@ -241,8 +244,8 @@ injection) depends on that determinism.
 - **Double-emit at box intersections.** An agent inside two **author-chosen**
   overlapping selector boxes receives the shared body twice — wasteful, never
   incorrect. Accepted as the duplication valve's cost. This is scoped to
-  authored box intersections only: a **seal/expose projection twin** is *not*
-  this case — the exposed projected starter self-`replaces` its framework origin
+  authored box intersections only: a **seal/customise twin** is *not*
+  this case — the customised starter self-`replaces` its framework origin
   (§ Suppression), so it resolves single-emit and does not ride this valve
   (REV-019).
 - **Authoring legibility.** The box/union model asks authors to reason about

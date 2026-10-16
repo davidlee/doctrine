@@ -30,7 +30,7 @@ flowchart LR
   subgraph leaf[leaf tier]
     state[install_state.rs<br/>Currency · classify · advisory]
     own[install_ownership.rs]
-    dtoml[dtoml / install_config]
+    dtoml[install_config]
   end
   install --> own
   install --> state
@@ -93,9 +93,12 @@ parallel model (DEC-379):
 `boot::wire(root, exec, harnesses, dry_run) -> Result<()>` (`src/boot.rs:3102`)
 prints and returns nothing, and it catches each harness's refresh error,
 prints `refresh failed` and continues (`src/boot.rs:3307-3310`). It is split
-into `plan_wire` (pure: the per-file edits it would make) and `apply_wire`
+into `plan_wire` (pure over the `@`-import line edits only) and `apply_wire`
 (writes, prints the same lines, continues past a failed harness, and returns
-per-harness results). `wire` becomes their composition and still returns
+per-harness results). The harness refresh (hooks, settings, registrations)
+does harness I/O, so it stays in `apply_wire`, which reports what it touched
+and what it refused; a refused wiring (printed manual fallback, foreign file
+left in place) fails that harness (RV-422 F-4, F-7). `wire` becomes their composition and still returns
 `Ok(())` after printing, so `boot install` is unchanged and its suites are the
 behaviour-preservation proof; install maps any failed harness to a `Failed`
 boot-wiring leg.
@@ -153,18 +156,21 @@ Proceed? [y/N/d] (d = show every step)
 After a successful run (DEC-382):
 
 ```
-Next: git add -- .gitignore .doctrine/doctrine.toml CLAUDE.md AGENTS.md .claude/settings.json \
-        && git commit -m "chore: install doctrine 0.47.0" -- .gitignore .doctrine/doctrine.toml \
-        CLAUDE.md AGENTS.md .claude/settings.json
+Next:
+  git add -- .gitignore .doctrine/doctrine.toml CLAUDE.md AGENTS.md .claude/settings.json
+  git commit -m 'chore: install doctrine 0.47.0' -- .gitignore .doctrine/doctrine.toml CLAUDE.md AGENTS.md .claude/settings.json
 ```
 
 - Paths: `Touched` paths not covered by the ignore contract install itself
   maintains (the managed block entries plus `.doctrine/state/`), deduplicated,
-  in plan order. No git query (DEC-382); a path the user ignores by their own
-  rules may still be listed, and `git add` then refuses it visibly.
+  in plan order, minus paths git ignores (one batched `git check-ignore`,
+  DEC-382 as amended, RV-422 F-5). If that query fails, install says so and
+  the hint lists every path.
 - The commit is path-limited with the same list, so already-staged unrelated
-  work stays out. Paths are root-relative and shell-quoted; when the working
-  directory is not the project root the hint is prefixed `cd <root> &&`.
+  work stays out. One command per line, no shell operator, so the hint pastes
+  into any shell including nushell (RV-422 F-10). Paths are root-relative and
+  quoted only when needed; when the working directory is not the project root
+  a `cd <root>` line comes first.
 - Removed starters are listed; `git add -- <deleted path>` stages the deletion.
 - Scope: doctrine's own writes (DEC-382 as amended, RV-421 F-11). The delegated `npx skills` leg (codex, pi;
   `skills_via = "universal"`) reports only success, so its copies under
@@ -396,15 +402,20 @@ In this repo that removes `harness/claude`, `harness/cursor`,
 | `.doctrine/adr/001/layering.toml` | register `install_state = "leaf"` |
 | `src/install.rs` | `InstallPlan`, `LegOutcome` + `Touched` (leg runner and gitignore writer return outcomes); `render_overview`; `prompt_choice` + single `Proceed? [y/N/d]` (`prompt_confirm` an adapter); delete `prompt_step`, the per-step prompts and the starter leg; `resolve_install_harnesses` replaces `detect_agents` + `install_harnesses`; `identical_starters` removal (gated on absent stamp); `read_install_marker` (linked-worktree fallback); stamp writes last, only on full success; downgrade gate; path-limited commit hint |
 | `src/install_config.rs` | `installed_version: Option<String>` |
-| `src/dtoml.rs` (or `install_config.rs`) | `write_installed_version` — comment-preserving `toml_edit` single-key write |
-| `src/boot.rs` | `BOOT_REF_GUARD` sentence; `PRIOR_BOOT_REF_GUARDS` + `plan_boot_import` upgrade; `wire` split into `plan_wire` + `apply_wire`; AGENTS.md detection rule moved to the shared resolver (boot keeps calling it for `boot install`); currency lines in `boot` / `boot --check` |
+| `src/install_config.rs` | `write_installed_version` — comment-preserving `toml_edit` single-key write |
+| `src/boot.rs` | `BOOT_REF_GUARD` sentence; `PRIOR_BOOT_REF_GUARDS` + `plan_boot_import` upgrade; `wire` split into `plan_wire` (import edits) + `apply_wire` (writes, harness refresh, refused-wiring report); AGENTS.md detection rule moved to the shared resolver (boot keeps calling it for `boot install`); currency lines in `boot` / `boot --check` |
 | `src/status.rs` | `BootSection.currency` (structured in JSON); text view lines |
 | `src/commands/prompt.rs` | `Customise { slot, path }` (alias `customize`); currency lines after unbanded `resolve` |
 | `src/commands/cli.rs` | `--allow-downgrade` on `install` |
 | `install/manifest.toml` | remove `[hymns].expose` |
 | `Cargo.toml` | `semver` direct dependency |
 | `.doctrine/hymns/` (this repo) | seven identical copies removed by running install (dogfood) |
+| `src/git.rs` | `ignored_among` — one batched `git check-ignore` for the commit hint |
+| `src/commands/guard.rs` | classify `prompt customise` as a write |
+| `src/main.rs` | register `install_state` |
+| `src/worktree/mod.rs`, `src/worktree/shared.rs` | `resolve_common_dir` crate-visible for the marker lookup |
 | `tests/e2e_install_*.rs` | binary-driven flow, hint, currency, downgrade, legacy removal, customise |
+| `tests/common/mod.rs`, `tests/e2e_prompt_resolve_golden.rs`, `tests/e2e_claude_install.rs` | shared stamp/digest helpers; golden and claude suites set up starters via `prompt customise` |
 
 Design-target selectors record exactly these paths.
 
@@ -461,7 +472,7 @@ E2e (built binary, `tests/common`):
   exactly the tracked paths; no hymn files; both stamps written.
 - `d` then `y` proceeds; `d` then `N` writes nothing; `N` writes nothing.
 - commit hint: an unrelated staged file stays out of the printed commit's
-  pathspec; run from a nested directory → `cd <root> &&` prefix.
+  pathspec; run from a nested directory → a leading `cd <root>` line.
 - forced leg failure (boot-wire error, malformed gitignore markers): progress
   shows the error, `install incomplete` printed, neither stamp written.
 - `-y` prints overview, no prompt; `--dry-run` writes nothing (digest check).

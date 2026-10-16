@@ -43,10 +43,6 @@ selector = "src/install_state.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/dtoml.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/install_config.rs"
 intent = "design-target"
 
@@ -72,6 +68,38 @@ intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_install_*.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/git.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/shared.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/common/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_prompt_resolve_golden.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_claude_install.rs"
 intent = "design-target"
 
 [[relation]]
