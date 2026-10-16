@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14520-abfd-7243-a415-a0280e3a1850"
+recorded_at = "2026-10-16T14:32:11.517928412Z"
+kind = "friction"
+summary = "design lock: severe-finding routes demanded only at lock, after findings were verified"
+detail = "SL-282 RV-421: 11 major findings were disposed and verified without --route (nothing prompted for it). Lock then refused; repairing needs reopen → re-dispose with --route → verify per finding (33 ledger acts). Route should be prompted/required at dispose time for blocker/major on design ledgers."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

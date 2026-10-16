@@ -38,6 +38,11 @@ act = "conclude"
 role = "raiser"
 note = "Rechecked F-13 against the revised SL-282 Scope variants section, the CLI contract, responder answer, and ISS-523/ISS-524. The design states the deferred mode divergence and excludes flagged runs from stamps, currency gate, and commit hint; F-13 verified. No other findings examined."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Route repair only: all 19 findings verified; severe findings now routed."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-282"
 
@@ -50,9 +55,8 @@ detail = """
 The local marker lives in .doctrine/state/install.toml (gitignored). A linked worktree (`doctrine worktree fork`, `git worktree add`) never has it, and the fork allowlist withholds the state tier (src/worktree/allowlist.rs:328). The session hook in this repo runs `prompt resolve --role orchestrator` (.claude/settings.json:27), which the design makes the advisory site, so every fork session — including confined dispatch workers — is told "run `doctrine install`", an action a worker must not take and which would write coord-owned files. The design must say how a worktree is recognised (e.g. classify against the primary worktree's marker via git common dir, or suppress CheckoutNotInstalled in linked worktrees / under DOCTRINE_WORKER) and add an e2e row for it.
 """
 disposition = "design-wrong"
-response = """
-User ruling 2026-10-17 ("1a"). DEC-379 amended: a linked worktree with no marker of its own reads the main worktree's marker via git's common dir; outside git only the checkout's own marker applies (POL-002). New command-tier helper read_install_marker -> (StampRead, MarkerSource); advisory takes the source and names the main root when it came from there. E2e rows for linked worktrees added.
-"""
+response = """User ruling 2026-10-17 ("1a"). DEC-379 amended: a linked worktree with no marker of its own reads the main worktree's marker via git's common dir; outside git only the checkout's own marker applies (POL-002). New command-tier helper read_install_marker -> (StampRead, MarkerSource); advisory takes the source and names the main root when it came from there. E2e rows for linked worktrees added. Criterion (control): e2e: in a linked worktree of an installed checkout, prompt resolve emits no checkout advisory; the incorrect candidate (fork with no marker reported CheckoutNotInstalled) must fail it. Place in tests/e2e_install_* currency rows."""
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -65,6 +69,22 @@ disposition = "design-wrong"
 response = """
 User ruling 2026-10-17 ("1a"). DEC-379 amended: a linked worktree with no marker of its own reads the main worktree's marker via git's common dir; outside git only the checkout's own marker applies (POL-002). New command-tier helper read_install_marker -> (StampRead, MarkerSource); advisory takes the source and names the main root when it came from there. E2e rows for linked worktrees added.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Mechanical repair: severe finding verified without a route; reopened only to attach one. Substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+route = "control"
+response = """User ruling 2026-10-17 ("1a"). DEC-379 amended: a linked worktree with no marker of its own reads the main worktree's marker via git's common dir; outside git only the checkout's own marker applies (POL-002). New command-tier helper read_install_marker -> (StampRead, MarkerSource); advisory takes the source and names the main root when it came from there. E2e rows for linked worktrees added. Criterion (control): e2e: in a linked worktree of an installed checkout, prompt resolve emits no checkout advisory; the incorrect candidate (fork with no marker reported CheckoutNotInstalled) must fail it. Place in tests/e2e_install_* currency rows."""
 
 [[finding.turn]]
 act = "verify"
@@ -79,9 +99,8 @@ detail = """
 sec-currency: "Tracked Absent (pre-stamp install) classifies as RepoOlder against any binary", yet `RepoOlder { repo: Version }` cannot be built without a version, and its advisory text ("newer than this repo's R ... or use R") names an R that does not exist. Every existing client hits this on first upgrade. Needs its own variant (e.g. RepoUnstamped) with its own line ("this repo has no recorded doctrine version: run `doctrine install` and commit"). Also decide whether tracked Absent + local Absent (never installed) should emit both lines or just CheckoutNotInstalled.
 """
 disposition = "design-wrong"
-response = """
-Agreed: RepoOlder{repo} cannot represent an absent stamp. Added Currency::RepoUnstamped with its own line; dropped beside CheckoutNotInstalled (installing writes the stamp, the hint carries it). DEC-378's "missing reads as older" kept in substance. sec-currency classifier + advisory table; unit row added.
-"""
+response = """Agreed: RepoOlder{repo} cannot represent an absent stamp. Added Currency::RepoUnstamped with its own line; dropped beside CheckoutNotInstalled (installing writes the stamp, the hint carries it). DEC-378's "missing reads as older" kept in substance. sec-currency classifier + advisory table; unit row added."""
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -99,6 +118,22 @@ Agreed: RepoOlder{repo} cannot represent an absent stamp. Added Currency::RepoUn
 act = "verify"
 role = "raiser"
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Mechanical repair: severe finding verified without a route; reopened only to attach one. Substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+route = "review"
+response = """Agreed: RepoOlder{repo} cannot represent an absent stamp. Added Currency::RepoUnstamped with its own line; dropped beside CheckoutNotInstalled (installing writes the stamp, the hint carries it). DEC-378's "missing reads as older" kept in substance. sec-currency classifier + advisory table; unit row added."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-3"
 status = "verified"
@@ -108,9 +143,8 @@ detail = """
 Context names "install newer than the binary (a stale ~/.cargo/bin shadowing a newer one)". Currency has CheckoutOlder but no CheckoutNewer; only RepoNewer covers it, which works only once the tracked stamp is committed and equals the local one. With the stamp uncommitted, absent, or a newer local install on an older repo, local > binary yields nothing. Same gap in the downgrade gate, which consults only the tracked stamp: re-running an older binary after a newer one installed in this checkout silently downgrades generated files. Add CheckoutNewer (advisory + gate input), and the matrix rows.
 """
 disposition = "design-wrong"
-response = """
-Agreed. Added CheckoutNewer{checkout} (local > binary) with advisory text naming PATH. Downgrade gate now fires on RepoNewer or CheckoutNewer (newer of the two quoted). Matrix and e2e rows extended (marker newer, stamp absent).
-"""
+response = "Agreed. Added CheckoutNewer{checkout} (local > binary) with advisory text naming PATH. Downgrade gate now fires on RepoNewer or CheckoutNewer (newer of the two quoted). Matrix and e2e rows extended (marker newer, stamp absent). Criterion (control): unit classify: local marker newer than binary with tracked Absent → CheckoutNewer; the incorrect candidate (no finding) must fail it."
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -123,6 +157,22 @@ disposition = "design-wrong"
 response = """
 Agreed. Added CheckoutNewer{checkout} (local > binary) with advisory text naming PATH. Downgrade gate now fires on RepoNewer or CheckoutNewer (newer of the two quoted). Matrix and e2e rows extended (marker newer, stamp absent).
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Mechanical repair: severe finding verified without a route; reopened only to attach one. Substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+route = "control"
+response = "Agreed. Added CheckoutNewer{checkout} (local > binary) with advisory text naming PATH. Downgrade gate now fires on RepoNewer or CheckoutNewer (newer of the two quoted). Matrix and e2e rows extended (marker newer, stamp absent). Criterion (control): unit classify: local marker newer than binary with tracked Absent → CheckoutNewer; the incorrect candidate (no finding) must fail it."
 
 [[finding.turn]]
 act = "verify"
@@ -281,10 +331,9 @@ Expected: a project that `doctrine install` can provision can also reach the cur
 Observed: install resolves with the embedded manifest markers (`src/install.rs:208-210,1261-1264`), including `pyproject.toml` and `justfile` (`install/manifest.toml:105-113`). `prompt resolve` (`src/commands/prompt.rs:118`), `doctrine boot` / `boot --check` (`src/boot.rs:435-453`), and `status` (`src/status.rs:286-288`) instead use `root::default_markers()`, which has neither marker (`src/root.rs:8-16`). In a VCS-agnostic Python project with only `pyproject.toml`, install succeeds, but all three promised advisory sites fail root resolution; the session hook cannot emit its cascade or currency line. `prompt customise` would inherit the same failure if it follows the existing prompt command root seam.
 Fix: use one manifest-backed root marker policy across install and these readers, or explicitly make all call sites accept the same marker set; pin a pyproject-only and a justfile-only e2e case from install through each advisory site.
 """
-disposition = "follow-up"
-response = """
-Verified: install uses manifest [root_markers] (incl. pyproject.toml, justfile); prompt resolve / boot / status use root::default_markers(). Pre-existing divergence, and it already breaks the session hook in such projects regardless of SL-282. User ruling 2026-10-17: follow-up. Filed ISS-522; recorded as a residual in sec-risks.
-"""
+disposition = "design-wrong"
+response = "Verified: install uses manifest [root_markers] (incl. pyproject.toml, justfile); prompt resolve / boot / status use root::default_markers(). Pre-existing divergence, and it already breaks the session hook in such projects regardless of SL-282. User ruling 2026-10-17: follow-up. Filed ISS-522; recorded as a residual in sec-risks."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -297,6 +346,22 @@ disposition = "follow-up"
 response = """
 Verified: install uses manifest [root_markers] (incl. pyproject.toml, justfile); prompt resolve / boot / status use root::default_markers(). Pre-existing divergence, and it already breaks the session hook in such projects regardless of SL-282. User ruling 2026-10-17: follow-up. Filed ISS-522; recorded as a residual in sec-risks.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Mechanical repair: severe finding verified without a route; reopened only to attach one. Substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+route = "review"
+response = "Verified: install uses manifest [root_markers] (incl. pyproject.toml, justfile); prompt resolve / boot / status use root::default_markers(). Pre-existing divergence, and it already breaks the session hook in such projects regardless of SL-282. User ruling 2026-10-17: follow-up. Filed ISS-522; recorded as a residual in sec-risks."
 
 [[finding.turn]]
 act = "verify"
@@ -313,9 +378,8 @@ Observed: the proposed hint ends with a pathless `git commit -m ...` (`.doctrine
 Fix: path-limit the commit itself with an explicit `-- <same touched paths>` pathspec, and use `--` for `git add` as well. Render both commands against the resolved project root (`git -C <root>` or an explicit `cd`) so a nested-directory invocation works. Shell-quote the root and every path; add a fixture with an unrelated staged file and run install from a nested directory.
 """
 disposition = "design-wrong"
-response = """
-Verified and agreed. Hint is now `git add -- <paths> && git commit -m "…" -- <paths>`, root-relative, shell-quoted, prefixed `cd <root> &&` when cwd differs. E2e rows: unrelated staged file excluded; nested-directory run.
-"""
+response = """Verified and agreed. Hint is now `git add -- <paths> && git commit -m "…" -- <paths>`, root-relative, shell-quoted, prefixed `cd <root> &&` when cwd differs. E2e rows: unrelated staged file excluded; nested-directory run. Criterion (control): e2e: with an unrelated file staged, the printed commit command's pathspec excludes it; a pathless commit candidate must fail it."""
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -333,6 +397,22 @@ Verified and agreed. Hint is now `git add -- <paths> && git commit -m "…" -- <
 act = "verify"
 role = "raiser"
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Mechanical repair: severe finding verified without a route; reopened only to attach one. Substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+route = "control"
+response = """Verified and agreed. Hint is now `git add -- <paths> && git commit -m "…" -- <paths>`, root-relative, shell-quoted, prefixed `cd <root> &&` when cwd differs. E2e rows: unrelated staged file excluded; nested-directory run. Criterion (control): e2e: with an unrelated file staged, the printed commit command's pathspec excludes it; a pathless commit candidate must fail it."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-11"
 status = "verified"
@@ -344,9 +424,8 @@ Observed: codex and pi route skills through `skills_via = "universal"` (`install
 Fix: either narrow the hint's stated contract to Doctrine-owned writes and report delegated paths as an explicit manual review step, or obtain a bounded, reliable change report for the delegated leg before claiming exact tracked coverage. Add a codex/pi fixture where delegated output is trackable.
 """
 disposition = "design-wrong"
-response = """
-Contest accepted: narrowing needed a governance change, not a REV note. User ruling 2026-10-17 ("1a — npx is likely going soon"): DEC-382 amended — the hint names exactly doctrine's own tracked writes, path-limited; delegated (npx) writes get a review line. Design cites the amended DEC.
-"""
+response = """Contest accepted: narrowing needed a governance change, not a REV note. User ruling 2026-10-17 ("1a — npx is likely going soon"): DEC-382 amended — the hint names exactly doctrine's own tracked writes, path-limited; delegated (npx) writes get a review line. Design cites the amended DEC."""
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -379,6 +458,22 @@ Contest accepted: narrowing needed a governance change, not a REV note. User rul
 act = "verify"
 role = "raiser"
 note = "DEC-382's amended doctrine-owned path contract is reflected in design.md:169-173, including the delegated npx review line."
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Mechanical repair: severe finding verified without a route; reopened only to attach one. Substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+route = "review"
+response = """Contest accepted: narrowing needed a governance change, not a REV note. User ruling 2026-10-17 ("1a — npx is likely going soon"): DEC-382 amended — the hint names exactly doctrine's own tracked writes, path-limited; delegated (npx) writes get a review line. Design cites the amended DEC."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
 
 [[finding]]
 id = "F-12"
@@ -422,9 +517,8 @@ Observed: the design's `InstallPlan` table unconditionally takes base steps from
 Fix: specify which InstallPlan legs each mode includes before rendering and execution, preserving global's chosen target and making the only-memory subset explicit. Add `--global` and `--only-memory` dry-run/live fixtures asserting the exact base, forward, stamp, and hint effects.
 """
 disposition = "design-wrong"
-response = """
-Contest accepted: stamping these runs would codify behaviour the CLI contract disowns. The design now follows the CLI contract: neither flag is a project install, so neither stamps, gates or hints. Their current divergence from that contract is recorded in the design and filed as pre-existing bugs, not re-scoped here: --global running the project base plan (ISS-524), --only-memory unwired (ISS-523). Until those land, a flagged run can leave the checkout classified not-installed, and the advice (plain install) is correct for that state. E2e row updated.
-"""
+response = "Contest accepted: stamping these runs would codify behaviour the CLI contract disowns. The design now follows the CLI contract: neither flag is a project install, so neither stamps, gates or hints. Their current divergence from that contract is recorded in the design and filed as pre-existing bugs, not re-scoped here: --global running the project base plan (ISS-524), --only-memory unwired (ISS-523). Until those land, a flagged run can leave the checkout classified not-installed, and the advice (plain install) is correct for that state. E2e row updated."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -473,6 +567,22 @@ act = "verify"
 role = "raiser"
 note = "Verified against the revised Scope variants section and commit 1ee3c3ab3: neither flag is treated as a project install for stamps, currency gate, or hint; the existing project-write divergence is explicit and tracked by ISS-523 and ISS-524."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Mechanical repair: severe finding verified without a route; reopened only to attach one. Substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+route = "review"
+response = "Contest accepted: stamping these runs would codify behaviour the CLI contract disowns. The design now follows the CLI contract: neither flag is a project install, so neither stamps, gates or hints. Their current divergence from that contract is recorded in the design and filed as pre-existing bugs, not re-scoped here: --global running the project base plan (ISS-524), --only-memory unwired (ISS-523). Until those land, a flagged run can leave the checkout classified not-installed, and the advice (plain install) is correct for that state. E2e row updated."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-14"
 status = "verified"
@@ -484,9 +594,8 @@ Observed: the current forward-step runner catches and prints memory-sync, boot-w
 Fix: make the executor collect explicit per-leg outcomes (including soft refusals) and allow the current marker only when the required legs and managed ignore boundary completed; otherwise leave the marker absent/old and report the incomplete install. Preserve the per-leg disclosure behavior, and test a forced boot-wire failure and malformed gitignore block.
 """
 disposition = "design-wrong"
-response = """
-Contest accepted; verified src/boot.rs:3307-3310 catches per-harness refresh errors and returns Ok. apply_wire now returns per-harness results while printing the same lines and continuing; wire still returns Ok after printing (boot install unchanged); install maps any failed harness to a Failed boot-wiring leg, so no stamps. E2e row: one harness's refresh fails inside apply_wire.
-"""
+response = "Contest accepted; verified src/boot.rs:3307-3310 catches per-harness refresh errors and returns Ok. apply_wire now returns per-harness results while printing the same lines and continuing; wire still returns Ok after printing (boot install unchanged); install maps any failed harness to a Failed boot-wiring leg, so no stamps. E2e row: one harness's refresh fails inside apply_wire. Criterion (control): e2e: one harness refresh fails inside apply_wire → install reports incomplete and writes neither stamp; the candidate that stamps after a caught failure must fail it."
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -519,6 +628,22 @@ Contest accepted; verified src/boot.rs:3307-3310 catches per-harness refresh err
 act = "verify"
 role = "raiser"
 note = "Design.md:93-101 now carries internally caught per-harness refresh failures through apply_wire to a Failed install leg; lines 486-488 require the regression fixture."
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Mechanical repair: severe finding verified without a route; reopened only to attach one. Substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+route = "control"
+response = "Contest accepted; verified src/boot.rs:3307-3310 catches per-harness refresh errors and returns Ok. apply_wire now returns per-harness results while printing the same lines and continuing; wire still returns Ok after printing (boot install unchanged); install maps any failed harness to a Failed boot-wiring leg, so no stamps. E2e row: one harness's refresh fails inside apply_wire. Criterion (control): e2e: one harness refresh fails inside apply_wire → install reports incomplete and writes neither stamp; the candidate that stamps after a caught failure must fail it."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
 
 [[finding]]
 id = "F-15"
@@ -562,9 +687,8 @@ Observed: the new verb is specified to call `project_starters` unchanged for one
 Fix: give explicit customisations a distinguishable durable identity (for example a sidecar marker ignored by the hymn selector), or bound cleanup to a one-time legacy migration that cannot run on post-migration customisations. Add the install → customise → install regression, including an unedited starter, and assert both files remain.
 """
 disposition = "design-wrong"
-response = """
-Verified: project_starters output is exactly what the removal rule matches. User ruling 2026-10-17 ("only delete unversioned"): DEC-384 amended so legacy removal runs only while the tracked installed-version is absent — a one-time migration for pre-stamp installs. Customise output can never be a candidate. sec-hymns, risks and e2e rows (install → customise → install keeps both files; no removal once stamped) updated.
-"""
+response = 'Verified: project_starters output is exactly what the removal rule matches. User ruling 2026-10-17 ("only delete unversioned"): DEC-384 amended so legacy removal runs only while the tracked installed-version is absent — a one-time migration for pre-stamp installs. Customise output can never be a candidate. sec-hymns, risks and e2e rows (install → customise → install keeps both files; no removal once stamped) updated. Criterion (control): e2e: install → prompt customise role/worker → install leaves both files; the candidate that deletes them must fail it.'
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -582,6 +706,22 @@ Verified: project_starters output is exactly what the removal rule matches. User
 act = "verify"
 role = "raiser"
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Mechanical repair: severe finding verified without a route; reopened only to attach one. Substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+route = "control"
+response = 'Verified: project_starters output is exactly what the removal rule matches. User ruling 2026-10-17 ("only delete unversioned"): DEC-384 amended so legacy removal runs only while the tracked installed-version is absent — a one-time migration for pre-stamp installs. Customise output can never be a candidate. sec-hymns, risks and e2e rows (install → customise → install keeps both files; no removal once stamped) updated. Criterion (control): e2e: install → prompt customise role/worker → install leaves both files; the candidate that deletes them must fail it.'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-17"
 status = "verified"
@@ -593,9 +733,8 @@ Observed: design.md:282-292 gates on `RepoNewer` OR `CheckoutNewer`, then says `
 Specify the tracked write separately: preserve it only when tracked > B; otherwise write B after full success. Assert both absent and older tracked cases under a local-only downgrade.
 """
 disposition = "design-wrong"
-response = """
-Agreed. Under --allow-downgrade the tracked stamp is preserved only when newer than B; absent or older is written as B like any successful install. E2e rows for absent / older / newer tracked under a local-only downgrade.
-"""
+response = "Agreed. Under --allow-downgrade the tracked stamp is preserved only when newer than B; absent or older is written as B like any successful install. E2e rows for absent / older / newer tracked under a local-only downgrade. Criterion (control): e2e: --allow-downgrade with only the local marker newer and tracked absent → tracked written as B; the candidate leaving it absent must fail it."
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -614,6 +753,22 @@ act = "verify"
 role = "raiser"
 note = "Design.md:303-307 preserves only a tracked stamp newer than B and writes B when absent or older; lines 489-490 cover all three cases."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Mechanical repair: severe finding verified without a route; reopened only to attach one. Substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+route = "control"
+response = "Agreed. Under --allow-downgrade the tracked stamp is preserved only when newer than B; absent or older is written as B like any successful install. E2e rows for absent / older / newer tracked under a local-only downgrade. Criterion (control): e2e: --allow-downgrade with only the local marker newer and tracked absent → tracked written as B; the candidate leaving it absent must fail it."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+
 [[finding]]
 id = "F-18"
 status = "verified"
@@ -625,9 +780,8 @@ Observed: a pre-SL-282 installed repo has no tracked `installed-version`. With t
 Keep the absent-stamp gate, but distinguish explicit customisations created before migration or skip them by durable provenance. Add pre-stamp repo → customise → install coverage.
 """
 disposition = "design-wrong"
-response = """
-Agreed: a pre-stamp customise was still a cleanup candidate. User ruling 2026-10-17 ("2a"): DEC-384 amended — prompt customise refuses while the tracked installed-version is absent ("run `doctrine install` first"). Design sec-hymns, risks row and e2e row (pre-stamp customise refuses, writes nothing) updated.
-"""
+response = 'Agreed: a pre-stamp customise was still a cleanup candidate. User ruling 2026-10-17 ("2a"): DEC-384 amended — prompt customise refuses while the tracked installed-version is absent ("run `doctrine install` first"). Design sec-hymns, risks row and e2e row (pre-stamp customise refuses, writes nothing) updated. Criterion (control): e2e: in a repo with no installed-version, prompt customise refuses and writes nothing; the candidate that writes the starter must fail it.'
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -645,6 +799,22 @@ Agreed: a pre-stamp customise was still a cleanup candidate. User ruling 2026-10
 act = "verify"
 role = "raiser"
 note = "DEC-384's amended pre-stamp refusal is explicit in design.md:348-350; lines 475-476 require no-write coverage."
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Mechanical repair: severe finding verified without a route; reopened only to attach one. Substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+route = "control"
+response = 'Agreed: a pre-stamp customise was still a cleanup candidate. User ruling 2026-10-17 ("2a"): DEC-384 amended — prompt customise refuses while the tracked installed-version is absent ("run `doctrine install` first"). Design sec-hymns, risks row and e2e row (pre-stamp customise refuses, writes nothing) updated. Criterion (control): e2e: in a repo with no installed-version, prompt customise refuses and writes nothing; the candidate that writes the starter must fail it.'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
 
 [[finding]]
 id = "F-19"
