@@ -1,7 +1,7 @@
 id = 282
 slug = "install-explains-itself"
 title = "Install explains itself"
-status = "design"
+status = "ready"
 created = "2026-10-16"
 updated = "2026-10-16"
 tags = ["area:install", "area:onboarding", "area:ux", "hymns"]
