@@ -401,9 +401,9 @@
         devshells.default = {
           packages =
             projectPkgs
-            # Bare (unjailed) agents on the host PATH, mirroring the jailed
-            # set. From agents's eval (jailLib.unjailed) so they're the identical
-            # drvs the jails bundle — dirge here == packages.dirge below.
+            # Bare (unjailed) agents on the host PATH, from agents's eval
+            # (jailLib.unjailed): pi and claude are the drvs the jails bundle;
+            # dirge has no jail, and here == packages.dirge below.
             ++ lib.optionals isLinux (
               with jailLib.unjailed; [
                 pi
