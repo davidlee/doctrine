@@ -128,17 +128,10 @@
             # pi-dev
           ];
 
-        # API-key forwarding is NOT configured here. jailed-agents.nix carries
-        # it (`apiKeyPassThrough`, on by default for online profiles): the outer
-        # `op run` wrapper resolves the op:// refs into the launcher's own
-        # environ, and bwrap's `--args FD` copies them into the jail down an
-        # anonymous pipe — never argv (`/proc/<pid>/cmdline` is world-readable),
-        # never disk. This flake once duplicated that FD mechanism locally to
-        # opt out of an older upstream that forwarded keys as `--setenv VAR
-        # "$VAR"` on the bwrap command line; upstream was fixed the same day
-        # (nix-config 1fea0a9d, 2026-08-11) and the duplicate removed. Don't
-        # re-add one: upstream also guards the empty selection and asserts on
-        # unknown key names, which the local copy did not.
+        # No provider key enters these jails: mkJail defaults to the LLM
+        # gateway (`gatewayClient "pi"`), and the jail gets only the gateway
+        # key, on FD 22. A jail with `gateway = null` falls back to
+        # jailed-agents.nix's own key forwarding; don't duplicate it here.
         jailEnvOptions = with jailLib.combinators; [
           (try-fwd-env "DOCTRINE_BIN")
           (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
@@ -207,6 +200,7 @@
               profile = "specDev";
               extraPkgs = projectPkgs;
               extraOptions = jailEnvOptions;
+              gateway = jailLib.gatewayClient "pi";
             }
             // args
           );
@@ -223,10 +217,9 @@
           # };
           jailed-claude = mkJail jailLib.makeJailedClaude {
             allowSelfAsSubagent = true;
-            # claude can spawn pi/dirge inside its own jail (no re-jail).
+            # claude can spawn pi inside its own jail (no re-jail).
             subagents = [
               "pi"
-              "dirge"
             ];
             maxSubagentDepth = 2;
           };
@@ -237,18 +230,11 @@
               "codex"
             ];
           };
-          jailed-dirge = mkJail jailLib.makeJailedDirge {
-            # exposePostgres = true;
-            allowSelfAsSubagent = true;
-            # maxSubagentDepth = 2;
-          };
-
           jailed-shell = mkJail jailLib.makeJailedAgent {
             name = "shell";
             agent = pkgs.zsh;
             subagents = [
               "pi"
-              "dirge"
               "claude"
             ];
           };
@@ -387,7 +373,7 @@
           // {
             inherit doctrine;
             # Unjailed dirge pulled straight from the agents flake — same pkgs +
-            # callPackage as the jailed-dirge wrapper bundles, so it's the
+            # callPackage as agents builds it, so it's the
             # identical derivation (one drv hash, store path reused, no rebuild).
             # Must come from agents's eval; doctrine's own pkgs (different nixpkgs +
             # rust-overlay pin) would fork the drv and rebuild from scratch.
@@ -464,11 +450,6 @@
               name = "drn";
               help = "short for doctrine";
               command = "doctrine $@";
-            }
-            {
-              name = "jdi";
-              help = "jailed-dirge --yolo";
-              command = "jailed-dirge $@";
             }
             {
               name = "jpi";
