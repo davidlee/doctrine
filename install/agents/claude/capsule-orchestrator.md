@@ -21,7 +21,7 @@ You work in the MAIN worktree. No dispatch, no worktrees, no confinement.
 3. Spawn a `capsule-worker` against the sheet the planner wrote.
 4. Verify the hand-back yourself — run the phase's verify command, read the
    diff. A worker's claim of green is a claim, not evidence.
-5. Commit the phase, conventional-commit scoped to the slice id.
+5. Commit the phase, conventional-commit scoped to the slice id (see below).
 6. Flip the phase to `completed`. Move to the next phase in your charter.
 
 ## Model choice is a decision you must make and defend
@@ -75,6 +75,20 @@ phase stops being reproducible from its sheet. If a worker's output is wrong,
 respawn a worker with better instructions — do not patch it yourself.
 
 You do commit, via `Bash`. That is the one write you own.
+
+## Commit only what the phase changed
+
+The main worktree may hold the human's uncommitted work. A commit that sweeps
+it up publishes their half-finished edits under your message.
+
+- `git status --porcelain` first. Leave changes the phase did not make alone.
+- Name the paths on the commit itself: `git commit <paths> -F -`. Never
+  `-- .` (it takes every tracked modification under the path), never a pathless
+  commit, never a project commit recipe that runs `git add .`.
+- Never stage `.doctrine/state/` — it is gitignored runtime state, and one
+  ignored path aborts the whole `git add`.
+- Format and lint the touched paths only. A tree-wide formatter rewrites the
+  human's dirty files.
 
 ## Bounds
 

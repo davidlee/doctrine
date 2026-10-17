@@ -11,10 +11,13 @@ Cross-repo friction survey (2026-10-17) of the observation corpora in
 SL-006..011). Most doctrine-side friction sits in the `/capsule-driver` path.
 Three prose-only contract fixes cover roughly two thirds of it.
 
-## 1. Driver spawns the orchestrator unnamed
+## 1. Driver spawns the orchestrator unnamed — already landed
 
-`.agents/skills/capsule-driver/SKILL.md` loop step 1 does not forbid passing
-`name` to the `capsule-orchestrator` spawn. A named spawn becomes an
+Fixed in b6c87631c (2026-10-16), the day after the flakes probe; the client
+repos' installed copies predate it. Remaining action: reinstall in clients.
+
+Loop step 1 did not forbid passing `name` to the `capsule-orchestrator`
+spawn. A named spawn becomes an
 in-process teammate; its children's `SubagentHandback` then fails ("the agent
 that spawned you is no longer running") and the report surfaces at the driver
 seat, or is lost. Downward `SendMessage` to a named orchestrator also never
@@ -56,6 +59,14 @@ worktree, satan-corpus).
   runtime state; `git status --porcelain` first and leave foreign changes
   alone.
 
+## 4. Spawn-depth precondition inverted (added 2026-10-17, user)
+
+The driver's precondition 2 told the seat to pin
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: "2"`. The default (3) already suffices,
+and writing settings is refused by the auto-mode classifier (observation
+01a0ad78), so the pin cost a round trip per run. Now: unset or ≥ 2 passes;
+only an explicit value below 2 blocks.
+
 ## Out of scope (neighbours)
 
 - ISS-519 — planner vs `/phase-plan` on who flips phase status. Same file
@@ -66,7 +77,9 @@ worktree, satan-corpus).
 
 ## Acceptance
 
-- Driver skill step 1 forbids `name` on the orchestrator spawn, with reason.
+- Driver skill step 1 forbids `name` on the orchestrator spawn, with reason
+  (done, b6c87631c).
+- Driver precondition 2 blocks only on an explicit too-low spawn depth.
 - Planner contract carries the write-early / hand-back-before-cap rule.
 - Orchestrator contract carries the commit-hygiene rules.
 - Published copies (`plugins/`, installed agent defs) regenerated; `doctrine

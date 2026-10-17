@@ -34,10 +34,12 @@ hand-backs.
    *your* session naming the asker — it will not deadlock, but it will pepper
    you and defeat the point. Confirm the operator is running a posture they are
    happy to have inherited by the whole tree.
-2. **Spawn depth.** The tree needs 2 layers below you. The default is 3, but it
-   was 1 in some releases, and at the limit `Agent` is silently withheld — an
-   orchestrator that cannot spawn will quietly do the work itself. Pin it:
-   `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: "2"` in settings.
+2. **Spawn depth.** The tree needs 2 layers below you. The default (3) is
+   enough, so nothing needs setting. Only a value set too low blocks: if
+   `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` is set below 2, at the limit `Agent`
+   is silently withheld — an orchestrator that cannot spawn will quietly do the
+   work itself. Check with `printenv CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`;
+   unset or ≥ 2 passes.
 3. **No competing writers.** Everything runs in the main worktree with no
    confinement. Confirm no other agent is active in this tree before you start.
 4. **The slice is planned.** Design locked, `plan.toml` authored, phases exist.
