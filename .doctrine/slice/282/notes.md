@@ -41,11 +41,12 @@ design read:
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-17 · audit · e50b1a131
+fresh-as-of: 2026-10-17 · close · adf0240f2
 
 ### Produced
 - PHASE-01..07 implemented (43dbc692c..71ebbfe86); PHASE-07 appended for the downgrade gate split from PHASE-03
-- audit RV-422: 10 findings; fixes e50b1a131 (F-1, F-2, F-3, F-5, F-7, F-9, F-10); F-4, F-5, F-6, F-8 to reconcile
+- audit RV-422: 10 findings; fixes e50b1a131 (F-1, F-2, F-3, F-5, F-7, F-9, F-10)
+- reconcile: REV-073 — SPEC-023, REQ-322, REQ-329 to starters-on-demand; DEC-382 amended (hint filter, one command per line); design + selectors (adf0240f2)
 - design locked after RV-421; DEC-379, DEC-382, DEC-384 amended on user rulings
 - minted: ISS-522 — root-marker divergence install vs readers; ISS-523 — `--only-memory` unwired; ISS-524 — `--global` runs the project install; CHR-180 — two stale memories
 
@@ -54,5 +55,4 @@ fresh-as-of: 2026-10-17 · audit · e50b1a131
 - mem.pattern.rust.pathbuf-eq-ignores-trailing-separator — PathBuf equality hid a rendered trailing `/`
 
 ### Open
-- DEC-382 — amend: hint omits git-ignored paths, one command per line (RV-422 F-5, F-10)
-- PHASE-06 VH-1 — user's interactive scratch-repo readability check pending
+- none — PHASE-06 VH-1 passed (user scratch-repo check, 2026-10-17); deferred work is on ISS-522..524, CHR-180

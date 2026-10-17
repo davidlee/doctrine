@@ -1,9 +1,9 @@
 id = 282
 slug = "install-explains-itself"
 title = "Install explains itself"
-status = "reconcile"
+status = "done"
 created = "2026-10-16"
-updated = "2026-10-16"
+updated = "2026-10-17"
 tags = ["area:install", "area:onboarding", "area:ux", "hymns"]
 
 [relationships]

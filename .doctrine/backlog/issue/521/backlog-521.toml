@@ -5,10 +5,10 @@ id = 521
 slug = "adherence-low-double-emit"
 title = "Repo hymn twin model/adherence/low double-emits"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-10-16"
-updated = "2026-10-16"
+updated = "2026-10-17"
 tags = ["area:prompt-cascade", "hymns"]
 
 # outbound-only. Cross-kind structural edges (e.g. references with a role
