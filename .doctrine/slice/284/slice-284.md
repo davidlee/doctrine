@@ -46,8 +46,9 @@ non-Claude target; doctrine must not also link into `.pi/skills/`.
    repo-slug setting and the `npx`/`bunx` runner resolution.
 4. **Settle `skills-lock.json` (IMP-406 `OQ-3`)** — no equivalent record vs. an
    owed one.
-5. **Fix the hardcoded `agent claude (direct):` header** in
-   `install_skills_direct` (RV-350 `F-7`): label each link target.
+5. ~~Fix the hardcoded `agent claude (direct):` header (RV-350 `F-7`).~~
+   Already resolved by SL-281's rewrite — `install_skills_direct` no longer
+   exists (research.md cross-thread finding 1).
 6. **Separate pi's boot-install selection from codex (ISS-479).** A codex-only
    selection leaves pi files untouched; pi gets its own selection/detection, or
    an explicit, disclosed combined selection. Keep per-file foreign-skip and
