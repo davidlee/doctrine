@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 388
+slug = "remove-the-npx-skills-delegation"
+title = "Remove the npx skills delegation"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-18"
+updated = "2026-10-18"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "After inq-1 every registered harness links directly; only unregistered --agent names would still reach npx."
+choice = "Delete the npx path: runner resolution, delegate_argv, install_for_other, Leg::Skills, the skills_via registry field and the [install] repo key. An unknown --agent is refused."
+alternatives = ["keep npx for unregistered agents"]
+rationale = "npx adds only a per-agent dir table (research thread 3); a new harness is a registry entry. Large self-contained deletion."
+consequences = []
+decided_by = "user"
+decided_on = "2026-10-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-284"

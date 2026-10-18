@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 387
+slug = "no-product-migration-for-npx-written-skill-copies"
+title = "No product migration for npx-written skill copies"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-18"
+updated = "2026-10-18"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Existing projects hold real npx-copied dirs at .agents/skills/<id> and .pi/skills/<id>, plus skills-lock.json."
+choice = "Ship no migration code. Blocking copies fall to the existing Shadows notice. The user's own checkouts get a one-off cleanup at close."
+alternatives = ["prove npx ownership via skills-lock.json and replace", "disclose .pi/skills and stale lockfile"]
+rationale = "No users besides the maintainer; migration code would be carried indefinitely for a one-time transition."
+consequences = []
+decided_by = "user"
+decided_on = "2026-10-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-284"

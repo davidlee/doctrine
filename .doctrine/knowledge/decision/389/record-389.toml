@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 389
+slug = "pi-gets-its-own-boot-adapter"
+title = "Pi gets its own boot adapter"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-18"
+updated = "2026-10-18"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "ISS-479: pi rode the codex boot adapter, so a codex install wrote pi extensions and a pi install wired codex hooks."
+choice = 'Add Harness::Pi; [harness.pi] boot = "pi". Pi arm: pi extensions (index.ts, mcp.ts, surface.ts) + AGENTS.md import. Codex arm: codex hooks + codex MCP + AGENTS.md import.'
+alternatives = ["explicit disclosed combined selection"]
+rationale = "POL-003: one harness selection must not write another's files. Pi does not read codex MCP config."
+consequences = []
+decided_by = "user"
+decided_on = "2026-10-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-284"

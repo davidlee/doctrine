@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 386
+slug = "non-claude-skills-link-from-the-embed-into-agentsskills"
+title = "Non-Claude skills link from the embed into .agents/skills"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-18"
+updated = "2026-10-18"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Non-Claude harnesses got skills via npx skills add from the published GitHub repo, lagging the binary and requiring Node/network."
+choice = 'codex, pi and universal registry entries take skills = ".agents/skills"; the existing canon+relative-link convergence serves them from the embed. Doctrine never links into .pi/skills (pi warns on duplicates).'
+alternatives = ["keep npx delegation", "per-harness dirs (.pi/skills)"]
+rationale = "Removes version skew and Node/network dependency; reuses the SL-281 mechanism; .agents/skills is what codex, pi and most non-Claude harnesses read."
+consequences = []
+decided_by = "user"
+decided_on = "2026-10-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-284"

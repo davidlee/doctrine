@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a14f3b-e4cc-71d3-bc0a-0a1a46497ee2"
+recorded_at = "2026-10-18T13:38:07.692503668Z"
+kind = "friction"
+summary = "research skill: pi research agents unusable outside the jail (no API keys); threads run inline by the orchestrator, costing primary context"
+detail = "SL-284 /research round from /home/david/dev/doctrine (no /workspace). CLAUDE.md says to pass prompts to the user in that case; skill allows self-run degradation. Chose self-run to spare user attention."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
