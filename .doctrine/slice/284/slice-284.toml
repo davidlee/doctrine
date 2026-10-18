@@ -1,0 +1,78 @@
+id = 284
+slug = "embedded-agents-skills"
+title = "Embedded skills for non-Claude harnesses"
+status = "design"
+created = "2026-10-18"
+updated = "2026-10-18"
+tags = ["area:install", "area:skills", "harness"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "install/manifest.toml"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/install.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/install_ownership.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/install_config.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/boot.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/spec/tech/010/**"
+intent = "scope-relevant"
+
+[[relation]]
+label = "fulfils"
+target = "IMP-406"
+
+[[relation]]
+label = "fulfils"
+target = "ISS-479"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-019"
+
+[[relation]]
+label = "governed_by"
+target = "POL-003"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "D2/REQ-175 amended via REV"
+target = "SPEC-010"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "same harness registry + install.rs; sequence"
+target = "SL-283"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "removes publication-lag aggravator only"
+target = "IMP-351"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis. Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-NNN
+#   doctrine link SL-NNN governed_by ADR-NNN
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
