@@ -249,9 +249,10 @@ web-hash:
     exit 1
   fi
 
-# install with vite stage
+# install with vite stage, into doctrine's own root: its bin/ is the directory
+# jails bind (agents flake), so nothing else in ~/.cargo/bin is exposed
 install: web-build
-  cargo install --path .
+  cargo install --path . --root ~/.local/share/doctrine
 
 # # list memories
 # list-memories:

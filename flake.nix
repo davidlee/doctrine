@@ -106,8 +106,6 @@
           uv
           python314
 
-          doctrine
-
           shellcheck
           procps # pgrep
           # Conformance-suite payload dependencies, declared rather than
@@ -162,28 +160,13 @@
           # was always on default `target/` and is unchanged. Do not re-add a
           # shared redirect: it reintroduces the cross-worktree fingerprint thrash
           # this removal fixes.
-          # Share the crane-built doctrine into the jail at the cargo path.
-          # persist-home mounts an isolated, writable ~/.cargo; this ro-binds the
-          # IMMUTABLE nix store output over ~/.cargo/bin/doctrine (extraOptions
-          # applies after persist-home, so it wins). src != dst: the dst is the
-          # path every PATH + absolute-path caller already resolves; the src is a
-          # content-addressed store path that `cargo install`'s atomic-rename can
-          # never invalidate. Converts the mid-session stale-bind HARD BREAK
-          # (rename → unlinked inode → hooks/MCP ENOENT) into benign staleness —
-          # the bound store path stays valid for the jail's whole life; a rebuild
-          # produces a NEW store path, picked up only on the next jail cycle. See
-          # IMP-249. dst tilde expands in the host launcher shell (noescape emits
-          # it raw/unquoted, so the launcher bash expands ~ → $HOME; portable
-          # across homes, unlike a hardcoded /home/david). Dev-iteration binary is
-          # ./target/debug/doctrine, never bound — unaffected. (ISS-230: the stray
-          # repo-root ~ was NEVER this line — it was a literal-~ CARGO_HOME in the
-          # host shell; this bind's ~ expands correctly.)
-          (ro-bind "${doctrine}/bin/doctrine" (noescape "~/.cargo/bin/doctrine"))
-          # Put cargo-bin on the jail PATH so the SessionStart hook's bare
-          # `doctrine boot` resolves to the shared binary above.
           #(ro-bind "${pkgs.coreutils}/bin/env" "/usr/bin/env")
           #(add-pkg-deps [pkgs.coreutils])
-          (add-path "/home/david/.cargo/bin")
+          # No doctrine bind here: the agents flake's jail default ro-binds the
+          # host's doctrine install dir (~/.local/share/doctrine/bin, from
+          # `just install`) at /run/doctrine-bin, ahead on PATH. A directory
+          # bind, not a file bind, so a reinstall's atomic rename reaches a
+          # running jail (IMP-249).
         ];
 
         # workspaceDeps now sourced from the JAIL_WORKSPACE_DEPS env var
@@ -210,11 +193,11 @@
             allowSelfAsSubagent = true;
             maxSubagentDepth = 2;
           };
-          # jailed-pi-research = mkJail jailLib.makeJailedPi {
-          #   name = "pi-research";
-          #   profile = "research";
-          #   inherit workspaceDeps;
-          # };
+          jailed-pi-research = mkJail jailLib.makeJailedPi {
+            name = "pi-research";
+            profile = "research";
+            allowSelfAsSubagent = true;
+          };
           jailed-claude = mkJail jailLib.makeJailedClaude {
             allowSelfAsSubagent = true;
             # claude can spawn pi inside its own jail (no re-jail).
@@ -380,10 +363,8 @@
             dirge = inputs.agents.packages.${system}.dirge;
             # Frontend layers exposed individually so they are buildable and
             # debuggable without the full rust binary — `nix build .#web-modules -L`
-            # streams the bun install, `.#web-dist` the vite build. Reaching them
-            # only through `doctrine` means a stuck frontend build also blocks the
-            # devshell (jailPkgs bind ${doctrine}/bin/doctrine), i.e. blocks
-            # entering the directory at all.
+            # streams the bun install, `.#web-dist` the vite build, without
+            # reaching them only through `doctrine`.
             web-modules = webModules;
             web-dist = webDist;
             # The devshell's tool set as one closure, for out-of-tree consumers
@@ -392,7 +373,10 @@
             # the VM and this devshell can't drift).
             dev-tools = pkgs.buildEnv {
               name = "doctrine-dev-tools";
-              paths = devToolPkgs;
+              # doctrine rides here, not in devToolPkgs: the host devshell and
+              # jails take the cargo install (`just install`); the VM guest
+              # can't reach the host's, so it keeps the crane build.
+              paths = devToolPkgs ++ [doctrine];
               ignoreCollisions = true;
             };
             default = doctrine;
