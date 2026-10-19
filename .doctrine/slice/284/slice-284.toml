@@ -12,11 +12,11 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "install/manifest.toml"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install_ownership.rs"
@@ -24,14 +24,26 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/install_config.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/boot.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".doctrine/spec/tech/010/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "README.md"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/spec/tech/009/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/spec/tech/011/**"
 intent = "scope-relevant"
 
 [[relation]]

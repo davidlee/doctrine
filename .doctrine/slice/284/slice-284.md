@@ -37,25 +37,23 @@ non-Claude target; doctrine must not also link into `.pi/skills/`.
    existing direct-link mechanism with `skills = ".agents/skills"` (SL-281's
    registry route). Canon copies, links, dead-link pruning and gitignore follow
    from the existing convergence — a new target, not a new mechanism.
-2. **Migrate npx-written state.** Existing projects hold *real directories*
-   (npx copies) at `.agents/skills/<id>`, which proven-ownership reconcile
-   classifies foreign and keeps. Define how install converges them (and the
-   stale `skills-lock.json`) without clobbering user-owned skills.
-3. **Decide the npx fallback (IMP-406 `OQ-2`).** Keep it for unregistered
-   `--agent` names / bespoke layouts, or remove it with `install_config.rs`'s
-   repo-slug setting and the `npx`/`bunx` runner resolution.
-4. **Settle `skills-lock.json` (IMP-406 `OQ-3`)** — no equivalent record vs. an
-   owed one.
+2. **No migration code (DEC-387).** Existing npx copies at a link site are kept
+   and disclosed by the existing `Shadows` notice; the maintainer's checkouts get
+   a one-off cleanup at close.
+3. **Remove the npx delegation (DEC-388)**, with the `[install] repo` setting and
+   the `npx`/`bunx` runner; an unknown `--agent` is refused.
+4. **`skills-lock.json`:** no equivalent record; doctrine writes none, and the
+   stale one is removed in the one-off cleanup.
 5. ~~Fix the hardcoded `agent claude (direct):` header (RV-350 `F-7`).~~
    Already resolved by SL-281's rewrite — `install_skills_direct` no longer
    exists (research.md cross-thread finding 1).
-6. **Separate pi's boot-install selection from codex (ISS-479).** A codex-only
-   selection leaves pi files untouched; pi gets its own selection/detection, or
-   an explicit, disclosed combined selection. Keep per-file foreign-skip and
+6. **Pi boot adapter (ISS-479, DEC-389).** A codex-only selection leaves pi
+   files untouched and vice versa. Keep per-file foreign-skip and
    regenerate-on-change.
-7. **Spec change through a REV.** SPEC-010 `D2` / `REQ-175` ("Claude direct, all
-   others delegated") and its responsibilities line are amended via a Revision,
-   not edited in place.
+6a. **Pi extensions out of the client tree (ISS-525, DEC-390):** generated into
+   `.doctrine/state/pi/extensions/`, registered via `.pi/settings.json`.
+7. **Spec change through a REV.** SPEC-010, SPEC-009 and SPEC-011 are amended via one Revision
+   (design sec-6), not edited in place.
 
 ## Non-Goals
 
@@ -70,37 +68,33 @@ non-Claude target; doctrine must not also link into `.pi/skills/`.
 ## Affected surface
 
 - `install/manifest.toml` — `[harness.*]` registry entries.
-- `src/install.rs` — skills routing, `install_skills_direct`, npx delegate
-  (`delegate_argv`, runner resolution), install plan output.
-- `src/install_ownership.rs` — reconcile / migration of real-dir copies.
-- `src/install_config.rs` — repo-slug setting (if npx goes).
-- `src/boot.rs` — `install_refresh` harness routing (ISS-479).
-- `.doctrine/spec/tech/010/` — via REV only.
-- Install docs / skills / memories that teach the npx path.
+- `src/install.rs` — skills routing, npx delegate removal, harness refusal.
+- `src/install_config.rs` — `[install] repo` removal.
+- `src/boot.rs` — pi adapter, `install_refresh` arms, extension dir,
+  `.pi/settings.json` merge.
+- `README.md` and comments teaching npx.
+- `.doctrine/spec/tech/{009,010,011}/` — via REV only.
 
 ## Risks & assumptions
 
-- **R1 — foreign real dirs.** Migration that is too eager deletes a user's
-  hand-authored skill; too timid leaves stale copies shadowing nothing (a link
-  can't be written over a dir). Needs a provable "this was npx's" test —
-  `skills-lock.json` membership is the obvious candidate.
-- **R2 — pi double-load.** Any leftover `.pi/skills/` doctrine content produces
-  pi warnings; confirm doctrine never writes there.
+- **R1 — foreign real dirs** (retired by DEC-387): copies are kept and disclosed,
+  never deleted by product code.
+- **R2 — pi double-load.** Leftover `.pi/skills/` or `.pi/extensions/doctrine/`
+  content duplicates in pi; doctrine never writes there after this slice, and
+  the one-off cleanup removes the maintainer's copies.
 - **R3 — SL-283 collision.** Both slices edit `[harness.codex]` and
-  `src/install.rs`; land in sequence.
-- **A1** — symlinked skill dirs under `.agents/skills/` are followed by pi and
-  codex (the user's confirmation covers the location; link-following is to be
-  verified in research).
+  `src/install.rs`; SL-284 lands first.
+- **R4 — disposable extension dir.** Wiping `.doctrine/state/` removes the pi
+  extensions until `doctrine boot install` re-runs (design sec-5).
+- **A1** — pi and codex follow symlinked skill dirs under `.agents/skills/`
+  (VH at close).
 
 ## Verification intent
 
-- Tests: a pi/codex/universal install with no `npx` on `PATH` and no network
-  produces `.agents/skills/<id>` links into canon matching the embed.
-- Tests: migration over a fixture holding npx-style copies + `skills-lock.json`;
-  foreign user skills survive.
-- Tests: codex-only boot install writes no `.pi/` files.
-- VH: pi session in a migrated project loads skills with no duplicate warning.
-- SPEC-010 REV approved and applied; `doctrine check gate` green.
+See design sec-7: VT over routing, shared-dir collapse, per-link gitignore,
+`Shadows` retention, unknown-agent refusal, codex/pi boot isolation, and the
+`.pi/settings.json` planner; VH for A1 after the one-off cleanup; REV applied;
+`doctrine check gate` green.
 
 ## Summary
 
