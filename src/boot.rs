@@ -731,6 +731,7 @@ const SURFACE_TIMEOUT_SEC_CODEX: u32 = 5;
 pub(crate) enum Harness {
     Claude,
     Codex,
+    Pi,
 }
 
 /// Parse an explicit `--agent` token. Unlike `skills::parse_agent` (which
@@ -741,8 +742,10 @@ fn parse_harness(s: &str) -> anyhow::Result<Harness> {
         Ok(Harness::Claude)
     } else if s.eq_ignore_ascii_case("codex") {
         Ok(Harness::Codex)
+    } else if s.eq_ignore_ascii_case("pi") {
+        Ok(Harness::Pi)
     } else {
-        bail!("Unknown harness '{s}'. Known harnesses: claude, codex.")
+        bail!("Unknown harness '{s}'. Known harnesses: claude, codex, pi.")
     }
 }
 
@@ -750,17 +753,18 @@ pub(crate) fn harness_label(h: &Harness) -> &'static str {
     match h {
         Harness::Claude => "claude",
         Harness::Codex => "codex",
+        Harness::Pi => "pi",
     }
 }
 
 /// The committed file each harness `@`-imports the snapshot from. **One file per
-/// harness** (review fix #1): Claude reads `CLAUDE.md`, codex `AGENTS.md` — never
-/// both for one agent, else the snapshot would inline twice. This repo's
+/// harness** (review fix #1): Claude reads `CLAUDE.md`, codex and pi share
+/// `AGENTS.md` — never both for one agent, else the snapshot would inline twice. This repo's
 /// `CLAUDE.md → AGENTS.md` symlink makes the union dedup to a single inode.
 fn import_targets(h: &Harness, root: &Path) -> Vec<PathBuf> {
     match h {
         Harness::Claude => vec![root.join("CLAUDE.md")],
-        Harness::Codex => vec![root.join("AGENTS.md")],
+        Harness::Codex | Harness::Pi => vec![root.join("AGENTS.md")],
     }
 }
 
@@ -783,7 +787,7 @@ pub(crate) fn agents_md_implies_codex(root: &Path, claude_detected: bool) -> boo
 
 /// Resolve target harnesses: explicit `--agent` wins; else auto-detect by marker
 /// (`.claude/` → Claude; `.codex/`, or an `AGENTS.md` that is not merely Claude's
-/// inode-alias → Codex); ≥1 required (mirrors `skills::resolve_agents`). A repo
+/// inode-alias → Codex; `.pi/` → Pi); ≥1 required (mirrors `skills::resolve_agents`). A repo
 /// with `.claude/` and a separate-inode `AGENTS.md` wires both; this repo's
 /// `AGENTS.md` symlink onto `CLAUDE.md` is Claude's import target via one inode,
 /// not a codex surface, so it stays Claude-only (SL-063 §3.1).
@@ -799,10 +803,13 @@ pub(crate) fn resolve_harnesses(explicit: &[String], root: &Path) -> anyhow::Res
     if root.join(".codex").exists() || agents_md_implies_codex(root, claude) {
         found.push(Harness::Codex);
     }
+    if root.join(".pi").exists() {
+        found.push(Harness::Pi);
+    }
     if found.is_empty() {
         bail!(
-            "No --agent given and no .claude/ or .codex/ (or AGENTS.md) found. \
-             Pass --agent <claude|codex>."
+            "No --agent given and no .claude/, .codex/, .pi/ (or AGENTS.md) found. \
+             Pass --agent <claude|codex|pi>."
         );
     }
     Ok(found)
@@ -1059,7 +1066,7 @@ pub(crate) enum RefreshOutcome {
         hook_file: &'static str,
         snippet: String,
     },
-    /// Nothing to do: the doctrine hook is already current, or pi (import-only).
+    /// Nothing to do: the doctrine hook or registration is already current.
     None,
 }
 
@@ -1771,13 +1778,20 @@ fn check_spike_coexistence(root: &Path) -> bool {
     false
 }
 
+/// An MCP registration is either handled by this harness or absent by design.
+#[derive(Debug, PartialEq, Eq)]
+enum McpOutcome {
+    Applicable(RefreshOutcome),
+    NotApplicable,
+}
+
 /// Imperative per-harness refresh. Claude merges the `SessionStart` hook into
 /// `.claude/settings.local.json` (writes only on change, `!dry_run`) AND sets
 /// `worktree.baseRef="head"` (SL-064 §8 — so the claude `/dispatch` arm's isolated
-/// worker forks the orchestrator session HEAD, base==B by placement); pi is
-/// import-only → no hook, no baseRef (its `AGENTS.md` ref is the shared
-/// `ensure_boot_import` work). A malformed settings file is left untouched
-/// (`PrintedFallback`).
+/// worker forks the orchestrator session HEAD, base==B by placement); pi
+/// generates extensions with no hook, MCP registration, or baseRef (its
+/// `AGENTS.md` ref is the shared `ensure_boot_import` work). A malformed
+/// settings file is left untouched (`PrintedFallback`).
 fn install_refresh(
     h: &Harness,
     root: &Path,
@@ -1798,18 +1812,12 @@ fn install_refresh(
             } else {
                 check_spike_coexistence(root)
             };
-            let append_system = AppendSystemOutcome::NotApplicable;
-            let extension = install_pi_extension(root, exec, dry_run)?;
-            let mcp_extension = install_mcp_extension(root, exec, dry_run)?;
-            let surface_extension = install_surface_extension(root, exec, dry_run)?;
-            // The MCP leg is written LAST in the arm (a different file from the
-            // hooks), and its error carries boundary context naming how far the arm
-            // got — mirroring the Claude hook loop, so an abort after the hooks and
-            // the pi extensions is not silent about what already landed (design
-            // sec-5.4).
-            let mcp = install_codex_mcp(root, dry_run).with_context(
-                || "codex MCP registration failed after the hook merge and pi extensions",
-            )?;
+            // The MCP leg follows the hooks; its error names the boundary so
+            // an abort after a successful hook merge is visible.
+            let mcp = McpOutcome::Applicable(
+                install_codex_mcp(root, dry_run)
+                    .with_context(|| "codex MCP registration failed after the hook merge")?,
+            );
             Ok(RefreshReport {
                 hooks,
                 claude_scope: None,
@@ -1818,13 +1826,27 @@ fn install_refresh(
                     stranded: None,
                 },
                 mcp,
-                append_system,
-                extension,
-                mcp_extension,
-                surface_extension,
+                append_system: AppendSystemOutcome::NotApplicable,
+                extension: ExtOutcome::NotApplicable,
+                mcp_extension: ExtOutcome::NotApplicable,
+                surface_extension: ExtOutcome::NotApplicable,
                 spike_warning,
             })
         }
+        Harness::Pi => Ok(RefreshReport {
+            hooks: Vec::new(),
+            claude_scope: None,
+            baseref: BaseRefWrite {
+                outcome: BaseRefOutcome::NotApplicable,
+                stranded: None,
+            },
+            mcp: McpOutcome::NotApplicable,
+            append_system: AppendSystemOutcome::NotApplicable,
+            extension: install_pi_extension(root, exec, dry_run)?,
+            mcp_extension: install_mcp_extension(root, exec, dry_run)?,
+            surface_extension: install_surface_extension(root, exec, dry_run)?,
+            spike_warning: false,
+        }),
         Harness::Claude => {
             // SL-250 PHASE-04: the arm merges the WHOLE registry — five entries
             // across three events (SL-254 PHASE-04 retired the four confinement
@@ -1869,7 +1891,7 @@ fn install_refresh(
             let baseref = install_baseref(root, scope, dry_run)?;
             // `.mcp.json` registration (CHR-013) — a SEPARATE project-root file,
             // not the settings file; its own narrow-path merge core.
-            let mcp = install_mcp(root, dry_run)?;
+            let mcp = McpOutcome::Applicable(install_mcp(root, dry_run)?);
             Ok(RefreshReport {
                 hooks,
                 // The scope the loop resolved, and every spec's eviction from the
@@ -1887,8 +1909,8 @@ fn install_refresh(
     }
 }
 
-/// The combined Claude refresh outcome: the `SessionStart` hook merge plus the
-/// `worktree.baseRef` set (SL-064 §8). Pi carries `None`/`NotApplicable`.
+/// The combined refresh outcome: hook merge, MCP registration, and pi extensions;
+/// `worktree.baseRef` is Claude-only (SL-064 §8).
 struct RefreshReport {
     /// One outcome per spec merged, in emission order. The Codex arm carries the
     /// whole `codex_hook_specs` registry — two specs, three entries; the Claude
@@ -1900,21 +1922,20 @@ struct RefreshReport {
     /// so nothing to abandon.
     claude_scope: Option<(ClaudeSettingsScope, SweepReport)>,
     baseref: BaseRefWrite,
-    /// The MCP server registration outcome (CHR-013; SL-271): the Claude arm
-    /// writes `.mcp.json`, the Codex arm `.codex/config.toml`. `None` when the
-    /// entry is already current; pi carries `None` (no MCP wiring).
-    mcp: RefreshOutcome,
+    /// The MCP server registration outcome (CHR-013; SL-271): Claude writes
+    /// `.mcp.json`, Codex `.codex/config.toml`; Pi carries `NotApplicable`.
+    mcp: McpOutcome,
     /// The `.pi/APPEND_SYSTEM.md` symlink outcome (PHASE-02); Claude carries
     /// `NotApplicable`.
     append_system: AppendSystemOutcome,
     /// The `.pi/extensions/doctrine/index.ts` extension outcome (PHASE-03);
-    /// Claude carries `NotApplicable`.
+    /// Claude and Codex carry `NotApplicable`.
     extension: ExtOutcome,
     /// The `.pi/extensions/doctrine/mcp.ts` MCP extension outcome (SL-120);
-    /// Claude carries `NotApplicable`.
+    /// Claude and Codex carry `NotApplicable`.
     mcp_extension: ExtOutcome,
     /// The `.pi/extensions/doctrine/surface.ts` neutral-surface extension outcome
-    /// (SL-263 §5.7/§5.8); Claude carries `NotApplicable`.
+    /// (SL-263 §5.7/§5.8); Claude and Codex carry `NotApplicable`.
     surface_extension: ExtOutcome,
     /// Whether a foreign `SessionStart` hook with the same codex matcher
     /// coexists — surfaced as a warning.
@@ -3200,11 +3221,16 @@ fn refused_wiring(report: &RefreshReport) -> Vec<String> {
     let fallbacks = report
         .hooks
         .iter()
-        .chain([&report.mcp])
         .filter_map(|o| match o {
             RefreshOutcome::PrintedFallback { hook_file, .. } => Some((*hook_file).to_string()),
             _ => None,
-        });
+        })
+        .chain(std::iter::once(&report.mcp).filter_map(|o| match o {
+            McpOutcome::Applicable(RefreshOutcome::PrintedFallback { hook_file, .. }) => {
+                Some((*hook_file).to_string())
+            }
+            _ => None,
+        }));
     let foreign = [
         (&report.extension, PI_EXT_INDEX.file_name),
         (&report.mcp_extension, PI_EXT_MCP.file_name),
@@ -3371,36 +3397,41 @@ pub(crate) fn apply_wire(
                 }
                 let mcp_written = matches!(
                     &report.mcp,
-                    RefreshOutcome::Wired(_) | RefreshOutcome::Refreshed(_)
+                    McpOutcome::Applicable(RefreshOutcome::Wired(_) | RefreshOutcome::Refreshed(_))
                 );
-                // MCP registration leg (CHR-013; SL-271): the harness's own file
-                // (`.mcp.json` for Claude, `.codex/config.toml` for Codex); a foreign
-                // / uninterpretable entry prints the manual snippet. None (already
-                // current) stays silent.
-                let mcp_rel = mcp_rel(h);
-                // One verb table, one `writeln!`: Codex states what was WRITTEN (or
-                // would write) — never activation, and a single form for both a
-                // fresh wire and a stale refresh (design sec-5.2); Claude keeps its
-                // registered/refreshed distinction. Only the written arms read it;
-                // the fallback and silent arms below print no such line.
+                // Only harnesses with an applicable MCP leg name a registration
+                // file. A pi-only run must not put a codex file in its report.
+                let mcp_rel = mcp_rel(h, &report.mcp);
                 let mcp_write_verb = match (h, &report.mcp) {
-                    (Harness::Codex, _) if dry_run => "would write MCP server registration in",
-                    (Harness::Codex, _) => "wrote MCP server registration in",
-                    (Harness::Claude, RefreshOutcome::Refreshed(_)) => "refreshed MCP server in",
-                    (Harness::Claude, _) => "registered MCP server in",
+                    (_, McpOutcome::NotApplicable) | (Harness::Pi, _) => None,
+                    (Harness::Codex, _) if dry_run => {
+                        Some("would write MCP server registration in")
+                    }
+                    (Harness::Codex, _) => Some("wrote MCP server registration in"),
+                    (Harness::Claude, McpOutcome::Applicable(RefreshOutcome::Refreshed(_))) => {
+                        Some("refreshed MCP server in")
+                    }
+                    (Harness::Claude, _) => Some("registered MCP server in"),
                 };
                 match report.mcp {
-                    RefreshOutcome::Wired(cmd) | RefreshOutcome::Refreshed(cmd) => {
-                        writeln!(
-                            stdout,
-                            "  {tag}{}: {mcp_write_verb} {mcp_rel}: {cmd}",
-                            harness_label(h)
-                        )?;
+                    McpOutcome::Applicable(
+                        RefreshOutcome::Wired(cmd) | RefreshOutcome::Refreshed(cmd),
+                    ) => {
+                        if let (Some(mcp_rel), Some(mcp_write_verb)) = (mcp_rel, mcp_write_verb) {
+                            writeln!(
+                                stdout,
+                                "  {tag}{}: {mcp_write_verb} {mcp_rel}: {cmd}",
+                                harness_label(h)
+                            )?;
+                        }
                     }
                     // ONE wording for both arms and both causes — a foreign entry and
                     // an uninterpretable file: the shared table cannot tell them
                     // apart, and the operator's next step is the same either way.
-                    RefreshOutcome::PrintedFallback { hook_file, snippet } => {
+                    McpOutcome::Applicable(RefreshOutcome::PrintedFallback {
+                        hook_file,
+                        snippet,
+                    }) => {
                         writeln!(
                             stdout,
                             "  {}: {hook_file} has a doctrine entry doctrine did not write, or could not be interpreted — left untouched. To register it manually:",
@@ -3408,7 +3439,7 @@ pub(crate) fn apply_wire(
                         )?;
                         writeln!(stdout, "{snippet}")?;
                     }
-                    RefreshOutcome::None => {}
+                    McpOutcome::Applicable(RefreshOutcome::None) | McpOutcome::NotApplicable => {}
                 }
                 // The trust caveat prints once per arm — only when the activation
                 // notice (which already carries the trust step) did not print it
@@ -3511,10 +3542,11 @@ fn import_touched(root: &Path, outcome: RefOutcome) -> Option<Touched> {
 }
 
 /// The harness's own MCP registration file (CHR-013; SL-271).
-const fn mcp_rel(h: &Harness) -> &'static str {
-    match h {
-        Harness::Codex => CODEX_CONFIG_REL,
-        Harness::Claude => MCP_REL,
+const fn mcp_rel(h: &Harness, outcome: &McpOutcome) -> Option<&'static str> {
+    match (h, outcome) {
+        (_, McpOutcome::NotApplicable) | (Harness::Pi, _) => None,
+        (Harness::Codex, _) => Some(CODEX_CONFIG_REL),
+        (Harness::Claude, _) => Some(MCP_REL),
     }
 }
 
@@ -3543,8 +3575,10 @@ fn refresh_touched(h: &Harness, report: &RefreshReport) -> Vec<Touched> {
     {
         add(settings_rel(scope.sibling()).to_string(), Change::Changed);
     }
-    if written(&report.mcp) {
-        add(mcp_rel(h).to_string(), Change::Changed);
+    if matches!(&report.mcp, McpOutcome::Applicable(o) if written(o))
+        && let Some(rel) = mcp_rel(h, &report.mcp)
+    {
+        add(rel.to_string(), Change::Changed);
     }
     match report.append_system {
         AppendSystemOutcome::CreatedDirAndLink | AppendSystemOutcome::CreatedLink => {
@@ -3581,7 +3615,7 @@ pub(crate) enum BootCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
 
-        /// Target harness(es): claude, codex. Repeatable. Default: auto-detect.
+        /// Target harness(es): claude, codex, pi. Repeatable. Default: auto-detect.
         #[arg(long = "agent")]
         agent: Vec<String>,
 
@@ -5067,6 +5101,7 @@ mod tests {
     fn parse_harness_known_and_unknown() {
         assert_eq!(parse_harness("claude").unwrap(), Harness::Claude);
         assert_eq!(parse_harness("CODEX").unwrap(), Harness::Codex);
+        assert_eq!(parse_harness("PI").unwrap(), Harness::Pi);
         assert!(
             parse_harness("cursor")
                 .unwrap_err()
@@ -5084,6 +5119,10 @@ mod tests {
         );
         assert_eq!(
             import_targets(&Harness::Codex, root),
+            vec![root.join("AGENTS.md")]
+        );
+        assert_eq!(
+            import_targets(&Harness::Pi, root),
             vec![root.join("AGENTS.md")]
         );
     }
@@ -5152,6 +5191,41 @@ mod tests {
         assert_eq!(
             resolve_harnesses(&[], lone_pair.path()).unwrap(),
             vec![Harness::Codex]
+        );
+    }
+
+    #[test]
+    fn resolve_harnesses_detects_pi_on_dot_pi_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::write(root.join("AGENTS.md"), "original\n").unwrap();
+        assert_eq!(resolve_harnesses(&[], root).unwrap(), vec![Harness::Codex]);
+        fs::create_dir(root.join(".pi")).unwrap();
+        assert_eq!(
+            resolve_harnesses(&[], root).unwrap(),
+            vec![Harness::Codex, Harness::Pi]
+        );
+        let pi_only = tempfile::tempdir().unwrap();
+        fs::create_dir(pi_only.path().join(".pi")).unwrap();
+        assert_eq!(
+            resolve_harnesses(&[], pi_only.path()).unwrap(),
+            vec![Harness::Pi]
+        );
+
+        let report = apply_wire(
+            root,
+            Path::new(FAKE_EXEC),
+            &[Harness::Codex, Harness::Pi],
+            false,
+        )
+        .unwrap();
+        assert_eq!(report.imports.len(), 1);
+        assert_eq!(
+            fs::read_to_string(root.join("AGENTS.md"))
+                .unwrap()
+                .matches(REF)
+                .count(),
+            1
         );
     }
 
@@ -5840,7 +5914,10 @@ mod tests {
             "one outcome per registry spec"
         );
         assert!(matches!(out.baseref.outcome, BaseRefOutcome::Set));
-        assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
+        assert!(matches!(
+            out.mcp,
+            McpOutcome::Applicable(RefreshOutcome::Wired(_))
+        ));
         assert!(!settings.exists(), "dry-run must not write settings");
         assert!(!mcp.exists(), "dry-run must not write .mcp.json");
 
@@ -5848,7 +5925,10 @@ mod tests {
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
         assert_eq!(out.hooks.len(), claude_hook_specs(exec).len());
         assert!(matches!(out.baseref.outcome, BaseRefOutcome::Set));
-        assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
+        assert!(matches!(
+            out.mcp,
+            McpOutcome::Applicable(RefreshOutcome::Wired(_))
+        ));
         let json = fs::read_to_string(&settings).unwrap();
         // The two SessionStart specs — the emit hook and `memory sync` — are
         // settings-wired now, where the arm wrote none since SL-152 PHASE-06.
@@ -5876,7 +5956,10 @@ mod tests {
 
         // a second real run is idempotent — no MCP change.
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
-        assert!(matches!(out.mcp, RefreshOutcome::None));
+        assert!(matches!(
+            out.mcp,
+            McpOutcome::Applicable(RefreshOutcome::None)
+        ));
 
         // Codex arm: BOTH registry specs are wired into .codex/hooks.json (no
         // Claude settings/MCP) — SL-263 §5.8 makes the report two entries.
@@ -5890,7 +5973,10 @@ mod tests {
         ));
         assert!(matches!(out.baseref.outcome, BaseRefOutcome::NotApplicable));
         // SL-271: the Codex arm now registers the MCP server in .codex/config.toml.
-        assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
+        assert!(matches!(
+            out.mcp,
+            McpOutcome::Applicable(RefreshOutcome::Wired(_))
+        ));
         assert!(
             root.join(CODEX_CONFIG_REL).exists(),
             "the codex leg writes .codex/config.toml"
@@ -8231,6 +8317,61 @@ weight = 0
         assert!(ext_path.exists());
     }
 
+    #[test]
+    fn codex_only_boot_install_writes_no_pi_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let report = apply_wire(root, Path::new(FAKE_EXEC), &[Harness::Codex], false).unwrap();
+        assert!(!root.join(".pi").exists());
+        assert!(root.join(CODE_HOOKS_REL).exists());
+        assert!(root.join(CODEX_CONFIG_REL).exists());
+        let out = install_refresh(&Harness::Codex, root, Path::new(FAKE_EXEC), false).unwrap();
+        assert_eq!(out.extension, ExtOutcome::NotApplicable);
+        assert_eq!(out.mcp_extension, ExtOutcome::NotApplicable);
+        assert_eq!(out.surface_extension, ExtOutcome::NotApplicable);
+        assert_eq!(boot_ref_count(root), 1, "AGENTS.md import wired once");
+        assert!(report.harnesses[0].result.is_ok());
+    }
+
+    #[test]
+    fn pi_only_boot_install_writes_no_codex_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let report = apply_wire(root, Path::new(FAKE_EXEC), &[Harness::Pi], false).unwrap();
+        assert!(!root.join(".codex").exists());
+        for name in ["index.ts", "mcp.ts", "surface.ts"] {
+            assert!(pi_ext_dir(root).join(name).exists());
+        }
+        let out = install_refresh(&Harness::Pi, root, Path::new(FAKE_EXEC), false).unwrap();
+        assert!(out.hooks.is_empty());
+        assert_eq!(out.baseref.outcome, BaseRefOutcome::NotApplicable);
+        assert_eq!(out.append_system, AppendSystemOutcome::NotApplicable);
+        assert!(matches!(out.mcp, McpOutcome::NotApplicable));
+        assert_eq!(boot_ref_count(root), 1, "AGENTS.md import wired once");
+        assert!(report.harnesses[0].result.is_ok());
+    }
+
+    /// How many times `AGENTS.md` @-imports the boot snapshot (the import the
+    /// codex and pi arms share, deduped to exactly one).
+    fn boot_ref_count(root: &Path) -> usize {
+        let agents = std::fs::read_to_string(root.join("AGENTS.md")).unwrap_or_default();
+        agents.matches("@.doctrine/state/boot.md").count()
+    }
+
+    #[test]
+    fn pi_only_report_names_no_mcp_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let out = install_refresh(&Harness::Pi, root, Path::new(FAKE_EXEC), false).unwrap();
+        assert!(mcp_rel(&Harness::Pi, &out.mcp).is_none());
+        assert!(
+            refresh_touched(&Harness::Pi, &out)
+                .iter()
+                .all(|t| t.path != Path::new(CODEX_CONFIG_REL) && t.path != Path::new(MCP_REL))
+        );
+        assert!(refused_wiring(&out).is_empty());
+    }
+
     // --- Integration: install_refresh pi arm includes mcp_extension outcome ---
 
     #[test]
@@ -8239,7 +8380,7 @@ weight = 0
         let root = dir.path();
         let exec = Path::new("/abs/doctrine");
 
-        let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
+        let out = install_refresh(&Harness::Pi, root, exec, false).unwrap();
         assert_eq!(out.mcp_extension, ExtOutcome::Generated);
         assert!(
             root.join(".pi")
@@ -8257,11 +8398,11 @@ weight = 0
         let exec = Path::new("/abs/doctrine");
 
         // First run generates.
-        let out1 = install_refresh(&Harness::Codex, root, exec, false).unwrap();
+        let out1 = install_refresh(&Harness::Pi, root, exec, false).unwrap();
         assert_eq!(out1.mcp_extension, ExtOutcome::Generated);
 
         // Second run is no-op.
-        let out2 = install_refresh(&Harness::Codex, root, exec, false).unwrap();
+        let out2 = install_refresh(&Harness::Pi, root, exec, false).unwrap();
         assert_eq!(out2.mcp_extension, ExtOutcome::NoOp);
     }
 
@@ -9227,7 +9368,7 @@ process.stdout.write("RESULT:" + JSON.stringify(result ?? null));
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let exec = Path::new("/abs/doctrine");
-        let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
+        let out = install_refresh(&Harness::Pi, root, exec, false).unwrap();
         assert_eq!(out.surface_extension, ExtOutcome::Generated);
         assert!(pi_ext_dir(root).join("surface.ts").exists());
     }
@@ -9237,8 +9378,8 @@ process.stdout.write("RESULT:" + JSON.stringify(result ?? null));
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let exec = Path::new("/abs/doctrine");
-        install_refresh(&Harness::Codex, root, exec, false).unwrap();
-        let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
+        install_refresh(&Harness::Pi, root, exec, false).unwrap();
+        let out = install_refresh(&Harness::Pi, root, exec, false).unwrap();
         assert_eq!(out.surface_extension, ExtOutcome::NoOp);
     }
 

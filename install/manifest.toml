@@ -48,7 +48,7 @@ skills = ".agents/skills"
 
 [harness.pi]
 detect = ".pi"
-boot = "codex"
+boot = "pi"
 agents = ".pi/agents"
 skills = ".agents/skills"
 

@@ -115,7 +115,7 @@ fn surface_extension_round_trips_through_the_neutral_decoder() {
             "boot",
             "install",
             "--agent",
-            "codex",
+            "pi",
             "-y",
             "-p",
             root.to_str().expect("utf8 root"),
@@ -124,6 +124,10 @@ fn surface_extension_round_trips_through_the_neutral_decoder() {
     assert!(
         install.contains("generated extension .pi/extensions/doctrine/surface.ts"),
         "install must report the surface extension: {install}"
+    );
+    assert!(
+        !install.contains(".codex"),
+        "a pi install reports no codex file: {install}"
     );
     let surface = root.join(".pi/extensions/doctrine/surface.ts");
     assert!(surface.exists(), "surface.ts generated");

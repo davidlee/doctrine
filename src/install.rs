@@ -629,7 +629,7 @@ fn seed_authoring_memories(root: &Path, manifest: &Manifest) -> anyhow::Result<(
 }
 
 /// The boot adapters a harness set implies, read from the registry's `boot`
-/// field. `pi` rides the codex adapter; `universal` has
+/// field. `pi` has its own adapter (SL-284 DEC-389); `universal` has
 /// none. Duplicates collapse; first-seen order is preserved.
 fn boot_names(agents: &[String], registry: &Registry) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
@@ -7635,11 +7635,7 @@ mod tests {
             boot_labels(&install_boot(&strings(agents), dir.path(), &reg))
         };
         // No --agent: the registry's detect dirs govern.
-        assert_eq!(
-            boot_for(&[".pi"], &[]),
-            vec!["codex"],
-            ".pi alone wires codex"
-        );
+        assert_eq!(boot_for(&[".pi"], &[]), vec!["pi"], ".pi alone wires pi");
         assert_eq!(boot_for(&[".codex"], &[]), vec!["codex"]);
         assert_eq!(boot_for(&[".claude"], &[]), vec!["claude"]);
         assert!(
@@ -7648,11 +7644,11 @@ mod tests {
         );
         assert_eq!(
             boot_for(&[".claude", ".pi", ".codex"], &[]),
-            vec!["claude", "codex"],
-            "pi and codex collapse to one codex adapter"
+            vec!["claude", "codex", "pi"],
+            "each harness has its own boot adapter"
         );
         // With --agent: the registry maps names, detection is ignored.
-        assert_eq!(boot_for(&[".claude"], &["pi"]), vec!["codex"]);
+        assert_eq!(boot_for(&[".claude"], &["pi"]), vec!["pi"]);
         assert!(boot_for(&[], &["universal"]).is_empty());
 
         let dir = tempfile::tempdir().unwrap();
