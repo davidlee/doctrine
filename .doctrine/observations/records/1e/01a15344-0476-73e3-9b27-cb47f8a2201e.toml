@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a15344-0476-73e3-9b27-cb47f8a2201e"
+recorded_at = "2026-10-19T08:25:28.951002975Z"
+kind = "friction"
+summary = "[plan; SL-284] verify-vt reports 'keyword present' for keywords absent from test_file"
+detail = "Pre-execution verify-vt on SL-284 printed 'UNATTRIBUTABLE VT-1 — keyword present but src/boot.rs not modified by this slice' for PHASE-04 VT-1, whose keyword plan_pi_settings occurs 0 times in src/boot.rs. The attribution check appears to short-circuit the keyword check and the message misstates the keyword result; PHASE-01 rows were omitted from the summary entirely. Misleads a planner into thinking keywords are too weak."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
