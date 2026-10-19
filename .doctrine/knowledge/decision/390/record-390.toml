@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 390
+slug = "pi-extensions-live-in-runtime-state-registered-via-pisettingsjson"
+title = "Pi extensions live in runtime state, registered via .pi/settings.json"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-19"
+updated = "2026-10-19"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "ISS-525: doctrine wrote generated pi extension TypeScript into .pi/extensions/doctrine/, where client type-aware lint and tsc pick it up and fail."
+choice = "Write the generated extensions under the gitignored runtime tier (.doctrine/state/pi/extensions/) and register that directory in project .pi/settings.json `extensions` (relative path, edit-preserving merge). Old .pi/extensions/doctrine/ files are removed by the one-off checkout cleanup, not product code (DEC-387)."
+alternatives = ["emit .js instead of .ts", "user-level ~/.pi/agent/extensions with a static PATH-resolving extension", "keep location and print suggested ignores"]
+rationale = "Generated, disposable files belong in the runtime tier (storage rule); pi supports settings-listed extension dirs (pi 0.99.1 settings.md:150); the dir is one constant and the JSON merge has precedent. Not total: a lint config ignoring neither .gitignore nor .doctrine/ could still see them."
+consequences = []
+decided_by = "user"
+decided_on = "2026-10-19"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-284"

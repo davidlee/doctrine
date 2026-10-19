@@ -43,6 +43,10 @@ label = "fulfils"
 target = "ISS-479"
 
 [[relation]]
+label = "fulfils"
+target = "ISS-525"
+
+[[relation]]
 label = "governed_by"
 target = "ADR-019"
 
