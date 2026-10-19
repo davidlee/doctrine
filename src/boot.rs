@@ -736,9 +736,8 @@ pub(crate) enum Harness {
     Pi,
 }
 
-/// Parse an explicit `--agent` token. Unlike `skills::parse_agent` (which
-/// delegates unknowns to `npx`), boot wires only the harnesses it knows, so an
-/// unknown name is an error, not a passthrough.
+/// Parse an explicit `--agent` token. Boot wires only the harnesses it knows,
+/// so an unknown name is an error, not a passthrough.
 fn parse_harness(s: &str) -> anyhow::Result<Harness> {
     if s.eq_ignore_ascii_case("claude") {
         Ok(Harness::Claude)

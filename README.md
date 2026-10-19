@@ -125,7 +125,6 @@ Then bootstrap a project:
 cd my_project || mkdir my_project
 
 doctrine install                  # prompts to confirm; or use --dry-run | --yes
-npx skills add davidlee/doctrine  # or `doctrine install --agent claude` for claude code only
 
 claude 
 > Let's design a feature: ...
@@ -154,7 +153,7 @@ doctrine = inputs.doctrine.packages.${system}.doctrine;
 to install skills for other agents:
 
 ```zsh
-npx skills add davidlee/doctrine # or your fork 
+doctrine install --agent codex    # or pi / universal: all read .agents/skills from the embed
 ```
 
 ### Host dependencies
@@ -265,7 +264,7 @@ cargo install --path .             # build with your edits
 
 # in your projects
 doctrine install --agent claude --yes # from binary, or
-npx skills add my-github/doctrine
+doctrine install --agent universal --yes # for pi / codex / other .agents/skills harnesses
 ```
 
 ## License

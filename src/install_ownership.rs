@@ -1114,7 +1114,7 @@ mod tests {
         assert!(!inline, "only markers and hint carry `#`");
     }
 
-    /// The scan of a project: (a) a doctrine link, (b) an npx-style link
+    /// The scan of a project: (a) a doctrine link, (b) a user's own link
     /// elsewhere, (c) a real entry.
     fn scanned() -> (Vec<PathBuf>, Vec<LinkSeen>) {
         let sym = |dir: &str, name: &str, value: &str| LinkSeen::Symlink {
@@ -1169,7 +1169,7 @@ mod tests {
     }
 
     #[test]
-    fn render_block_omits_npx_written_skill_copies() {
+    fn render_block_omits_foreign_skill_copies() {
         let (roots, seen) = scanned();
         let out = rendered_links(&roots, &seen);
         assert!(out.contains(&"/.claude/skills/a".to_owned()));

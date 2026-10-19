@@ -258,10 +258,10 @@ install: web-build
 # list-memories:
 #   @cargo run -q -- memory list
 
-# doctrine + skills reinstall; idempotent
+# doctrine + skills reinstall; idempotent (`doctrine install` also links every
+# harness's skills from the embed — there is no external skills runner)
 reinstall:
   doctrine install -y
-  npx skills add . --agent universal -y
 
 ## OUBLIETTE
 ##
