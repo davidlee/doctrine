@@ -322,6 +322,12 @@ fn admit(
 pub(crate) const BLOCK_START: &str =
     "# >>> doctrine managed — rewritten by `doctrine install`; edit outside this block";
 pub(crate) const BLOCK_END: &str = "# <<< doctrine managed";
+const CUSTOMISING_HINT: &str = concat!(
+    "# Customised a skill? Replace its link with a real dir; the next install drops\n",
+    "# it from this block. Until then, un-ignore it BELOW the block, e.g.\n",
+    "#   !/.agents/skills/<id>\n",
+    "# (git cannot re-include a path whose parent dir is itself ignored.)",
+);
 const BLOCK_START_PREFIX: &str = "# >>> doctrine managed";
 const BLOCK_END_PREFIX: &str = "# <<< doctrine managed";
 
@@ -361,11 +367,12 @@ pub(crate) fn links_after(links: Vec<PathBuf>, actions: &[Action]) -> Vec<PathBu
 
 /// The block, markers included: runtime `entries`, then `<root>/*` per root,
 /// then one line per link (already `/`-anchored, project-relative; sorted and
-/// deduplicated here so the output is byte-stable). Only the markers carry
-/// `#` — gitignore has no inline comments.
+/// deduplicated here so the output is byte-stable). The markers and
+/// customising hint are comments; gitignore has no inline comments.
 pub(crate) fn render_block(entries: &[String], roots: &[String], links: &[String]) -> Vec<String> {
     let links: BTreeSet<&String> = links.iter().collect();
     std::iter::once(BLOCK_START.to_owned())
+        .chain(CUSTOMISING_HINT.lines().map(str::to_owned))
         .chain(entries.iter().cloned())
         .chain(roots.iter().map(|root| format!("{root}/*")))
         .chain(links.into_iter().cloned())
@@ -1064,27 +1071,47 @@ mod tests {
     }
 
     #[test]
+    fn render_block_carries_customising_hint() {
+        let out = render_block(&[], &[], &[]);
+        assert_eq!(out[0], BLOCK_START);
+        assert_eq!(
+            out[1..out.len() - 1].join("\n"),
+            "# Customised a skill? Replace its link with a real dir; the next install drops\n# it from this block. Until then, un-ignore it BELOW the block, e.g.\n#   !/.agents/skills/<id>\n# (git cannot re-include a path whose parent dir is itself ignored.)"
+        );
+    }
+
+    #[test]
+    fn splice_of_hinted_block_is_byte_stable() {
+        let original = format!(
+            "before\n{}!/.agents/skills/custom\n",
+            joined(&sample_block(), "\n")
+        );
+        assert_eq!(splice(&original), original);
+    }
+
+    #[test]
     fn render_block_lists_runtime_entries_roots_and_links() {
         let out = render_block(
             &block(&[".doctrine/state/", ".doctrine/memory/shipped/"]),
             &block(&[".doctrine/agents", ".doctrine/skills"]),
             &block(&["/.pi/agents/b.md", "/.claude/skills/a", "/.pi/agents/b.md"]),
         );
-        assert_eq!(
-            out,
-            block(&[
-                BLOCK_START,
-                ".doctrine/state/",
-                ".doctrine/memory/shipped/",
-                ".doctrine/agents/*",
-                ".doctrine/skills/*",
-                "/.claude/skills/a",
-                "/.pi/agents/b.md",
-                BLOCK_END,
-            ])
-        );
-        let inline = out[1..out.len() - 1].iter().any(|l| l.contains('#'));
-        assert!(!inline, "only the markers carry `#`");
+        let mut expected = block(&[BLOCK_START]);
+        expected.extend(CUSTOMISING_HINT.lines().map(str::to_owned));
+        expected.extend(block(&[
+            ".doctrine/state/",
+            ".doctrine/memory/shipped/",
+            ".doctrine/agents/*",
+            ".doctrine/skills/*",
+            "/.claude/skills/a",
+            "/.pi/agents/b.md",
+            BLOCK_END,
+        ]));
+        assert_eq!(out, expected);
+        let inline = out[1 + CUSTOMISING_HINT.lines().count()..out.len() - 1]
+            .iter()
+            .any(|l| l.contains('#'));
+        assert!(!inline, "only markers and hint carry `#`");
     }
 
     /// The scan of a project: (a) a doctrine link, (b) an npx-style link
@@ -1146,7 +1173,10 @@ mod tests {
         let (roots, seen) = scanned();
         let out = rendered_links(&roots, &seen);
         assert!(out.contains(&"/.claude/skills/a".to_owned()));
-        assert!(!out.iter().any(|l| l.contains(".agents/skills")), "{out:?}");
+        assert!(
+            !out.iter().any(|l| l.starts_with("/.agents/skills")),
+            "{out:?}"
+        );
     }
 
     #[test]
@@ -1154,6 +1184,10 @@ mod tests {
         let (roots, seen) = scanned();
         let out = rendered_links(&roots, &seen);
         assert!(!out.iter().any(|l| l.contains("mine")), "{out:?}");
-        assert_eq!(out.len(), 3, "markers + the one doctrine link: {out:?}");
+        assert_eq!(
+            out.len(),
+            7,
+            "markers + hint + the one doctrine link: {out:?}"
+        );
     }
 }

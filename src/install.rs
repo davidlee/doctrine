@@ -31,6 +31,7 @@ struct PluginAssets;
 // ── Constants (moved from skills.rs, IMP-226) ────────────────────────────
 
 const MEMORY_SUBSET_DOMAIN: &str = "doctrine-memory";
+const MEMORY_SKILLS: &[&str] = &["record-memory", "retrieve-memory"];
 const PARTNER_SUBSET_DOMAIN: &str = "doctrine-partner";
 const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN, PARTNER_SUBSET_DOMAIN];
 /// Marker token injected into the dispatch-worker agent defs (SL-186 PHASE-04).
@@ -902,7 +903,7 @@ fn print_ownership_plan(
         return Ok(Vec::new());
     }
     let catalog = discover()?;
-    let selected = select_for_install(&catalog, args.skills, args.domains)?;
+    let selected = select_for_install_args(&catalog, args)?;
     with_wanted(
         &plan.base.project_root,
         args,
@@ -997,7 +998,7 @@ fn run_forward_steps(
     // 3. One convergence covers every harness (SL-281 D3) — none, nothing converges.
     // Convergence reports per action, not per path: no touched paths.
     let catalog = discover()?;
-    let selected = select_for_install(&catalog, args.skills, args.domains)?;
+    let selected = select_for_install_args(&catalog, args)?;
 
     let mut convergence = LegOutcome::done();
     if !agents.is_empty() {
@@ -2686,6 +2687,21 @@ pub(crate) fn select_for_install<'a>(
 ) -> anyhow::Result<Vec<&'a Entry>> {
     validate_filters(catalog, skills, domains)?;
     Ok(select(catalog, skills, domains))
+}
+
+fn select_for_install_args<'a>(
+    catalog: &'a [Entry],
+    args: &InstallArgs<'_>,
+) -> anyhow::Result<Vec<&'a Entry>> {
+    if args.only_memory {
+        let skills = MEMORY_SKILLS
+            .iter()
+            .map(|id| (*id).to_owned())
+            .collect::<Vec<_>>();
+        select_for_install(catalog, &skills, args.domains)
+    } else {
+        select_for_install(catalog, args.skills, args.domains)
+    }
 }
 
 /// Return every embedded workflow file (under `"workflows/"`) as
@@ -6759,6 +6775,68 @@ mod tests {
             harnesses,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn only_memory_links_exactly_the_memory_pair() {
+        assert_eq!(MEMORY_SKILLS, &["record-memory", "retrieve-memory"]);
+        let manifest = load_manifest().unwrap();
+        let catalog = discover().unwrap();
+
+        // Scope is not an input to the subset: `--global` selects the same pair.
+        let global_args = InstallArgs {
+            only_memory: true,
+            global: true,
+            ..project_args()
+        };
+        let ids: Vec<&str> = select_for_install_args(&catalog, &global_args)
+            .unwrap()
+            .iter()
+            .map(|e| e.id.as_str())
+            .collect();
+        assert_eq!(ids, MEMORY_SKILLS.to_vec());
+
+        // Every skills-routed harness links exactly the pair, preview and live.
+        for (harness, skills_dir) in [
+            ("claude", ".claude/skills"),
+            ("codex", ".agents/skills"),
+            ("pi", ".agents/skills"),
+            ("universal", ".agents/skills"),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let agents = strings(&[harness]);
+            let args = InstallArgs {
+                agents: &agents,
+                only_memory: true,
+                ..project_args()
+            };
+            let plan = test_plan(&manifest, dir.path(), &args);
+            let site = dir.path().join(skills_dir);
+            let expected: BTreeSet<PathBuf> =
+                MEMORY_SKILLS.iter().map(|id| site.join(id)).collect();
+            let preview = print_ownership_plan(&plan, &args, &manifest, "Preview").unwrap();
+            let links: BTreeSet<PathBuf> = preview
+                .iter()
+                .filter_map(|action| match action {
+                    Action::Link { dest, .. } if dest.starts_with(&site) => Some(dest.clone()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(
+                links, expected,
+                "{harness}: preview links only memory skills"
+            );
+
+            run_forward_steps(&plan, Path::new("doctrine"), &args, &manifest).unwrap();
+            let live: BTreeSet<PathBuf> = fs::read_dir(&site)
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .collect();
+            assert_eq!(
+                live, expected,
+                "{harness}: live convergence matches preview"
+            );
+        }
     }
 
     #[test]
