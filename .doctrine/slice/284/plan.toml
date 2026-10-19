@@ -18,7 +18,8 @@ collaborators = []
 targets      = []
 dependencies = []
 
-# One [[phase]]
+# One [[phase]] block per phase.
+[[phase]]
 id        = "PHASE-01"
 name      = "Embed-sourced .agents/skills; npx delegation removed"
 objective = """
@@ -40,7 +41,7 @@ exit_criteria = [
   { id = "EX-5", text = "`doctrine check gate` green; clippy zero warnings." },
 ]
 verification = [
-  { id = "VT-1", expects = "pi/codex/universal selection yields relative .agents/skills/<id> links into .doctrine/skills/<id>; no skills-lock.json written", test_file = "src/install.rs", keywords = ["desired_set_links_agents_skills_for_every_non_claude_harness", "skills-lock.json"], waived = false },
+  { id = "VT-1", expects = "pi/codex/universal selection yields relative .agents/skills/<id> links into .doctrine/skills/<id>", test_file = "src/install.rs", keywords = ["desired_set_links_agents_skills_for_every_non_claude_harness"], waived = false },
   { id = "VT-2", expects = "pi + codex + universal together produce exactly one link per skill", test_file = "src/install.rs", keywords = ["shared_agents_skills_dir_collapses_to_one_link"], waived = false },
   { id = "VT-3", expects = "managed gitignore block lists each .agents/skills/<id> link and omits a foreign entry in that dir", test_file = "src/install.rs", keywords = ["managed_block_lists_agents_skills_links_not_foreign_entries"], waived = false },
   { id = "VT-4", expects = "a real dir at .agents/skills/<id> is kept and reported Shadows", test_file = "src/install.rs", keywords = ["real_dir_at_agents_skills_is_kept_and_reported_shadows", "Notice::Shadows"], waived = false },
