@@ -48,6 +48,22 @@ doctrine link (`render_block`, `src/install_ownership.rs:366`), as it does for
 new code, and install leaves no tracked noise. Doctrine does not ignore the whole
 directory: a user's own skills under `.agents/skills/` stay visible to git.
 
+**Customising hint.** `render_block` emits a fixed comment directly under the
+opening marker (a named constant, STD-001):
+
+```
+# >>> doctrine managed — rewritten by `doctrine install`; edit outside this block
+# Customised a skill? Replace its link with a real dir; the next install drops
+# it from this block. Until then, un-ignore it BELOW the block:
+#   !/.agents/skills/<id>
+```
+
+The `!` line must sit after the block, because gitignore's last match wins and
+the block is rewritten on every install. Block detection keys on the marker
+prefix (`BLOCK_START_PREFIX`, `src/install_ownership.rs:325`), so the extra
+comment lines don't affect splicing; a splice test pins this. Existing block
+snapshot tests change by exactly these lines.
+
 **`skills_via` is deleted** from `HarnessSection` (`src/install.rs:92`) along
 with the both-routes validation (`:2237`). `deny_unknown_fields` then refuses a
 manifest that still carries it, which is correct for an embedded asset.
@@ -169,9 +185,8 @@ One REV, raised in this slice's execution and applied at reconcile:
 ## Code impact and verification
 
 **Design-target selectors:** `install/manifest.toml`, `src/install.rs`,
-`src/install_config.rs`, `src/boot.rs`, `README.md`.
-`src/install_ownership.rs` is no longer expected to change; it gets a test
-only, if one fits there.
+`src/install_config.rs`, `src/boot.rs`, `src/install_ownership.rs` (block
+hint), `README.md`.
 
 **Tests (VT):**
 - An install selecting pi, codex or universal, run with a runner seam absent
@@ -181,6 +196,8 @@ only, if one fits there.
   per skill.
 - The managed gitignore block lists each `.agents/skills/<id>` link, and a
   foreign entry in that dir is not listed.
+- The block carries the customising hint under its opening marker, and
+  re-splicing a block that has the hint is byte-stable.
 - A real directory at `.agents/skills/<id>` is kept and reported `Shadows`.
   This is the existing behaviour, pinned for the new target.
 - An unknown `--agent` is refused before any write, and the message names the

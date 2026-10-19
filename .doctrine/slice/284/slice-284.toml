@@ -20,7 +20,7 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/install_ownership.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install_config.rs"
