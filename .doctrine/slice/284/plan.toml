@@ -1,0 +1,165 @@
+# Implementation plan for SL-284 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-284"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]]
+id        = "PHASE-01"
+name      = "Embed-sourced .agents/skills; npx delegation removed"
+objective = """
+Route pi, codex and universal to `skills = ".agents/skills"` in
+install/manifest.toml; delete `skills_via`, the npx delegation and the
+`[install] repo` key (design sec-2, sec-3 table); make an unknown `--agent`
+fail before any write. Rewrite the install suites that assert npx behaviour
+(design sec-3 test table, install side).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (DEC-386..390); RV-423 concluded with no routed obligations." },
+  { id = "EN-2", text = "SL-283 has not landed changes to [harness.codex] or src/install.rs (R3)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "[harness.codex], [harness.pi], [harness.universal] carry `skills = \".agents/skills\"`; `skills_via` gone from HarnessSection and its both-routes validation." },
+  { id = "EX-2", text = "Every item in design sec-3's deletion table is removed from src/; run_forward_steps ends at Leg::Convergence." },
+  { id = "EX-3", text = "resolve_install_harnesses is fallible: an unregistered --agent errors before any write, naming the registered harnesses and suggesting `universal`; parse_harness_answer applies the same rule." },
+  { id = "EX-4", text = "Install-side suites from design sec-3's table rewritten (e2e_install_flow, e2e_install_executor, e2e_claude_install); every other suite green unchanged." },
+  { id = "EX-5", text = "`doctrine check gate` green; clippy zero warnings." },
+]
+verification = [
+  { id = "VT-1", expects = "pi/codex/universal selection yields relative .agents/skills/<id> links into .doctrine/skills/<id>; no skills-lock.json written", test_file = "src/install.rs", keywords = ["desired_set_links_agents_skills_for_every_non_claude_harness", "skills-lock.json"], waived = false },
+  { id = "VT-2", expects = "pi + codex + universal together produce exactly one link per skill", test_file = "src/install.rs", keywords = ["shared_agents_skills_dir_collapses_to_one_link"], waived = false },
+  { id = "VT-3", expects = "managed gitignore block lists each .agents/skills/<id> link and omits a foreign entry in that dir", test_file = "src/install.rs", keywords = ["managed_block_lists_agents_skills_links_not_foreign_entries"], waived = false },
+  { id = "VT-4", expects = "a real dir at .agents/skills/<id> is kept and reported Shadows", test_file = "src/install.rs", keywords = ["real_dir_at_agents_skills_is_kept_and_reported_shadows", "Notice::Shadows"], waived = false },
+  { id = "VT-5", expects = "unknown --agent refused before any write; message names registered harnesses", test_file = "src/install.rs", keywords = ["unknown_agent_is_refused_before_any_write", "universal"], waived = false },
+  { id = "VT-6", expects = "e2e: universal installs as direct links, no delegate", test_file = "tests/e2e_install_executor.rs", keywords = [".agents/skills"], waived = false },
+  { id = "VA-1", expects = "`grep -rnE 'npx|bunx|skills_via|DEFAULT_REPO|install_for_other' src/ install/manifest.toml` returns no live code (comments rewritten in PHASE-05 may remain until then — list any)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "--only-memory subset and gitignore customising hint"
+objective = """
+Fix --only-memory so preview and live convergence link exactly the memory pair
+through select_for_install (RV-423 F-1, design sec-2). Add the customising
+hint under the managed block's opening marker as a named constant (RV-423 F-7,
+STD-001).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete; gate green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Both select_for_install call sites honour --only-memory via one named constant for the memory pair (record-memory, retrieve-memory)." },
+  { id = "EX-2", text = "render_block emits the hint text from design sec-2 directly under the opening marker; block detection unaffected; existing block snapshots change by exactly the hint lines." },
+  { id = "EX-3", text = "`doctrine check gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "--only-memory with any harness links exactly record-memory and retrieve-memory (preview and live)", test_file = "src/install.rs", keywords = ["only_memory_links_exactly_the_memory_pair", "MEMORY_SKILLS"], waived = false },
+  { id = "VT-2", expects = "block carries the hint under its opening marker; re-splicing a hinted block is byte-stable", test_file = "src/install_ownership.rs", keywords = ["CUSTOMISING_HINT", "render_block_carries_customising_hint", "splice_of_hinted_block_is_byte_stable"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Pi boot adapter split from codex"
+objective = """
+Add Harness::Pi (parse, label, import_targets = AGENTS.md, auto-detect on .pi/
+only). Split install_refresh: codex writes hooks + MCP only; pi writes the
+generated extensions only. Report non-applicable legs via NotApplicable; make
+mcp_rel and the MCP write-verb table conditional on an applicable MCP outcome
+(RV-423 F-6). Registry: [harness.pi] boot = "pi" (design sec-4). Extension
+location is unchanged in this phase.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete; gate green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "codex-only boot install writes no pi file; pi-only writes no .codex/ file." },
+  { id = "EX-2", text = "Pi auto-detects on .pi/; AGENTS.md alone implies codex only; selecting both prepends the AGENTS.md ref once." },
+  { id = "EX-3", text = "Pi-only report names no MCP file; codex report shows extension legs not applicable." },
+  { id = "EX-4", text = "boot.rs tests that asserted Harness::Codex writes pi files are split (design sec-3 table); e2e_surface_neutral_roundtrip selects pi." },
+  { id = "EX-5", text = "`doctrine check gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "codex-only boot install writes nothing under .pi/", test_file = "src/boot.rs", keywords = ["Harness::Pi", "codex_only_boot_install_writes_no_pi_files"], waived = false },
+  { id = "VT-2", expects = "pi-only boot install writes nothing under .codex/", test_file = "src/boot.rs", keywords = ["pi_only_boot_install_writes_no_codex_files"], waived = false },
+  { id = "VT-3", expects = "pi detected on .pi/ only; AGENTS.md alone is codex", test_file = "src/boot.rs", keywords = ["resolve_harnesses_detects_pi_on_dot_pi_only"], waived = false },
+  { id = "VT-4", expects = "pi-only report names no MCP file", test_file = "src/boot.rs", keywords = ["pi_only_report_names_no_mcp_file"], waived = false },
+  { id = "VT-5", expects = "surface extension round-trip driven through the pi harness", test_file = "tests/e2e_surface_neutral_roundtrip.rs", keywords = ["\"pi\""], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Pi extensions in the runtime tier, registered via .pi/settings.json"
+objective = """
+Move PI_EXT_DIR_REL to .doctrine/state/pi/extensions (DEC-390). Add a pure
+.pi/settings.json planner beside plan_baseref that ensures the `extensions`
+array holds "../.doctrine/state/pi/extensions" (named constant). Add a
+pi-settings outcome to RefreshReport, wired into refresh_touched and
+refused_wiring (RV-423 F-4), and a pi activation notice on write (RV-423 F-5,
+POL-003). Design sec-4, sec-5.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete; gate green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Extensions generated under .doctrine/state/pi/extensions; ownership header and foreign-skip unchanged." },
+  { id = "EX-2", text = "Planner handles absent, empty/whitespace (written, F-8), key absent, already present (no-op), foreign entries preserved in order, malformed or non-array (untouched, line-to-add printed, STD-003)." },
+  { id = "EX-3", text = "Settings write appears in the commit hint; malformed fallback leaves the boot leg unstamped." },
+  { id = "EX-4", text = "Activation notice printed on any extension or settings write, not on a no-op; states what was written, not that it is active." },
+  { id = "EX-5", text = "`doctrine check gate` green." },
+]
+verification = [
+  { id = "VT-1", expects = "planner cases: absent, empty, key absent, present no-op, foreign preserved, malformed untouched", test_file = "src/boot.rs", keywords = ["plan_pi_settings", "plan_pi_settings_writes_when_absent", "plan_pi_settings_writes_empty_file", "plan_pi_settings_noop_when_present", "plan_pi_settings_preserves_foreign_entries", "plan_pi_settings_leaves_malformed_untouched"], waived = false },
+  { id = "VT-2", expects = "extension dir constant points at the runtime tier", test_file = "src/boot.rs", keywords = ["PI_EXT_DIR_REL"], patterns = ["PI_EXT_DIR_REL: &str = \"\\.doctrine/state/pi/extensions\""], waived = false },
+  { id = "VT-3", expects = "settings write joins refresh_touched; malformed fallback joins refused_wiring", test_file = "src/boot.rs", keywords = ["pi_settings_write_reaches_commit_hint", "malformed_pi_settings_blocks_boot_stamp"], waived = false },
+  { id = "VT-4", expects = "activation notice on write, silent on no-op", test_file = "src/boot.rs", keywords = ["pi_activation_notice_on_write_not_on_noop"], waived = false },
+  { id = "VT-5", expects = "e2e round-trip reads the extension from the runtime dir", test_file = "tests/e2e_surface_neutral_roundtrip.rs", keywords = [".doctrine/state/pi/extensions"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Docs, justfile and spec REV"
+objective = """
+Rewrite every doc and comment teaching npx (README, manifest registry comment,
+install_config module docs, boot.rs skills::parse_agent mention) and drop the
+justfile reinstall npx line (design sec-3). Raise one REV over SPEC-009,
+SPEC-010, SPEC-011 covering design sec-6's clause table; it is applied at
+reconcile.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete; gate green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "No README, justfile, manifest or src comment teaches npx skills or skills_via." },
+  { id = "EX-2", text = "REV raised covering every row of design sec-6, with `doctrine search npx -k all` and `doctrine search skills_via -k all` hits each addressed or noted." },
+  { id = "EX-3", text = "`doctrine check gate` green." },
+]
+verification = [
+  { id = "VA-1", expects = "`grep -rnE 'npx|skills_via' README.md justfile install/manifest.toml src/` shows no teaching hit." },
+  { id = "VA-2", expects = "REV's change list matches design sec-6 row for row; both spec searches have no unaddressed hit." },
+  { id = "VH-1", expects = "At close: one-off cleanup of the maintainer's checkouts (npx copies in .agents/skills and .pi/skills, tracked skills-lock.json deleted in a commit, old .pi/extensions/doctrine/), then `doctrine install`." },
+  { id = "VH-2", expects = "At close (A1): live pi and codex sessions load doctrine skills via .agents/skills symlinks, no duplicate warning; pi loads extensions from the runtime dir." },
+]
+specs        = []
+requirements = []
