@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1566c-690b-7081-94a6-febdf0460970"
+recorded_at = "2026-10-19T23:08:27.787626563Z"
+kind = "friction"
+summary = "capsule-driver under pi: the planner agent ignores an explicit sheet path"
+detail = "Twice, a planner spawn charted to write .doctrine/state/slice/NNN/phases/phase-NN.md returned its plan as a session artifact (plan.md) and left the sheet untouched, despite an explicit one-file write instruction. The agent def's output: plan.md frontmatter wins over the task text. The parent had to read the artifact and author the sheet itself, adding a round-trip and ~3k tokens per phase."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

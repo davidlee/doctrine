@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1566c-72f2-77a2-b2c9-47408cbab158"
+recorded_at = "2026-10-19T23:08:30.322333174Z"
+kind = "friction"
+summary = "plan.toml with a commented-out [[phase]] header yields a silently shorter plan"
+detail = "SL-284's plan.toml had '# One [[phase]]' commented and no live [[phase]] header before PHASE-01's keys, so PHASE-01's id/name/objective/criteria were absorbed into the [requirements] table. slice list reported 0/4, slice phases reported 'Phases up to date', and no PHASE-01 runtime sheet was materialised - with no warning about the unknown keys in [requirements] or the missing phase. The missing phase was only found by reading the plan against plan.md's five-phase overview."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
