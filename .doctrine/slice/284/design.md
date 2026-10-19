@@ -54,11 +54,14 @@ opening marker (a named constant, STD-001):
 ```
 # >>> doctrine managed — rewritten by `doctrine install`; edit outside this block
 # Customised a skill? Replace its link with a real dir; the next install drops
-# it from this block. Until then, un-ignore it BELOW the block:
+# it from this block. Until then, un-ignore it BELOW the block, e.g.
 #   !/.agents/skills/<id>
+# (git cannot re-include a path whose parent dir is itself ignored.)
 ```
 
-The `!` line must sit after the block, because gitignore's last match wins and
+The parenthetical matters (RV-423 F-7): a host rule ignoring a parent, such as
+this repo's own `/.agents`, defeats the leaf negation. That rule is the host's,
+so doctrine only names the limit. The `!` line must sit after the block, because gitignore's last match wins and
 the block is rewritten on every install. Block detection keys on the marker
 prefix (`BLOCK_START_PREFIX`, `src/install_ownership.rs:325`), so the extra
 comment lines don't affect splicing; a splice test pins this. Existing block
@@ -67,6 +70,13 @@ snapshot tests change by exactly these lines.
 **`skills_via` is deleted** from `HarnessSection` (`src/install.rs:92`) along
 with the both-routes validation (`:2237`). `deny_unknown_fields` then refuses a
 manifest that still carries it, which is correct for an embedded asset.
+
+**`--only-memory` actually subsets (RV-423 F-1).** A pre-existing bug: both
+`select_for_install` call sites (`src/install.rs:952`, `:1048`) pass only
+`--skill`/`--domain`, so `--only-memory` links the whole catalog (Claude today).
+Every harness now rides this seam, so it is fixed here: `--only-memory` resolves to
+the memory pair (`record-memory`, `retrieve-memory`, one named constant) through
+the same selection for preview and live convergence.
 
 **Unknown `--agent` is refused** (inq-7). `resolve_install_harnesses`
 (`src/install.rs:660`) becomes fallible: any explicit name not in the registry
@@ -94,11 +104,25 @@ Deleted outright (DEC-388). Nothing else consumes these:
 | `Leg::Skills` and its forward step | `src/install.rs:1066-1094`, `:1255` |
 | `[install] repo` key + `DEFAULT_REPO` | `src/install_config.rs:13-17`, `:73-75` |
 
+Outside `src/`: the `justfile` `reinstall` recipe (`justfile:261-264`) drops its
+`npx skills add . --agent universal` line.
+
 `run_forward_steps` then ends at `Leg::Convergence`. Leg-dependent logic
 (`incomplete_legs`, `touched`, `stamp_decision`, commit hint) is keyed on the
-enum, so dropping a variant is a compile-checked removal, not a behaviour
-change for the remaining legs. Their existing tests stay green unchanged; tests
-that name `Leg::Skills` are deleted with it.
+enum, so dropping a variant is a compile-checked removal for the remaining legs.
+
+**Behaviour tests that assert removed behaviour are rewritten, not kept green
+unchanged (RV-423 F-2):**
+
+| Test | Asserted | Becomes |
+|---|---|---|
+| `tests/e2e_install_flow.rs:368-400` | `NPX_REVIEW` disclosure | no npx disclosure; `.agents/skills` links listed |
+| `tests/e2e_install_executor.rs:242-269` | `agents universal (delegate)` | direct links for universal |
+| `tests/e2e_claude_install.rs:350-375` | npx offer text | offer reads `skills` for every registered harness |
+| `tests/e2e_surface_neutral_roundtrip.rs:111-129` | codex writes pi extension at old path | pi writes it under the runtime dir |
+| `src/boot.rs:8234-8265`, `:9223-9242` | `Harness::Codex` writes pi files | split: codex writes none, pi writes them |
+
+Every other suite stays green unchanged (the behaviour-preservation gate).
 
 A leftover `repo` key in a client `doctrine.toml` is silently ignored, because
 `InstallConfig` does not deny unknown fields (inq-8, accepted).
@@ -126,11 +150,25 @@ the `skills::parse_agent` mention in `src/boot.rs:736`, and the local memory
 | Codex | codex hooks (`.codex/hooks.json`), spike check, codex MCP (`.codex/config.toml`). No pi files. |
 | Pi | the three generated extensions (`index.ts`, `mcp.ts`, `surface.ts`) under `PI_EXT_DIR_REL`, plus the `.pi/settings.json` `extensions` entry (sec-5). No codex hooks or MCP. |
 
-`RefreshReport` already carries every field as an outcome. The codex arm
-reports the extension legs as not applicable, and the pi arm reports hooks and
-MCP as not applicable. This uses the existing `NotApplicable` idiom
-(`AppendSystemOutcome`, `BaseRefOutcome`), extended to the extension and MCP
-outcome types where they lack it.
+**Report.** The codex arm reports the extension legs as not applicable, and the
+pi arm reports hooks and MCP as not applicable. This uses the existing
+`NotApplicable` idiom (`AppendSystemOutcome`, `BaseRefOutcome`), extended to the
+extension and MCP outcome types where they lack it.
+
+`RefreshReport` (`src/boot.rs:1892`) gains a **pi-settings outcome** (RV-423
+F-4). The settings write joins `refresh_touched` (`:3525`), so it reaches the
+install commit hint. Its malformed fallback joins `refused_wiring` (`:3199`),
+so the boot leg is not stamped complete while the extensions are unregistered.
+
+**MCP report sites (RV-423 F-6).** `mcp_rel` (`:3514`) and the MCP write-verb
+table (`:3386`) are total over `Harness`. Both become conditional on an
+applicable MCP outcome, so pi never names a Claude or codex MCP file.
+
+**Activation disclosure (RV-423 F-5, POL-003).** Pi loads project `.pi`
+settings only after project trust, and a running session needs `/reload` (pi
+0.99.1 `docs/configuration.md:3-5`). The pi arm prints one activation notice on
+any extension or settings write, mirroring `write_codex_activation` (`:3312`).
+It states what was written, never that it is active.
 
 **Install registry:** `[harness.pi] boot = "pi"`. `boot_names`
 (`src/install.rs:637`) needs no change: it maps the registry value through
@@ -158,6 +196,11 @@ DEC-390: generated extensions leave the client's source tree.
     preserved in order.
   - Malformed file, or `extensions` that is not an array: leave the file
     untouched and print the line to add (STD-003; the existing fallback idiom).
+    The outcome is reported per sec-4.
+  - An empty or whitespace-only file counts as an empty object, as
+    `parse_settings` (`src/boot.rs:1648`) already does for Claude and codex
+    settings. It is written, since an empty file holds nothing to lose. This is
+    deliberate, not the malformed case (RV-423 F-8).
   - The literal is a named constant (STD-001).
 
 **Risk, accepted.** `.doctrine/state/` is disposable. Wiping it removes the
@@ -171,22 +214,32 @@ extensions) remains the complete fix if that bites.
 <!-- doctrine:section sec-6 -->
 ## Spec revision
 
-One REV, raised in this slice's execution and applied at reconcile:
+One REV, raised during execution and applied at reconcile. It covers structured
+and prose occurrences (RV-423 F-3). `doctrine spec validate` runs on all three
+specs after it is applied.
 
 | Spec | Clause | Change |
 |---|---|---|
-| SPEC-010 | `D2`, `REQ-175` (FR-003), responsibilities line 3 | Every registered harness takes a `skills` link route; npx delegation removed; unknown agents refused |
+| SPEC-010 | Overview (non-Claude "delegated") | Every registered harness links from the embed |
+| SPEC-010 | `D2`, `REQ-175` (FR-003), responsibilities line 3 | `skills` link route for every registered harness; npx removed; unknown agents refused |
 | SPEC-010 | Concern "Delegate version skew (accepted)" | Retired |
+| SPEC-010 | Concern "Multi-agent status fidelity" | Retired: every harness is a dir doctrine owns |
 | SPEC-010 | Hypothesis "Delegate the long tail" | Replaced: a new harness is a registry entry |
 | SPEC-010 | Concerns (new) | `universal --global` lands at `~/.agents/skills` |
-| SPEC-009 | `D5`, `REQ-172` (NF-003) | Drop "delegates skills … through npx"; memory-sync clause stands |
-| SPEC-011 | Responsibilities: pi extensions | Owned by the pi boot adapter; location in the runtime tier and the `.pi/settings.json` registration; codex arm writes no pi files |
+| SPEC-009 | Overview, `D4` (registry: `skills_via` / npx) | Registry carries one skills route, `skills` |
+| SPEC-009 | `D5`, `REQ-172` (NF-003) | Drop "delegates skills … through npx"; the memory-sync clause stands |
+| SPEC-011 | `REQ-185` + its responsibility (import targets, auto-detect) | Add pi: `AGENTS.md` import, `.pi/` detection |
+| SPEC-011 | `REQ-480` + its responsibility (generated pi extensions) | Owned by the pi adapter; runtime-tier location; `.pi/settings.json` registration with its outcome and activation notice; codex arm writes no pi files |
+
+The REV's own scan repeats `doctrine search npx -k all` and
+`doctrine search skills_via -k all`, so no hit is left unaddressed.
 <!-- doctrine:section sec-7 -->
 ## Code impact and verification
 
 **Design-target selectors:** `install/manifest.toml`, `src/install.rs`,
 `src/install_config.rs`, `src/boot.rs`, `src/install_ownership.rs` (block
-hint), `README.md`.
+hint), `src/commands/cli.rs` (only if `--only-memory` plumbing needs it),
+`README.md`, `justfile`, and the `tests/` suites in sec-3.
 
 **Tests (VT):**
 - An install selecting pi, codex or universal, run with a runner seam absent
@@ -207,6 +260,15 @@ hint), `README.md`.
 - `.pi/settings.json` planner cases: absent, present without the key, already
   present, foreign entries preserved, and malformed left untouched.
 - Pi auto-detects on `.pi/`. `AGENTS.md` alone implies codex, not pi.
+
+- `--only-memory` with any harness links exactly the memory pair (F-1).
+- The pi-settings outcome: a successful write appears in the commit hint; a
+  malformed fallback marks the boot leg incomplete (F-4).
+- A pi install prints the activation notice on write, not on a no-op (F-5).
+- A pi-only boot install report names no MCP file (F-6).
+- `.pi/settings.json` empty or whitespace-only is written; malformed is left
+  untouched (F-8).
+- The rewritten suites in sec-3's table.
 
 **Manual (VH, at close):**
 1. One-off cleanup of the maintainer's checkouts: remove the npx copies in

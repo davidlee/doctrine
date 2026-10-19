@@ -46,6 +46,30 @@ intent = "scope-relevant"
 selector = ".doctrine/spec/tech/011/**"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "justfile"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_install_flow.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_install_executor.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_claude_install.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_surface_neutral_roundtrip.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
 [[relation]]
 label = "fulfils"
 target = "IMP-406"

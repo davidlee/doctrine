@@ -33,6 +33,16 @@ Evidence: `research/research.md` (threads 1-3).
 **Constraining governance:** SPEC-010 D2/D3/REQ-175, SPEC-009 D5/REQ-172,
 SPEC-011, ADR-019, POL-002, POL-003, STD-001, STD-003.
 
+## Design review passes
+
+- **RV-423** (codex gpt-6-sol, high; 2026-10-19): 8 findings (F-1..F-5 major,
+  F-6..F-8 minor), all fix-now in design rev 35, verified by the raiser, concluded.
+- **Further pass: none needed at design.** The remaining risk is in
+  implementation detail: the `RefreshReport` outcome plumbing, the rewritten e2e
+  suites, and the `--only-memory` seam. The audit's RV covers that against the
+  real diff. A further design pass would only re-probe the pi activation wording
+  and the REV clause list, both now explicit.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
