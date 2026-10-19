@@ -72,8 +72,31 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
         reason = "the seam itself — write_atomic's internal temp write"
     )]
     fs::write(&tmp, bytes).with_context(|| format!("Failed to write temp {}", tmp.display()))?;
+    preserve_mode(path, &tmp)?;
     fs::rename(&tmp, path)
         .with_context(|| format!("Failed to rename {} -> {}", tmp.display(), path.display()))
+}
+
+/// Give `tmp` the mode of `existing` when `existing` is already on disk. A
+/// rewrite republishes the target, so without this a private file (`0600`
+/// settings) would come back at the umask default and expose contents that
+/// were deliberately restricted.
+#[cfg(unix)]
+fn preserve_mode(existing: &Path, tmp: &Path) -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let Ok(metadata) = fs::metadata(existing) else {
+        return Ok(());
+    };
+    let mode = metadata.permissions().mode();
+    // Keep only the permission bits; the file-type bits are the temp's own.
+    fs::set_permissions(tmp, fs::Permissions::from_mode(mode & 0o7777))
+        .with_context(|| format!("Failed to preserve the mode of {}", existing.display()))
+}
+
+#[cfg(not(unix))]
+fn preserve_mode(_existing: &Path, _tmp: &Path) -> anyhow::Result<()> {
+    Ok(())
 }
 
 /// Whether a *real* directory sits at `path` — `symlink_metadata` does not
@@ -487,6 +510,22 @@ mod tests {
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .collect();
         assert_eq!(names, ["x.toml"]);
+    }
+
+    #[test]
+    fn write_atomic_preserves_an_existing_files_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        write_atomic(&path, b"{}").unwrap();
+        // A private settings file must not be republished at the umask default.
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+
+        write_atomic(&path, b"{\"a\":1}").unwrap();
+
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o7777;
+        assert_eq!(mode, 0o600, "the rewrite preserves the target's mode");
     }
 
     #[test]

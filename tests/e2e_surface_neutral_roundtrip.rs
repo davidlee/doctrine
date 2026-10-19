@@ -122,15 +122,48 @@ fn surface_extension_round_trips_through_the_neutral_decoder() {
         ],
     );
     assert!(
-        install.contains("generated extension .pi/extensions/doctrine/surface.ts"),
+        install.contains("generated extension .doctrine/state/pi/extensions/surface.ts"),
         "install must report the surface extension: {install}"
     );
     assert!(
         !install.contains(".codex"),
         "a pi install reports no codex file: {install}"
     );
-    let surface = root.join(".pi/extensions/doctrine/surface.ts");
+    assert!(
+        install.contains("Pi loads project settings after project trust"),
+        "a write discloses activation: {install}"
+    );
+
+    // A second run has nothing to write, so the activation notice is silent.
+    let again = run_ok(
+        root,
+        &[
+            "boot",
+            "install",
+            "--agent",
+            "pi",
+            "-y",
+            "-p",
+            root.to_str().expect("utf8 root"),
+        ],
+    );
+    assert!(
+        !again.contains("Pi loads project settings after project trust"),
+        "a no-op install says nothing about activation: {again}"
+    );
+    let surface = root.join(".doctrine/state/pi/extensions/surface.ts");
     assert!(surface.exists(), "surface.ts generated");
+    let settings: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(root.join(".pi/settings.json")).expect("read pi settings"),
+    )
+    .expect("valid pi settings");
+    assert!(
+        settings["extensions"]
+            .as_array()
+            .expect("extension registrations")
+            .contains(&serde_json::json!("../.doctrine/state/pi/extensions"))
+    );
+
     let generated = std::fs::read_to_string(&surface).expect("read surface.ts");
     assert!(
         generated.contains(&format!(
