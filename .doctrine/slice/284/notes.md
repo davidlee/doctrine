@@ -45,10 +45,17 @@ SPEC-011, ADR-019, POL-002, POL-003, STD-001, STD-003.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-10-19 · design locked (plan next) · 12f755b1a
 
 ### Produced
+- design.md (run dr-01a1514a…, locked rev 40); DEC-386, DEC-387, DEC-388, DEC-389, DEC-390; RV-423 (concluded).
 
 ### Learned
+- Friction observations recorded: research agents unusable outside the jail; the lock gate needs routes on verified major findings (reviewer should pass `--route` at raise).
+- Local memory `mem.fact.doctrine.agents-skill-mirror-is-published-source` is to be retired at close (design sec-3).
 
 ### Open
+- A1 (pi/codex follow `.agents/skills` symlinks): VH at close (design sec-7).
+- REV over SPEC-009/010/011: to raise during execution (design sec-6).
+- One-off checkout cleanup at close (design sec-7).
+- Follow-up candidate: `install_append_system` has no production caller (design sec-4).
