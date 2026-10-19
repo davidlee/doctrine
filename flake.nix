@@ -88,8 +88,6 @@
           cargo-edit # `cargo set-version` for the release recipe
           # tokei
 
-          bashInteractive # jailed agents' Bash-tool shell (see CLAUDE_CODE_SHELL below)
-
           stdenv.cc # cc/ld on PATH (linker for cargo build)
           stdenv.cc.cc.lib
 
@@ -133,18 +131,8 @@
         jailEnvOptions = with jailLib.combinators; [
           (try-fwd-env "DOCTRINE_BIN")
           (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
-          # Claude Code runs Bash-tool commands under `bash` or `zsh` ONLY. Its
-          # auto-detection reads $SHELL, and falls back to "first working zsh,
-          # then bash on PATH" when $SHELL is neither — so a jailed agent lands
-          # on zsh (jail login shell) and the host lands on nushell→zsh. Both
-          # give the agent non-bash semantics it does not expect (zsh globbing
-          # is the usual bite: `grep --include=*.md` dies with `no matches
-          # found`). Pin the store path — bash is already in the closure, but
-          # `/run/current-system` and `/bin/bash` are not jail-visible, so a
-          # host-stable path would be silently ignored here. A bad value is
-          # ignored (falls back to auto-detection), so this can't hard-break.
-          # Host side sets the same var in ~/.claude/settings.json `env`.
-          (set-env "CLAUDE_CODE_SHELL" "${pkgs.bashInteractive}/bin/bash")
+          # No CLAUDE_CODE_SHELL or bashInteractive here: the agents flake pins
+          # both in every jail.
           # No CARGO_TARGET_DIR redirect: each worktree builds into its own
           # in-tree, gitignored `target/` (cargo's default). Per-worktree build
           # isolation is then correct by construction — both dispatch arms, `just`
