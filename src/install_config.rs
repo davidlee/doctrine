@@ -1,20 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! `install_config` — the `[install]` section of `doctrine.toml` (SL-152 PHASE-06).
 //!
-//! Parameterises two install-time choices: the git repo slug the universal npx
-//! skills delegation (`npx skills add <repo> …`) resolves against, and — since
-//! SL-250 — which Claude settings file `boot install` / `memory sync install`
-//! writes its direct-written hooks into (`claude_settings_scope`). A pure leaf
-//! (ADR-001): serde defaults only, no IO and no domain knowledge — mirrors the
-//! `dispatch_config` precedent.
+//! Configures the Claude settings file that `boot install` / `memory sync
+//! install` writes hooks into (`claude_settings_scope`). A pure leaf (ADR-001):
+//! serde defaults only, no IO and no domain knowledge.
 
 use serde::Deserialize;
-
-const DEFAULT_REPO: &str = "davidlee/doctrine";
-
-fn default_repo() -> String {
-    DEFAULT_REPO.to_string()
-}
 
 /// Which Claude settings file doctrine writes its hooks and `worktree.baseRef`
 /// into (SL-250 `DEC-163`). A sticky project key rather than a per-invocation
@@ -67,13 +58,9 @@ impl ClaudeSettingsScope {
 /// sets `deny_unknown_fields` — leaving the operator's chosen scope inert while
 /// doctrine writes (and, from SL-250 PHASE-03, sweeps) the other file. The
 /// precedent is `DispatchConfig`, which carries exactly this pair.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub(crate) struct InstallConfig {
-    /// The git repo slug the universal npx skills delegation resolves against.
-    /// Defaults to `davidlee/doctrine`.
-    #[serde(default = "default_repo")]
-    pub(crate) repo: String,
     /// Which Claude settings file `boot install` and `memory sync install`
     /// write. Defaults to `Project` (SL-250 `OQ-1`).
     #[serde(default)]
@@ -83,16 +70,6 @@ pub(crate) struct InstallConfig {
     /// rather than failing the whole config read.
     #[serde(default)]
     pub(crate) installed_version: Option<String>,
-}
-
-impl Default for InstallConfig {
-    fn default() -> Self {
-        Self {
-            repo: default_repo(),
-            claude_settings_scope: ClaudeSettingsScope::default(),
-            installed_version: None,
-        }
-    }
 }
 
 /// The `[install]` table name and the stamp key within it (STD-001).
@@ -141,18 +118,6 @@ pub(crate) fn write_installed_version(text: &str, version: &str) -> anyhow::Resu
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn absent_repo_defaults() {
-        let cfg: InstallConfig = toml::from_str("").unwrap();
-        assert_eq!(cfg.repo, "davidlee/doctrine");
-    }
-
-    #[test]
-    fn explicit_repo_overrides_default() {
-        let cfg: InstallConfig = toml::from_str("repo = \"acme/doctrine\"").unwrap();
-        assert_eq!(cfg.repo, "acme/doctrine");
-    }
 
     /// SL-250 PHASE-02 VT-1. Driven through `dtoml::parse` — the real path — so
     /// this asserts the CONTAINER `rename_all` as well as the enum's, which a

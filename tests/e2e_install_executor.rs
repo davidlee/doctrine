@@ -240,7 +240,7 @@ fn global_and_only_memory_installs_record_no_version() {
 }
 
 /// One harness set: an `AGENTS.md`-only repo wires the codex import and runs
-/// codex's skills leg (delegated to npx under the `universal` route).
+/// codex skills as direct doctrine links.
 #[test]
 fn an_agents_md_only_repo_wires_and_installs_codex_from_one_set() {
     if common::under_worker_marker() {
@@ -249,7 +249,7 @@ fn an_agents_md_only_repo_wires_and_installs_codex_from_one_set() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     fs::write(root.join("AGENTS.md"), "# agents\n").unwrap();
-    // No npx on PATH: the delegation is attempted (and reported) offline.
+    // No external runner on PATH: all skills come from the embedded catalog.
     let empty_path = tempfile::tempdir().unwrap();
 
     let out = run(
@@ -265,9 +265,14 @@ fn an_agents_md_only_repo_wires_and_installs_codex_from_one_set() {
     );
     assert!(root.join(CODEX_HOOKS).is_file(), "codex hooks: {out}");
     assert!(
-        out.contains("agents universal (delegate):"),
-        "codex skills leg ran: {out}"
+        root.join(".agents/skills/code-review/SKILL.md").is_file(),
+        "{out}"
     );
+    assert_eq!(
+        fs::read_link(root.join(".agents/skills/code-review")).unwrap(),
+        Path::new("../../.doctrine/skills/code-review")
+    );
+    assert!(!out.contains("delegate"), "{out}");
 }
 
 /// EX-1: a lone `CLAUDE.md` ↔ `AGENTS.md` symlink pair with no `.claude/` is a

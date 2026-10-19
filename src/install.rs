@@ -33,8 +33,6 @@ struct PluginAssets;
 const MEMORY_SUBSET_DOMAIN: &str = "doctrine-memory";
 const PARTNER_SUBSET_DOMAIN: &str = "doctrine-partner";
 const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN, PARTNER_SUBSET_DOMAIN];
-const RUNNER_BUNX: &str = "bunx";
-const RUNNER_NPX: &str = "npx";
 /// Marker token injected into the dispatch-worker agent defs (SL-186 PHASE-04).
 /// When the convergence executor writes a def carrying this literal, it resolves the role
 /// band (`Role::Worker`) through the prompt engine and replaces the marker with
@@ -85,8 +83,7 @@ struct FrameworkSection {
     roots: Vec<String>,
 }
 
-/// One `[harness.<name>]` table. Carries at most one skills route: `skills`
-/// (doctrine links into that dir) or `skills_via` (an `npx skills` target).
+/// One `[harness.<name>]` table; `skills` is the doctrine link directory.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct HarnessSection {
@@ -97,7 +94,6 @@ struct HarnessSection {
     /// The link dir for the def set under `install/agents/<harness>/`.
     agents: Option<String>,
     skills: Option<String>,
-    skills_via: Option<String>,
     workflows: Option<String>,
 }
 
@@ -208,7 +204,7 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     let manifest = load_manifest()?;
     let project_root =
         detect_project_root(project_path, &manifest).context("Could not find project root")?;
-    let mut harnesses = resolve_install_harnesses(args.agents, &project_root, &manifest.harness);
+    let mut harnesses = resolve_install_harnesses(args.agents, &project_root, &manifest.harness)?;
     if harnesses.names.is_empty() && is_interactive(args) {
         harnesses = ask_harnesses(&manifest.harness)?;
     }
@@ -632,7 +628,7 @@ fn seed_authoring_memories(root: &Path, manifest: &Manifest) -> anyhow::Result<(
 }
 
 /// The boot adapters a harness set implies, read from the registry's `boot`
-/// field. `pi` rides the codex adapter; `universal` and unregistered names have
+/// field. `pi` rides the codex adapter; `universal` has
 /// none. Duplicates collapse; first-seen order is preserved.
 fn boot_names(agents: &[String], registry: &Registry) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
@@ -661,18 +657,31 @@ fn resolve_install_harnesses(
     explicit: &[String],
     root: &Path,
     registry: &Registry,
-) -> HarnessChoice {
+) -> anyhow::Result<HarnessChoice> {
     if !explicit.is_empty() {
-        return HarnessChoice {
+        for name in explicit {
+            validate_harness_name(name, registry)?;
+        }
+        return Ok(HarnessChoice {
             names: explicit.to_vec(),
             origin: HarnessOrigin::Flag,
-        };
+        });
     }
     let (names, found) = detect_harnesses(root, registry).into_iter().unzip();
-    HarnessChoice {
+    Ok(HarnessChoice {
         names,
         origin: HarnessOrigin::Detected(found),
+    })
+}
+
+fn validate_harness_name(name: &str, registry: &Registry) -> anyhow::Result<()> {
+    if !registry.contains_key(name) {
+        bail!(
+            "unknown agent {name:?}; registered harnesses: {}. Use `universal` for another harness that reads .agents/skills",
+            registry.keys().cloned().collect::<Vec<_>>().join(", ")
+        );
     }
+    Ok(())
 }
 
 /// Each registry harness present in `root`, with what found it: its `detect`
@@ -709,34 +718,28 @@ fn ask_harnesses(registry: &Registry) -> anyhow::Result<HarnessChoice> {
         "No agent harness found here. Set up for which? ({}; blank for none) ",
         offered.join(", ")
     ))?;
-    let (names, unknown) = parse_harness_answer(&answer, registry);
-    for name in unknown {
-        stdout_line(&format!("  ignored unknown harness {name}"))?;
-    }
+    let names = parse_harness_answer(&answer, registry)?;
     Ok(HarnessChoice {
         names,
         origin: HarnessOrigin::Asked,
     })
 }
 
-/// PURE. The registry names in `answer` (split on commas and whitespace,
-/// lowercased, de-duplicated), and the unknown ones — a typo must not become
-/// an npx delegate.
-fn parse_harness_answer(answer: &str, registry: &Registry) -> (Vec<String>, Vec<String>) {
+/// PURE. Validate registry names in `answer` (split on commas and whitespace,
+/// lowercased, de-duplicated); refuse unknown names.
+fn parse_harness_answer(answer: &str, registry: &Registry) -> anyhow::Result<Vec<String>> {
     let mut known: Vec<String> = Vec::new();
-    let mut unknown = Vec::new();
     for word in answer
         .split(|c: char| c == ',' || c.is_whitespace())
         .filter(|w| !w.is_empty())
     {
         let name = word.to_lowercase();
-        if !registry.contains_key(&name) {
-            unknown.push(name);
-        } else if !known.contains(&name) {
+        validate_harness_name(&name, registry)?;
+        if !known.contains(&name) {
             known.push(name);
         }
     }
-    (known, unknown)
+    Ok(known)
 }
 
 /// The boot adapters a harness set wires, through the registry's `boot` field.
@@ -748,55 +751,17 @@ fn boot_harnesses(set: &[String], root: &Path, registry: &Registry) -> Vec<crate
     crate::boot::resolve_harnesses(&names, root).unwrap_or_default()
 }
 
-/// Where non-linked skills go: each registered harness's `skills_via` target,
-/// or an unregistered name itself. De-duplicated, first-seen order. Harnesses
-/// with a doctrine `skills` route are not delegated.
-#[derive(Debug, PartialEq, Eq)]
-struct DelegateTargets {
-    targets: Vec<String>,
-    unregistered: Vec<String>,
-}
-
-fn delegate_targets(agents: &[String], registry: &Registry) -> DelegateTargets {
-    let mut d = DelegateTargets {
-        targets: Vec::new(),
-        unregistered: Vec::new(),
-    };
-    for agent in agents {
-        let target = match registry.get(agent) {
-            Some(h) if h.skills.is_some() => continue,
-            Some(h) => h.skills_via.clone().unwrap_or_else(|| agent.clone()),
-            None => {
-                if !d.unregistered.contains(agent) {
-                    d.unregistered.push(agent.clone());
-                }
-                agent.clone()
-            }
-        };
-        if !d.targets.contains(&target) {
-            d.targets.push(target);
-        }
-    }
-    d
-}
-
 /// What confirming a harness installs, part by part (RV-420 F-9).
 const OFFER_SKILLS: &str = "skills";
-const OFFER_SKILLS_VIA_NPX: &str = "skills via npx";
 const OFFER_AGENT_DEFS: &str = "agent defs";
 const OFFER_WORKFLOWS: &str = "workflows";
 
 /// What confirming `agent` installs: its skills route, then the def sets its
-/// registry entry links. An unregistered harness gets npx skills only.
+/// registry entry links.
 fn install_offer(agent: &str, registry: &Registry) -> String {
     let h = registry.get(agent);
-    let skills = if h.is_some_and(|h| h.skills.is_some()) {
-        OFFER_SKILLS
-    } else {
-        OFFER_SKILLS_VIA_NPX
-    };
     let parts: Vec<&str> = [
-        Some(skills),
+        h.and_then(|h| h.skills.as_ref()).map(|_| OFFER_SKILLS),
         h.and_then(|h| h.agents.as_ref()).map(|_| OFFER_AGENT_DEFS),
         h.and_then(|h| h.workflows.as_ref())
             .map(|_| OFFER_WORKFLOWS),
@@ -823,18 +788,6 @@ fn install_scope(global: bool) -> Scope {
     } else {
         Scope::Project
     }
-}
-
-/// Disclose each unregistered harness (DEC-377): it gets no agent defs or
-/// links, only npx skills delegation under its own name.
-fn report_unregistered(names: &[String], out: &mut dyn Write) -> io::Result<()> {
-    for name in names {
-        writeln!(
-            out,
-            "  {name}: unregistered harness — skills delegated to npx under its own name"
-        )?;
-    }
-    Ok(())
 }
 
 /// The forward-step summary's header: under `--dry-run`, at `d`, and live.
@@ -1041,13 +994,10 @@ fn run_forward_steps(
     )?;
     outcomes.push((Leg::LegacyStarters, starters));
 
-    // 3. Framework artefacts for the harness set, then npx delegation. One
-    // convergence covers every harness (SL-281 D3) — none, nothing converges.
+    // 3. One convergence covers every harness (SL-281 D3) — none, nothing converges.
     // Convergence reports per action, not per path: no touched paths.
     let catalog = discover()?;
     let selected = select_for_install(&catalog, args.skills, args.domains)?;
-    let (runner_name, runner) = resolve_runner();
-    let repo = &crate::dtoml::load_doctrine_toml(root)?.install.repo;
 
     let mut convergence = LegOutcome::done();
     if !agents.is_empty() {
@@ -1067,31 +1017,6 @@ fn run_forward_steps(
         }
     }
     outcomes.push((Leg::Convergence, convergence));
-
-    // Batch-delegate every harness without a doctrine `skills` route
-    // to a single npx invocation, one de-duplicated target per skills route
-    // (pi + codex → `universal` once). npx reports no paths.
-    let delegate = delegate_targets(agents, registry);
-    report_unregistered(&delegate.unregistered, &mut io::stdout())?;
-    let mut skills = LegOutcome::done();
-    if !delegate.targets.is_empty() {
-        let mut out = io::stdout();
-        if let Err(e) = install_for_other(
-            &InstallOtherArgs {
-                agent_names: &delegate.targets,
-                selected: &selected,
-                global: args.global,
-                repo,
-                runner: &runner,
-                runner_name,
-            },
-            &mut out,
-        ) {
-            writeln!(io::stdout(), "  non-Claude skills install failed: {e:#}")?;
-            skills = LegOutcome::failed(&e);
-        }
-    }
-    outcomes.push((Leg::Skills, skills));
 
     Ok(outcomes)
 }
@@ -1239,7 +1164,6 @@ enum Leg {
     BootWiring,
     LegacyStarters,
     Convergence,
-    Skills,
     Gitignore,
     VersionStamp,
 }
@@ -1252,7 +1176,6 @@ impl Leg {
             Self::BootWiring => "boot wiring",
             Self::LegacyStarters => "legacy starters",
             Self::Convergence => "convergence",
-            Self::Skills => "skills",
             Self::Gitignore => "gitignore",
             Self::VersionStamp => "version stamp",
         }
@@ -1306,9 +1229,6 @@ fn stamp_decision(outcomes: &[(Leg, LegOutcome)], is_project_install: bool) -> S
 // ── The commit hint (SL-282 § Commit hint, DEC-382) ──
 
 const NOTHING_TO_COMMIT: &str = "Nothing to commit.";
-/// The delegated npx leg's copies cannot be listed (same disclosure as
-/// `NPX_SKILLS_NOTE`).
-const NPX_REVIEW: &str = "also review .agents/skills/ (written by npx skills)";
 /// Runtime state: always outside the hint, whatever the manifest lists.
 const STATE_IGNORE: &str = ".doctrine/state/";
 /// The line above the hint's commands, one per line below it.
@@ -1347,12 +1267,6 @@ fn print_commit_hint(
         for command in commit_hint(&paths, &msg, cd.as_deref()) {
             stdout_line(&format!("  {command}"))?;
         }
-    }
-    if !delegate_targets(&plan.harnesses, &manifest.harness)
-        .targets
-        .is_empty()
-    {
-        stdout_line(NPX_REVIEW)?;
     }
     Ok(())
 }
@@ -2228,19 +2142,9 @@ pub(crate) fn framework_roots() -> anyhow::Result<Vec<String>> {
     Ok(load_manifest()?.framework.roots)
 }
 
-/// Parse and validate manifest text. A harness table may carry only one skills
-/// route.
+/// Parse the embedded manifest text.
 fn parse_manifest(text: &str) -> anyhow::Result<Manifest> {
-    let manifest: Manifest =
-        toml::from_str(text).context("Failed to parse install/manifest.toml")?;
-    for (name, h) in &manifest.harness {
-        if h.skills.is_some() && h.skills_via.is_some() {
-            bail!(
-                "install/manifest.toml [harness.{name}] sets both `skills` and `skills_via`; pick one"
-            );
-        }
-    }
-    Ok(manifest)
+    toml::from_str(text).context("Failed to parse install/manifest.toml")
 }
 
 // ---------------------------------------------------------------------------
@@ -2318,9 +2222,6 @@ fn embedded_filenames() -> Vec<String> {
     names.sort();
     names
 }
-
-/// Operator disclosure: the block cannot list what it cannot attribute.
-const NPX_SKILLS_NOTE: &str = "note: skill copies written by `npx skills` (.agents/skills/<id>) are not listed in the block; doctrine cannot tell them from yours.";
 
 /// The managed block (design `sec-gitignore`): the manifest's runtime entries,
 /// each framework root's contents, and one anchored line per doctrine link
@@ -2412,7 +2313,6 @@ fn write_gitignore_block(
             LegOutcome::Refused(rest)
         }
     };
-    writeln!(out, "{NPX_SKILLS_NOTE}")?;
     Ok(outcome)
 }
 
@@ -2524,31 +2424,6 @@ fn execute_plan(plan: &Plan) -> anyhow::Result<Vec<Touched>> {
         }
     }
     Ok(touched)
-}
-
-fn program_available(prog: &str) -> bool {
-    std::process::Command::new(prog)
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
-}
-
-/// Resolve the delegated skills runner: try `npx` first, fall back to `bunx`.
-/// Returns the program name and a concrete runner.
-pub(crate) fn resolve_runner() -> (&'static str, ProcessRunner) {
-    resolve_runner_with(&program_available)
-}
-
-/// Same as `resolve_runner()` but with an injectable availability check.
-/// The `check` predicate returns `true` when a program is available.
-fn resolve_runner_with(check: &dyn Fn(&str) -> bool) -> (&'static str, ProcessRunner) {
-    if check(RUNNER_NPX) {
-        (RUNNER_NPX, ProcessRunner { name: RUNNER_NPX })
-    } else {
-        (RUNNER_BUNX, ProcessRunner { name: RUNNER_BUNX })
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2801,94 +2676,6 @@ fn write_link(dest: &Path, target: &Path) -> anyhow::Result<()> {
     })
 }
 
-/// Assemble the `npx skills add …` argv (program `npx`/`bunx` excluded).
-fn delegate_argv(
-    agents: &[&str],
-    skills: &[&Entry],
-    global: bool,
-    subset: bool,
-    repo: &str,
-) -> Vec<String> {
-    let mut argv = vec!["skills".to_string(), "add".to_string(), repo.to_string()];
-    for agent in agents {
-        argv.push("--agent".to_string());
-        argv.push(agent.to_string());
-    }
-    if global {
-        argv.push("--global".to_string());
-    }
-    if subset {
-        for e in skills {
-            argv.push("--skill".to_string());
-            argv.push(e.id.clone());
-        }
-    }
-    argv.push("--yes".to_string());
-    argv
-}
-
-// ---------------------------------------------------------------------------
-// Imperative: command execution behind a seam
-// ---------------------------------------------------------------------------
-
-/// Runs an external command. Seam so plans are tested without spawning Node.
-pub(crate) trait Runner: std::fmt::Debug {
-    /// Run `program` with `args`; return whether it exited successfully.
-    fn run(&self, program: &str, args: &[String]) -> anyhow::Result<bool>;
-}
-
-/// Real runner: spawns the process and inherits stdio.
-#[derive(Debug)]
-pub(crate) struct ProcessRunner {
-    name: &'static str,
-}
-
-impl Runner for ProcessRunner {
-    fn run(&self, program: &str, args: &[String]) -> anyhow::Result<bool> {
-        let status = std::process::Command::new(program)
-            .args(args)
-            .status()
-            .with_context(|| format!("Failed to run '{program}' (is {} installed?)", self.name))?;
-        Ok(status.success())
-    }
-}
-
-/// Install skills for a non-Claude agent: delegate to `npx skills`.
-/// Extracted from `execute()` for reuse from the consolidated `install::run()`
-/// forward-step dispatch (SL-088 PHASE-02).
-pub(crate) struct InstallOtherArgs<'a> {
-    pub(crate) agent_names: &'a [String],
-    pub(crate) selected: &'a [&'a Entry],
-    pub(crate) global: bool,
-    pub(crate) repo: &'a str,
-    pub(crate) runner: &'a dyn Runner,
-    pub(crate) runner_name: &'a str,
-}
-
-pub(crate) fn install_for_other(
-    args: &InstallOtherArgs<'_>,
-    out: &mut dyn Write,
-) -> anyhow::Result<()> {
-    let subset = !args.selected.is_empty();
-    let agent_strs: Vec<&str> = args.agent_names.iter().map(String::as_str).collect();
-    let argv = delegate_argv(&agent_strs, args.selected, args.global, subset, args.repo);
-    let label = args.agent_names.join(", ");
-    writeln!(
-        out,
-        "agents {label} (delegate): {} {}",
-        args.runner_name,
-        argv.join(" ")
-    )?;
-    if !args.runner.run(args.runner_name, &argv)? {
-        bail!(
-            "{runner_name} skills failed for agents: {label}",
-            runner_name = args.runner_name,
-            label = label
-        );
-    }
-    Ok(())
-}
-
 /// Select and validate skills for the consolidated install path.
 /// Thin wrapper over `validate_filters` + `select` so `install.rs` doesn't
 /// reach into the private filter logic.
@@ -3020,9 +2807,9 @@ struct Wanted<'a> {
 
 /// Build the desired set (design § Desired set): members span every
 /// registered harness; `selected` and `new_links` only those in `harnesses`.
-/// An unregistered harness, or one without `agents`/`skills`/`workflows`
-/// routes (codex), contributes nothing. Top-level `AGENTS.md` is never a
-/// member — only `<harness>/<file>` defs match.
+/// An unregistered harness, or one with no `agents`/`skills`/`workflows`
+/// route, contributes nothing. Top-level `AGENTS.md` is never a member — only
+/// `<harness>/<file>` defs match.
 fn desired_set<'a>(
     base: &Path,
     registry: &Registry,
@@ -3845,7 +3632,7 @@ mod tests_converge {
     fn registered_link_dirs_cover_every_harness_route_once() {
         let registry = registry_from(
             "[harness.a]\nagents = \".a/agents\"\nskills = \".s\"\nworkflows = \".a/wf\"\n\
-             [harness.b]\nskills = \".s\"\n[harness.c]\nskills_via = \"universal\"\n",
+             [harness.b]\nskills = \".s\"\n[harness.c]\n\n",
         );
         let base = Path::new(BASE);
         let dirs: BTreeSet<PathBuf> = registered_link_dirs(base, &registry).into_iter().collect();
@@ -4633,7 +4420,7 @@ mod tests_converge {
     }
 
     #[test]
-    fn desired_set_selects_nothing_for_codex_or_unregistered() {
+    fn desired_set_selects_codex_skills_without_unregistered_links() {
         let base = Path::new(BASE);
         let defs = embedded_agent_defs();
         let catalog = discover().unwrap();
@@ -4648,8 +4435,19 @@ mod tests_converge {
             &[],
         );
         assert!(!w.desired.members.is_empty(), "control: members built");
-        assert!(w.desired.selected.is_empty());
-        assert!(w.desired.new_links.is_empty());
+        assert!(
+            w.desired
+                .selected
+                .iter()
+                .all(|m| m.kind == MemberKind::Skill)
+        );
+        assert_eq!(w.desired.new_links.len(), all.len());
+        assert!(
+            w.desired
+                .new_links
+                .iter()
+                .all(|p| p.starts_with(base.join(".agents/skills")))
+        );
     }
 
     #[test]
@@ -4760,6 +4558,110 @@ mod tests_converge {
     }
 
     const CODE_REVIEW_TARGET: &str = "../../.doctrine/skills/code-review";
+
+    #[test]
+    fn desired_set_links_agents_skills_for_every_non_claude_harness() {
+        for harness in ["pi", "codex", "universal"] {
+            let t = Tree::new();
+            converge_report(
+                t.base(),
+                &real_registry(),
+                &[harness],
+                &["code-review"],
+                &[],
+            );
+            let link = t.path(".agents/skills/code-review");
+            assert_eq!(
+                fs::read_link(&link).unwrap(),
+                PathBuf::from(CODE_REVIEW_TARGET)
+            );
+            assert!(link.join("SKILL.md").is_file());
+        }
+    }
+
+    #[test]
+    fn shared_agents_skills_dir_collapses_to_one_link() {
+        let t = Tree::new();
+        converge_report(
+            t.base(),
+            &real_registry(),
+            &["pi", "codex", "universal"],
+            &["code-review"],
+            &[],
+        );
+        let entries: Vec<_> = fs::read_dir(t.path(".agents/skills")).unwrap().collect();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            fs::read_link(t.path(".agents/skills/code-review")).unwrap(),
+            PathBuf::from(CODE_REVIEW_TARGET)
+        );
+    }
+
+    #[test]
+    fn managed_block_lists_agents_skills_links_not_foreign_entries() {
+        let t = Tree::new();
+        t.file(".agents/skills/mine/SKILL.md", "mine");
+        converge_report(
+            t.base(),
+            &real_registry(),
+            &["universal"],
+            &["code-review"],
+            &[],
+        );
+        let block = gitignore_block(t.base(), &load_manifest().unwrap(), &[]).unwrap();
+        assert!(
+            block.contains(&"/.agents/skills/code-review".to_string()),
+            "{block:?}"
+        );
+        assert!(
+            !block
+                .iter()
+                .any(|line| line.contains("/.agents/skills/mine")),
+            "{block:?}"
+        );
+    }
+
+    #[test]
+    fn real_dir_at_agents_skills_is_kept_and_reported_shadows() {
+        let t = Tree::new();
+        let mine = t.file(".agents/skills/code-review/SKILL.md", "mine");
+        let out = converge_report(
+            t.base(),
+            &real_registry(),
+            &["universal"],
+            &["code-review"],
+            &[],
+        );
+        assert!(out.contains("real file shadows doctrine def"), "{out}");
+        assert_eq!(fs::read_to_string(mine).unwrap(), "mine");
+        let catalog = discover().unwrap();
+        let picked = select_for_install(&catalog, &["code-review".into()], &[]).unwrap();
+        let wanted = desired_set(
+            t.base(),
+            &real_registry(),
+            &names(&["universal"]),
+            &[],
+            &catalog,
+            &picked,
+            &[],
+        );
+        let (scanned, _) = survey(
+            &Converge {
+                root: t.base(),
+                base: t.base(),
+                scope: Scope::Project,
+            },
+            &framework_roots().unwrap(),
+            &real_registry(),
+            &wanted,
+        )
+        .unwrap();
+        assert!(scanned.snapshot.links.contains(&LinkSeen::Real {
+            dir: t.path(".agents/skills"),
+            name: "code-review".into(),
+        }));
+        assert!(plan(&manifest_roots(t.base()), Scope::Project, &wanted.desired, &scanned.snapshot).iter().any(|a| matches!(a, Action::Report(Notice::Shadows(p)) if p == &t.path(".agents/skills/code-review"))));
+    }
 
     #[test]
     fn converge_materialises_skill_and_links_it() {
@@ -5511,8 +5413,6 @@ mod tests_hymns {
 mod tests_skills {
     use super::*;
 
-    const TEST_REPO: &str = "davidlee/doctrine";
-
     // ADR-005 / SL-023 PHASE-04 (VT-1): the de-dup'd skills route rather than
     // restate. Guards the named sites against re-growing flag-syntax templates,
     // option/enum tables, or `--status` transition commands. Each must also keep
@@ -5673,65 +5573,7 @@ mod tests_skills {
 
     // --- ownership classification ---
 
-    // --- delegate argv ---
-
-    #[test]
-    fn delegate_argv_all_skills_omits_skill_flags() {
-        let e = entry("review", "code-review");
-        let argv = delegate_argv(&["codex"], &[&e], false, false, TEST_REPO);
-        assert_eq!(
-            argv,
-            vec!["skills", "add", TEST_REPO, "--agent", "codex", "--yes"]
-        );
-    }
-
-    #[test]
-    fn delegate_argv_subset_and_global() {
-        let e = entry("review", "code-review");
-        let argv = delegate_argv(&["cursor"], &[&e], true, true, TEST_REPO);
-        assert_eq!(
-            argv,
-            vec![
-                "skills",
-                "add",
-                TEST_REPO,
-                "--agent",
-                "cursor",
-                "--global",
-                "--skill",
-                "code-review",
-                "--yes",
-            ]
-        );
-    }
-
-    #[test]
-    fn delegate_argv_multiple_agents() {
-        let e = entry("review", "code-review");
-        let argv = delegate_argv(&["pi", "codex"], &[&e], false, false, TEST_REPO);
-        assert_eq!(
-            argv,
-            vec![
-                "skills", "add", TEST_REPO, "--agent", "pi", "--agent", "codex", "--yes",
-            ]
-        );
-    }
-
     // --- agent resolution ---
-
-    // --- plan ---
-
-    #[test]
-    fn resolve_runner_with_npx_available() {
-        let (name, _runner) = resolve_runner_with(&|prog| prog == "npx");
-        assert_eq!(name, RUNNER_NPX);
-    }
-
-    #[test]
-    fn resolve_runner_with_falls_back_to_bunx() {
-        let (name, _runner) = resolve_runner_with(&|_prog| false);
-        assert_eq!(name, RUNNER_BUNX);
-    }
 
     // --- plan ---
 
@@ -6721,7 +6563,9 @@ mod tests {
         execute_plan(&build_plan(&manifest, dir.path())).unwrap();
         // …yet the harness is still detected, so the adapter leg fires.
         assert_eq!(
-            resolve_install_harnesses(&[], dir.path(), &registry()).names,
+            resolve_install_harnesses(&[], dir.path(), &registry())
+                .unwrap()
+                .names,
             vec!["claude".to_string()],
             "a detected harness must still resolve for adapter install after the flip"
         );
@@ -6780,7 +6624,9 @@ mod tests {
     #[test]
     fn resolve_install_harnesses_empty_when_no_agent_dirs_and_no_flags() {
         let dir = tempfile::tempdir().unwrap();
-        let agents = resolve_install_harnesses(&[], dir.path(), &registry()).names;
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry())
+            .unwrap()
+            .names;
         assert!(agents.is_empty());
     }
 
@@ -6788,7 +6634,9 @@ mod tests {
     fn resolve_install_harnesses_returns_claude_when_dir_present() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".claude")).unwrap();
-        let agents = resolve_install_harnesses(&[], dir.path(), &registry()).names;
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry())
+            .unwrap()
+            .names;
         assert_eq!(agents, vec!["claude".to_string()]);
     }
 
@@ -6796,7 +6644,9 @@ mod tests {
     fn resolve_install_harnesses_returns_pi_when_dir_present() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".pi")).unwrap();
-        let agents = resolve_install_harnesses(&[], dir.path(), &registry()).names;
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry())
+            .unwrap()
+            .names;
         assert_eq!(agents, vec!["pi".to_string()]);
     }
 
@@ -6804,7 +6654,9 @@ mod tests {
     fn resolve_install_harnesses_returns_codex_when_dir_present() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".codex")).unwrap();
-        let agents = resolve_install_harnesses(&[], dir.path(), &registry()).names;
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry())
+            .unwrap()
+            .names;
         assert_eq!(agents, vec!["codex".to_string()]);
     }
 
@@ -6812,7 +6664,9 @@ mod tests {
     fn resolve_install_harnesses_returns_universal_for_dot_agents_dir() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".agents")).unwrap();
-        let agents = resolve_install_harnesses(&[], dir.path(), &registry()).names;
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry())
+            .unwrap()
+            .names;
         assert_eq!(agents, vec!["universal".to_string()]);
     }
 
@@ -6821,7 +6675,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".claude")).unwrap();
         fs::create_dir(dir.path().join(".pi")).unwrap();
-        let agents = resolve_install_harnesses(&[], dir.path(), &registry()).names;
+        let agents = resolve_install_harnesses(&[], dir.path(), &registry())
+            .unwrap()
+            .names;
         assert_eq!(agents, vec!["claude".to_string(), "pi".to_string()]);
     }
 
@@ -6829,7 +6685,9 @@ mod tests {
     fn resolve_install_harnesses_uses_explicit_over_detection() {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".claude")).unwrap();
-        let agents = resolve_install_harnesses(&["pi".to_string()], dir.path(), &registry()).names;
+        let agents = resolve_install_harnesses(&["pi".to_string()], dir.path(), &registry())
+            .unwrap()
+            .names;
         assert_eq!(agents, vec!["pi".to_string()]);
     }
 
@@ -6841,6 +6699,7 @@ mod tests {
             dir.path(),
             &registry(),
         )
+        .unwrap()
         .names;
         assert_eq!(agents, vec!["claude".to_string(), "pi".to_string()]);
     }
@@ -6853,7 +6712,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("AGENTS.md"), "x").unwrap();
         assert_eq!(
-            resolve_install_harnesses(&[], dir.path(), &registry()).names,
+            resolve_install_harnesses(&[], dir.path(), &registry())
+                .unwrap()
+                .names,
             strings(&["codex"])
         );
     }
@@ -6866,7 +6727,9 @@ mod tests {
         fs::write(root.join("CLAUDE.md"), "x").unwrap();
         std::os::unix::fs::symlink("CLAUDE.md", root.join("AGENTS.md")).unwrap();
         assert_eq!(
-            resolve_install_harnesses(&[], root, &registry()).names,
+            resolve_install_harnesses(&[], root, &registry())
+                .unwrap()
+                .names,
             strings(&["claude"])
         );
     }
@@ -6878,14 +6741,16 @@ mod tests {
         fs::write(root.join("CLAUDE.md"), "x").unwrap();
         std::os::unix::fs::symlink("CLAUDE.md", root.join("AGENTS.md")).unwrap();
         assert_eq!(
-            resolve_install_harnesses(&[], root, &registry()).names,
+            resolve_install_harnesses(&[], root, &registry())
+                .unwrap()
+                .names,
             strings(&["codex"])
         );
     }
 
     /// `InstallPlan::build` at binary 1.2.3 over the set `run` resolves.
     fn test_plan(manifest: &Manifest, root: &Path, args: &InstallArgs<'_>) -> InstallPlan {
-        let harnesses = resolve_install_harnesses(args.agents, root, &manifest.harness);
+        let harnesses = resolve_install_harnesses(args.agents, root, &manifest.harness).unwrap();
         InstallPlan::build(
             manifest,
             root,
@@ -7126,7 +6991,7 @@ mod tests {
         let outcomes = vec![
             (Leg::MemorySync, LegOutcome::done()),
             (Leg::BootWiring, LegOutcome::Failed("claude: boom".into())),
-            (Leg::Skills, LegOutcome::Done(vec![touched_at("x")])),
+            (Leg::Convergence, LegOutcome::Done(vec![touched_at("x")])),
             (Leg::Gitignore, LegOutcome::Refused("malformed".into())),
         ];
         let incomplete = vec![Leg::BootWiring, Leg::Gitignore];
@@ -7144,7 +7009,7 @@ mod tests {
 
     #[test]
     fn a_non_project_install_never_stamps() {
-        let failed = vec![(Leg::Skills, LegOutcome::Failed("x".into()))];
+        let failed = vec![(Leg::Convergence, LegOutcome::Failed("x".into()))];
         assert_eq!(stamp_decision(&failed, false), StampDecision::Skip);
         assert_eq!(stamp_decision(&[], false), StampDecision::Skip);
     }
@@ -7297,21 +7162,35 @@ mod tests {
     }
 
     #[test]
-    fn parse_harness_answer_keeps_registry_names_and_reports_the_rest() {
+    fn unknown_agent_is_refused_before_any_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let agents = strings(&["claude", "cursor"]);
+        let args = InstallArgs {
+            agents: &agents,
+            ..project_args()
+        };
+        let err = run(Some(dir.path().to_path_buf()), &args)
+            .unwrap_err()
+            .to_string();
+        for name in ["cursor", "claude", "codex", "pi", "universal"] {
+            assert!(err.contains(name), "{err}");
+        }
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn parse_harness_answer_accepts_only_registry_names() {
         let reg = registry();
         assert_eq!(
-            parse_harness_answer("claude, codex", &reg),
-            (strings(&["claude", "codex"]), vec![])
+            parse_harness_answer("claude, codex", &reg).unwrap(),
+            strings(&["claude", "codex"])
         );
         assert_eq!(
-            parse_harness_answer("Claude pi claude\n", &reg),
-            (strings(&["claude", "pi"]), vec![])
+            parse_harness_answer("Claude pi claude\n", &reg).unwrap(),
+            strings(&["claude", "pi"])
         );
-        assert_eq!(parse_harness_answer("\n", &reg), (vec![], vec![]));
-        assert_eq!(
-            parse_harness_answer("claud", &reg),
-            (vec![], strings(&["claud"]))
-        );
+        assert!(parse_harness_answer("\n", &reg).unwrap().is_empty());
+        assert!(parse_harness_answer("claud", &reg).is_err());
     }
 
     #[test]
@@ -7319,13 +7198,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".claude")).unwrap();
         fs::write(dir.path().join("AGENTS.md"), "x").unwrap();
-        let choice = resolve_install_harnesses(&[], dir.path(), &registry());
+        let choice = resolve_install_harnesses(&[], dir.path(), &registry()).unwrap();
         assert_eq!(choice.names, strings(&["claude", "codex"]));
         assert_eq!(
             choice.origin,
             HarnessOrigin::Detected(strings(&[".claude/", "AGENTS.md"]))
         );
-        let flagged = resolve_install_harnesses(&strings(&["pi"]), dir.path(), &registry());
+        let flagged =
+            resolve_install_harnesses(&strings(&["pi"]), dir.path(), &registry()).unwrap();
         assert_eq!(flagged.origin, HarnessOrigin::Flag);
     }
 
@@ -7632,7 +7512,7 @@ mod tests {
     /// the registry's boot mapping, as `InstallPlan::build` composes them.
     fn install_boot(agents: &[String], root: &Path, reg: &Registry) -> Vec<crate::boot::Harness> {
         boot_harnesses(
-            &resolve_install_harnesses(agents, root, reg).names,
+            &resolve_install_harnesses(agents, root, reg).unwrap().names,
             root,
             reg,
         )
@@ -7643,14 +7523,12 @@ mod tests {
     }
 
     #[test]
-    fn harness_table_with_both_skills_and_skills_via_is_refused() {
-        let text = "[harness.odd]\nskills = \".odd/skills\"\nskills_via = \"universal\"\n";
+    fn stale_skills_via_field_is_refused() {
+        let text = "[harness.odd]\nskills_via = \"universal\"\n";
         let err = parse_manifest(text).unwrap_err();
         let msg = format!("{err:#}");
-        assert!(msg.contains("odd"), "names the harness: {msg}");
-        // Positive control: either route alone parses.
+        assert!(msg.contains("unknown field"), "stale route refused: {msg}");
         parse_manifest("[harness.odd]\nskills = \".odd/skills\"\n").unwrap();
-        parse_manifest("[harness.odd]\nskills_via = \"universal\"\n").unwrap();
     }
 
     #[test]
@@ -7698,15 +7576,11 @@ mod tests {
         // With --agent: the registry maps names, detection is ignored.
         assert_eq!(boot_for(&[".claude"], &["pi"]), vec!["codex"]);
         assert!(boot_for(&[], &["universal"]).is_empty());
-        assert!(
-            boot_for(&[], &["cursor"]).is_empty(),
-            "unregistered: no boot"
-        );
 
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         assert_eq!(
-            resolve_install_harnesses(&[], root, &reg).names,
+            resolve_install_harnesses(&[], root, &reg).unwrap().names,
             Vec::<String>::new(),
             "bare project detects nothing"
         );
@@ -7728,38 +7602,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn pi_and_codex_delegate_universal_once() {
-        let reg = registry();
-        for agents in [
-            &["pi"][..],
-            &["codex"],
-            &["universal"],
-            &["pi", "codex", "universal"],
-        ] {
-            let d = delegate_targets(&strings(agents), &reg);
-            assert_eq!(d.targets, strings(&["universal"]), "{agents:?}");
-            assert!(d.unregistered.is_empty());
-        }
-        // claude links its own skills: never delegated.
-        let d = delegate_targets(&strings(&["claude", "pi"]), &reg);
-        assert_eq!(d.targets, strings(&["universal"]));
-    }
-
-    #[test]
-    fn unregistered_harness_delegates_skills_and_reports_unregistered() {
-        let d = delegate_targets(&strings(&["cursor", "pi", "cursor"]), &registry());
-        assert_eq!(d.targets, strings(&["cursor", "universal"]));
-        assert_eq!(d.unregistered, strings(&["cursor"]));
-        let mut out = Vec::new();
-        report_unregistered(&d.unregistered, &mut out).unwrap();
-        let out = String::from_utf8(out).unwrap();
-        assert!(
-            out.contains("cursor") && out.contains("unregistered"),
-            "{out}"
-        );
-    }
-
     /// RV-420 F-9: the forward summary names everything installing a harness
     /// writes, and the canon convergence it triggers.
     #[test]
@@ -7767,9 +7609,9 @@ mod tests {
         let reg = registry();
         for (agent, offer) in [
             ("claude", "skills + agent defs + workflows for claude"),
-            ("pi", "skills via npx + agent defs for pi"),
-            ("codex", "skills via npx for codex"),
-            ("cursor", "skills via npx for cursor"),
+            ("pi", "skills + agent defs for pi"),
+            ("codex", "skills for codex"),
+            ("universal", "skills for universal"),
         ] {
             assert_eq!(install_offer(agent, &reg), offer);
         }

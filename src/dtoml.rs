@@ -42,7 +42,7 @@ pub(crate) struct DoctrineToml {
     /// the spawn arm (SL-108 design D3 / IMP-101).
     #[serde(default)]
     pub(crate) dispatch: crate::dispatch_config::DispatchConfig,
-    /// The `[install]` table — the npx-skills delegation slug and the Claude
+    /// The `[install]` table — the Claude
     /// settings activation scope (SL-152 PHASE-06; SL-250).
     #[serde(default)]
     pub(crate) install: crate::install_config::InstallConfig,
@@ -156,16 +156,6 @@ mod tests {
             let entry = design_entry(&format!("conduct = 42\n{body}")).unwrap();
             assert_eq!(entry.is_some(), !body.is_empty(), "{body:?} kept raw");
         }
-    }
-
-    #[test]
-    fn install_table_roundtrip() {
-        // SL-152 PHASE-06: the [install] repo survives the full DoctrineToml parse;
-        // absent → default davidlee/doctrine.
-        let doc = parse("[install]\nrepo = \"acme/doctrine\"\n").unwrap();
-        assert_eq!(doc.install.repo, "acme/doctrine");
-        let doc2 = parse("").unwrap();
-        assert_eq!(doc2.install.repo, "davidlee/doctrine");
     }
 
     #[test]

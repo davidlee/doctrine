@@ -31,13 +31,9 @@ seed_items = []
 # user-owned — write-if-absent, never overwritten, pruned or ignored.
 roots = [".doctrine/agents", ".doctrine/skills", ".doctrine/workflows"]
 
-# The harness registry — install's harness vocabulary. Per harness: `detect`
-# (the dir whose presence implies it when no --agent is given), `boot` (the
-# boot adapter; absent = no boot leg), `agents` (link dir for the def set under
-# install/agents/<harness>/), and exactly one skills route: `skills` (doctrine
-# links into this dir) or `skills_via` (delegated `npx skills add --agent <t>`).
-# An unregistered --agent gets no defs or links; its skills are delegated under
-# its own name, and install says so.
+# The harness registry — install's harness vocabulary. `detect` selects a
+# harness by directory, `boot` names its adapter, and `agents`, `skills`, and
+# `workflows` are doctrine-owned link directories. Unknown agents are refused.
 [harness.claude]
 detect = ".claude"
 boot = "claude"
@@ -48,17 +44,17 @@ workflows = ".claude/workflows"
 [harness.codex]
 detect = ".codex"
 boot = "codex"
-skills_via = "universal"
+skills = ".agents/skills"
 
 [harness.pi]
 detect = ".pi"
 boot = "codex"
 agents = ".pi/agents"
-skills_via = "universal"
+skills = ".agents/skills"
 
 [harness.universal]
 detect = ".agents"
-skills_via = "universal"
+skills = ".agents/skills"
 
 [gitignore]
 # Runtime state is disposable and must never be committed; the convenience

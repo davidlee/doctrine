@@ -307,7 +307,7 @@ fn global_reports_orphan_and_keeps_it() {
 }
 
 #[test]
-fn pi_without_npx_still_writes_defs() {
+fn pi_without_external_runner_writes_defs_and_skills() {
     if common::under_worker_marker() {
         return;
     }
@@ -324,6 +324,7 @@ fn pi_without_npx_still_writes_defs() {
         Path::new("../../.doctrine/agents/pi/dispatch-worker.md")
     );
     assert!(link.exists(), "the pi def link resolves");
+    assert!(p.path(".agents/skills/code-review/SKILL.md").is_file());
 }
 
 // ── PHASE-05: the managed `.gitignore` block ──
@@ -388,7 +389,7 @@ fn user_negation_after_block_survives() {
 }
 
 #[test]
-fn pi_without_npx_block_reflects_landed_links() {
+fn pi_without_external_runner_block_reflects_landed_links() {
     if common::under_worker_marker() {
         return;
     }
@@ -401,7 +402,7 @@ fn pi_without_npx_block_reflects_landed_links() {
 
     let text = p.gitignore();
     assert!(has_line(&text, "/.pi/agents/dispatch-worker.md"), "{text}");
-    assert!(!text.contains(".agents/skills"), "no npx copies: {text}");
+    assert!(has_line(&text, "/.agents/skills/code-review"), "{text}");
     for line in text.lines().filter(|l| l.starts_with('/')) {
         let rel = line.trim_start_matches('/');
         assert!(

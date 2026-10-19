@@ -35,7 +35,6 @@ const HEADER: &str = "Doctrine will set this project up for: claude";
 const DETAILS: &str = "Project root:";
 const NOTHING: &str = "Nothing to commit.";
 const HINT: &str = "Next:";
-const NPX_REVIEW: &str = "also review .agents/skills/ (written by npx skills)";
 const HARNESS_QUESTION: &str = "No agent harness found here. Set up for which?";
 
 /// `doctrine <args…> -p <root>` from `root`, with `input` on stdin.
@@ -156,7 +155,6 @@ fn interactive_y_shows_overview_one_prompt_and_hint() {
     assert!(out.contains(PROMPT), "{out}");
     assert!(!out.contains("[y/N/a]"), "no per-step prompt: {out}");
     assert!(!out.contains(DETAILS), "details not shown: {out}");
-    assert!(!out.contains(NPX_REVIEW), "no npx leg ran: {out}");
     assert!(!root.join(".doctrine/hymns").exists(), "{out}");
     assert_stamped(root, &out);
 
@@ -366,38 +364,42 @@ fn removed_starter_appears_in_the_hint() {
 }
 
 #[test]
-fn npx_leg_adds_the_review_line() {
+fn codex_links_are_listed_without_delegation_disclosure() {
     if common::under_worker_marker() {
         return;
     }
-    let bin = tempfile::tempdir().unwrap();
-    let npx = bin.path().join("npx");
-    fs::write(&npx, "#!/bin/sh\nexit 0\n").unwrap();
-    let mut perms = fs::metadata(&npx).unwrap().permissions();
-    std::os::unix::fs::PermissionsExt::set_mode(&mut perms, 0o755);
-    fs::set_permissions(&npx, perms).unwrap();
-    let path = std::env::join_paths(
-        std::iter::once(bin.path().to_path_buf())
-            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
-    )
-    .unwrap();
     let dir = repo();
     let root = dir.path();
-
-    let mut cmd = doctrine_cmd(root);
-    cmd.args([
-        "install",
-        "--agent",
-        "codex",
-        "--skill",
-        "code-review",
-        "--yes",
-    ])
-    .env("PATH", &path);
-    let out = stdout_ok(cmd.output().unwrap());
-
-    assert!(!hint(&out).is_empty(), "control: the hint printed: {out}");
-    assert!(out.lines().any(|l| l == NPX_REVIEW), "{out}");
+    let out = stdout_ok(
+        doctrine_cmd(root)
+            .args([
+                "install",
+                "--agent",
+                "codex",
+                "--skill",
+                "code-review",
+                "--yes",
+            ])
+            .output()
+            .unwrap(),
+    );
+    assert!(!hint(&out).is_empty(), "control: hint printed: {out}");
+    assert!(!out.contains("written by npx"), "{out}");
+    assert!(
+        !root.join("skills-lock.json").exists(),
+        "doctrine writes no skills lockfile: {out}"
+    );
+    let block = fs::read_to_string(root.join(".gitignore")).unwrap();
+    assert!(
+        block
+            .lines()
+            .any(|line| line == "/.agents/skills/code-review"),
+        "{block}"
+    );
+    assert_eq!(
+        fs::read_link(root.join(".agents/skills/code-review")).unwrap(),
+        Path::new("../../.doctrine/skills/code-review")
+    );
 }
 
 #[test]

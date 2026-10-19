@@ -348,7 +348,7 @@ fn install_wires_five_hook_entries_across_three_events() {
 }
 
 #[test]
-fn install_agent_pi_dry_run_prints_delegation_plan() {
+fn install_agent_pi_dry_run_prints_direct_skills_plan() {
     if common::under_worker_marker() {
         return;
     } // SL-225 #2: skip in a worker fork
@@ -371,8 +371,8 @@ fn install_agent_pi_dry_run_prints_delegation_plan() {
         "pi agent mentioned in plan: {stdout}"
     );
     assert!(
-        stdout.contains("install skills via npx + agent defs for pi"),
-        "npx delegation shown: {stdout}"
+        stdout.contains("install skills + agent defs for pi"),
+        "direct skill route shown: {stdout}"
     );
     assert!(
         stdout.contains("converge framework canon (pruning unshipped entries)"),
