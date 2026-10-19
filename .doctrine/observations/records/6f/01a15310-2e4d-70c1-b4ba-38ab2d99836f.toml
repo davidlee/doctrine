@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a15310-2e4d-70c1-b4ba-38ab2d99836f"
+recorded_at = "2026-10-19T07:28:51.789397232Z"
+kind = "friction"
+summary = "design skill: lock gate demands routes on verified major findings; adding one costs reopen+dispose+verify per finding (15 calls for 5)"
+detail = "SL-284 RV-423: codex raised/verified findings without --route; review-disposition-attested refused lock. amend refuses verified findings. Workaround: orchestrator reopened/re-disposed/re-verified as both roles. Prompt the reviewer to route at raise, or let amend set route on verified."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

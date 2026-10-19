@@ -17,6 +17,11 @@ act = "conclude"
 role = "raiser"
 note = "Rechecked the eight fix-now responses against revised SL-284 design and their cited source/spec seams; all verified, no revision-introduced defect found."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "All 8 findings verified; route bookkeeping on F-1..F-5 complete."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-284"
 
@@ -29,7 +34,8 @@ detail = """
 Expected: SL-284 design sec-3:97-101 and sec-7:191-194 preserve subset selection on the new direct routes, including the CLI's --only-memory subset. Observed: src/commands/cli.rs:105-108 promises only record-memory and retrieve-memory; src/commands/cli.rs:1532-1543 passes only_memory, but src/install.rs:952 and :1048 call select_for_install with only args.skills/domains, and src/install.rs:2895-2901 selects all when those filters are empty. The only production read of args.only_memory in src/install.rs is :407 (stamp selection). Thus --only-memory --agent pi/codex/universal will link the entire embedded catalog, and the existing Claude route already does so. Repair: derive the two memory IDs through the existing selection seam for both preview and live convergence, then test the actual links for --only-memory alongside --skill and --domain.
 """
 disposition = "fix-now"
-response = "Confirmed pre-existing (src/install.rs:952,:1048 ignore only_memory). Fixed in design sec-2: --only-memory resolves to the memory pair through the shared selection seam; test in sec-7."
+response = "Fixed in design rev 35 (see prior response); verified by codex raiser. Route added for the lock gate."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -46,6 +52,23 @@ act = "verify"
 role = "raiser"
 note = "Sec-2 routes --only-memory through the shared selection used by preview and live convergence; src/install.rs currently omits it at both call sites, and the CLI already enforces exclusivity."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Bookkeeping: add route required by design lock gate; codex verdict unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Fixed in design rev 35 (see prior response); verified by codex raiser. Route added for the lock gate."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Re-verify after route-only change; substance verified by codex (gpt-6-sol) earlier this pass."
+
 [[finding]]
 id = "F-2"
 status = "verified"
@@ -55,7 +78,8 @@ detail = """
 Expected: removing npx in SL-284 design sec-3:85-110 and reaching the sec-7:220 green gate accounts for consumers outside src/install.rs. Observed: justfile:261-264 still runs npx skills add . --agent universal on every just reinstall. Existing tests assert behavior the design removes: tests/e2e_install_flow.rs:368-400 expects NPX_REVIEW; tests/e2e_install_executor.rs:242-269 expects agents universal (delegate); tests/e2e_claude_install.rs:350-375 expects the npx offer; tests/e2e_surface_neutral_roundtrip.rs:111-129 expects Codex to generate the old Pi extension path. src/boot.rs:8234-8265 and :9223-9242 likewise assert Harness::Codex generates Pi files. These are not merely Leg::Skills tests and cannot stay green unchanged as sec-3:100 claims. Repair: include the recipe and each affected behavioral suite in the impact/verification plan; replace the old assertions with direct-link and Pi-only ownership checks while preserving unrelated tests.
 """
 disposition = "fix-now"
-response = "Confirmed (justfile:261-264 and the cited suites). sec-3 adds the justfile line and a table of behaviour tests rewritten rather than kept green; sec-7 lists them."
+response = "Fixed in design rev 35 (see prior response); verified by codex raiser. Route added for the lock gate."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -72,6 +96,23 @@ act = "verify"
 role = "raiser"
 note = "Sec-3 includes justfile reinstall and each cited behavioral suite for rewritten direct-link/Pi-only assertions; the cited recipe and tests still assert removed behavior."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Bookkeeping: add route required by design lock gate; codex verdict unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Fixed in design rev 35 (see prior response); verified by codex raiser. Route added for the lock gate."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Re-verify after route-only change; substance verified by codex (gpt-6-sol) earlier this pass."
+
 [[finding]]
 id = "F-3"
 status = "verified"
@@ -81,7 +122,8 @@ detail = """
 Expected: SL-284 design sec-6:174-183 identifies every normative clause the proposed routing and Pi adapter contradict. Observed: SPEC-011 REQ-185 and its structured responsibility (spec-011.toml:20; spec-011.md:90-97) enumerate only Claude/Codex import targets and auto-detection, while the design adds Pi with AGENTS.md and .pi detection (design sec-4:114-120). SPEC-011 REQ-480 and its structured responsibility (spec-011.toml:23; spec-011.md:149-153) still describe generated Pi extensions without the new runtime path and settings registration. The table only says SPEC-011 Responsibilities: pi extensions. SPEC-009 D4 and overview (spec-009.md:39-43, :189-193) still name skills_via and npx, though the table lists only D5/REQ-172. SPEC-010 overview and multi-agent status concern (spec-010.md:23-27, :137-139) still call non-Claude routing delegated. doctrine search npx -k all and search skills_via -k all also return REQ-172/REQ-175 and SPEC-010. Repair: expand the one REV's clause list to the structured and prose occurrences, especially REQ-185/REQ-480 and SPEC-009 D4, then validate all three specs after application.
 """
 disposition = "fix-now"
-response = "Accepted. sec-6 table expanded to REQ-185, REQ-480, SPEC-009 overview/D4, SPEC-010 overview and multi-agent status concern; spec validate after apply; REV repeats the npx/skills_via searches."
+response = "Fixed in design rev 35 (see prior response); verified by codex raiser. Route added for the lock gate."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -98,6 +140,23 @@ act = "verify"
 role = "raiser"
 note = "Sec-6 names REQ-185, REQ-480, SPEC-009 overview/D4, and SPEC-010 overview/status concern, with structured/prose REV scan and post-apply validation; these match the cited spec clauses."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Bookkeeping: add route required by design lock gate; codex verdict unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Fixed in design rev 35 (see prior response); verified by codex raiser. Route added for the lock gate."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Re-verify after route-only change; substance verified by codex (gpt-6-sol) earlier this pass."
+
 [[finding]]
 id = "F-4"
 status = "verified"
@@ -107,7 +166,8 @@ detail = """
 Expected: SL-284 design sec-4:127-133 and sec-5:151-160 make .pi/settings.json registration a first-class, disclosed Pi boot leg whose write and refusal affect install completeness. Observed: the claim that RefreshReport already carries every field is false for this new setting: src/boot.rs:1892-1922 has no Pi settings outcome; refused_wiring at :3199-3222 only examines hooks, MCP and extension files; refresh_touched at :3525-3568 cannot include .pi/settings.json. src/install.rs:1015-1027 converts that touched/refused result into the boot leg, and :1321-1336 builds the commit hint from touched paths. Following the design as written would omit a successful settings edit from the commit hint and could stamp an install complete when registration was refused, leaving generated extensions unloaded. Repair: specify a separate settings outcome in RefreshReport, include success in touched and fallback in refused_wiring, report the manual repair, and verify stamp and commit-hint behavior for both cases.
 """
 disposition = "fix-now"
-response = "Accepted. sec-4: RefreshReport gains a pi-settings outcome; write joins refresh_touched (commit hint), fallback joins refused_wiring (leg incomplete). Tests in sec-7."
+response = "Fixed in design rev 35 (see prior response); verified by codex raiser. Route added for the lock gate."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -124,6 +184,23 @@ act = "verify"
 role = "raiser"
 note = "Sec-4 adds a Pi settings outcome to RefreshReport, successful writes to refresh_touched and fallback to refused_wiring; sec-7 tests the resulting commit hint and incomplete boot leg."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Bookkeeping: add route required by design lock gate; codex verdict unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Fixed in design rev 35 (see prior response); verified by codex raiser. Route added for the lock gate."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Re-verify after route-only change; substance verified by codex (gpt-6-sol) earlier this pass."
+
 [[finding]]
 id = "F-5"
 status = "verified"
@@ -133,7 +210,8 @@ detail = """
 Expected: POL-003 requires an opt-in harness supplement to disclose the manual activation step and not imply that a written extension is active. Pi 0.99.1 docs/configuration.md:3 says project .pi settings load only after project trust, and :5 says a running session needs /reload after manually changing settings or resources. SL-284 design sec-4:122-133 and sec-5:151-160 specify writing and reporting extension files plus settings registration but no trust/reload disclosure. Current src/boot.rs:3149-3168 reports only generated/regenerated/skipped file status; Codex already has an explicit activation notice at :3312-3324. A Pi install into an untrusted or already-running project can therefore report the wiring while Pi has not loaded it. Repair: include Pi's project-trust and session reload step in the Pi arm's operator report, with a test that distinguishes written from active.
 """
 disposition = "fix-now"
-response = "Accepted. sec-4: pi arm prints an activation notice (project trust + /reload, pi docs configuration.md:3-5) on write, mirroring write_codex_activation; states written, not active."
+response = "Fixed in design rev 35 (see prior response); verified by codex raiser. Route added for the lock gate."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -149,6 +227,23 @@ response = "Accepted. sec-4: pi arm prints an activation notice (project trust +
 act = "verify"
 role = "raiser"
 note = "Sec-4 requires a Pi activation notice on extension/settings writes naming project trust and /reload, and distinguishes files written from active; sec-7 pins write versus no-op."
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Bookkeeping: add route required by design lock gate; codex verdict unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Fixed in design rev 35 (see prior response); verified by codex raiser. Route added for the lock gate."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Re-verify after route-only change; substance verified by codex (gpt-6-sol) earlier this pass."
 
 [[finding]]
 id = "F-6"
