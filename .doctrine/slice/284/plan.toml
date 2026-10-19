@@ -36,7 +36,7 @@ exit_criteria = [
   { id = "EX-1", text = "[harness.codex], [harness.pi], [harness.universal] carry `skills = \".agents/skills\"`; `skills_via` gone from HarnessSection and its both-routes validation." },
   { id = "EX-2", text = "Every item in design sec-3's deletion table is removed from src/; run_forward_steps ends at Leg::Convergence." },
   { id = "EX-3", text = "resolve_install_harnesses is fallible: an unregistered --agent errors before any write, naming the registered harnesses and suggesting `universal`; parse_harness_answer applies the same rule." },
-  { id = "EX-4", text = "Install-side suites from design sec-3's table rewritten (e2e_install_flow, e2e_install_executor, e2e_claude_install); every other suite green unchanged." },
+  { id = "EX-4", text = "Install-side suites from design sec-3's table rewritten (e2e_install_flow, e2e_install_executor, e2e_claude_install), plus e2e_install_ownership's pi_without_npx_* tests (they assert no .agents/skills in the block — removed behaviour, same rule); in-module tests of deleted items deleted, and desired_set_selects_nothing_for_codex_or_unregistered inverted; every other suite green unchanged." },
   { id = "EX-5", text = "`doctrine check gate` green; clippy zero warnings." },
 ]
 verification = [

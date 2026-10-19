@@ -45,6 +45,9 @@ All serial: 01/02 share `src/install.rs`, 03/04 share `src/boot.rs`.
 - Design sec-3's test-table line numbers have drifted; locate the tests by
   their assertions (npx disclosure, `agents universal (delegate)`, offer text,
   codex writing pi files).
+- Design sec-3's table omits `tests/e2e_install_ownership.rs`'s
+  `pi_without_npx_*` tests, which assert removed behaviour; the table's own
+  rule covers them (PHASE-01 EX-4).
 - `write_codex_activation` is at `src/boot.rs:3099` (design cites `:3312`).
 - VT keywords name tests this plan introduces; an executor that picks a better
   name updates the keyword in `plan.toml` in the same commit.
