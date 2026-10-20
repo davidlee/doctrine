@@ -30,3 +30,18 @@ Guard both reads (`lib.optionals isLinux`, or `or` fallbacks to the unjailed
 packages from `inputs.agents.packages.${system}`, if it publishes darwin), and
 check with the eval above. ISS-345 is the related gap: the darwin guard can't
 run in the jail, which is how this went unnoticed.
+
+## Resolution
+
+Fixed in `195e869c0`. Cause as inferred, plus a second blocker: `iproute2` has
+no darwin build.
+
+- `jailLib` now evaluates on every system. The agents flake's
+  `mkJailedAgents {}` exposes `agentsByName`/`unjailed` (claude, codex, pi) on
+  darwin, though not under `packages`; only the jail builders are Linux-only,
+  and they were already behind `isLinux`.
+- The conformance-suite deps split out as `conformancePkgs`, Linux-only.
+
+Evidence: darwin devshell drv evaluated from x86_64-linux; the Linux devshell
+drv stayed byte-identical to the prior HEAD; v0.46.8 built on darwin in GitHub
+Actions (user report).

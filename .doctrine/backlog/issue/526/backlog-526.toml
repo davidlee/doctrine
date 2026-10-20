@@ -5,10 +5,10 @@ id = 526
 slug = "the-darwin-devshell-does-not-evaluate-jaillibagentsbyname-read-unguarded"
 title = "The darwin devshell does not evaluate: jailLib.agentsByName read unguarded"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-10-19"
-updated = "2026-10-19"
+updated = "2026-10-20"
 tags = ["area:build", "cross-platform"]
 
 # outbound-only. Cross-kind structural edges (e.g. references with a role
