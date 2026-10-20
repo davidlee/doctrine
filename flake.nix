@@ -69,16 +69,14 @@
           then inputs.agents.lib.${system}.mkJailedAgents {}
           else {};
 
-        # pi-dev = jailLib.agentsByName.pi;
-        claude = jailLib.agentsByName.claude;
-        codex = jailLib.agentsByName.codex;
-
         # The tool set minus the jailed agents: what a doctrine working
         # environment needs, independent of how it is confined. Exported as
         # `packages.dev-tools` for consumers that jail differently — the
         # microvm capsule runs the agent inside a VM, where a bwrap wrapper
         # binding *host* paths is meaningless.
-        devToolPkgs = with pkgs; [
+        devToolPkgs = commonToolPkgs ++ conformancePkgs;
+
+        commonToolPkgs = with pkgs; [
           jujutsu
           jjui
           just
@@ -106,23 +104,32 @@
 
           shellcheck
           procps # pgrep
-          # Conformance-suite payload dependencies, declared rather than
-          # inherited: an absent binary makes a row's escape silently fail to
-          # launch, and the arm then reads as a hold. That is `EVD-013`'s
-          # false-negative-through-absent-binary, and row 7 was sitting in it.
+        ];
+
+        # Conformance-suite payload dependencies, declared rather than
+        # inherited: an absent binary makes a row's escape silently fail to
+        # launch, and the arm then reads as a hold. That is `EVD-013`'s
+        # false-negative-through-absent-binary, and row 7 was sitting in it.
+        # Linux only, like the live-bwrap rows they serve (iproute2 has no
+        # darwin build; ISS-526).
+        conformancePkgs = lib.optionals isLinux (with pkgs; [
           util-linux # setsid — row 7's session escape
           socat # row 5 — present transitively before this, undeclared
           tinyproxy
           iproute2
-        ];
+        ]);
 
         projectPkgs =
           devToolPkgs
-          ++ [
-            (jailLib.unjailed.codex or codex)
-            claude
-            # pi-dev
-          ];
+          # Linux only: jailLib is {} off Linux, and the agents flake publishes
+          # no claude/codex for darwin (ISS-526).
+          ++ lib.optionals isLinux (
+            with jailLib.agentsByName; [
+              (jailLib.unjailed.codex or codex)
+              claude
+              # pi
+            ]
+          );
 
         # No provider key enters these jails: mkJail defaults to the LLM
         # gateway (`gatewayClient "pi"`), and the jail gets only the gateway
