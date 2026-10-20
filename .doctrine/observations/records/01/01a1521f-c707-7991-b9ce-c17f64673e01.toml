@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1521f-c707-7991-b9ce-c17f64673e01"
+recorded_at = "2026-10-19T03:06:16.711744602Z"
+kind = "friction"
+summary = "[backlog] boot.md 'Invoking doctrine' path /run/doctrine-bin/doctrine missing outside jail"
+detail = "Unjailed session: boot snapshot names /run/doctrine-bin/doctrine (absent); doctrine MCP failed ENOENT on unset DOCTRINE_BIN. Fell back to ~/.local/share/doctrine/bin/doctrine after a wasted probe."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

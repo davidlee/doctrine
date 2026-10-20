@@ -78,4 +78,4 @@ file-size-cap-mib = 512
 execution-kill-grace-seconds = 5
 
 [install]
-installed-version = "0.46.6"
+installed-version = "0.46.8"
