@@ -1835,21 +1835,35 @@ fn install_refresh(
                 spike_warning,
             })
         }
-        Harness::Pi => Ok(RefreshReport {
-            hooks: Vec::new(),
-            claude_scope: None,
-            baseref: BaseRefWrite {
-                outcome: BaseRefOutcome::NotApplicable,
-                stranded: None,
-            },
-            mcp: McpOutcome::NotApplicable,
-            append_system: AppendSystemOutcome::NotApplicable,
-            extension: install_pi_extension(root, exec, dry_run)?,
-            mcp_extension: install_mcp_extension(root, exec, dry_run)?,
-            surface_extension: install_surface_extension(root, exec, dry_run)?,
-            pi_settings: install_pi_settings(root, dry_run)?,
-            spike_warning: false,
-        }),
+        Harness::Pi => {
+            // The settings leg runs LAST, so its failure leaves the three
+            // extensions on disk. A bare `?` here would discard them and report
+            // only "refresh failed" — name what landed instead (RV-424 F-2,
+            // STD-003).
+            let extension = install_pi_extension(root, exec, dry_run)?;
+            let mcp_extension = install_mcp_extension(root, exec, dry_run)?;
+            let surface_extension = install_surface_extension(root, exec, dry_run)?;
+            let pi_settings = install_pi_settings(root, dry_run).with_context(|| {
+                format!(
+                    "pi settings registration failed; the extensions in {PI_EXT_DIR_REL} were written but are unregistered ({extension:?}, {mcp_extension:?}, {surface_extension:?})"
+                )
+            })?;
+            Ok(RefreshReport {
+                hooks: Vec::new(),
+                claude_scope: None,
+                baseref: BaseRefWrite {
+                    outcome: BaseRefOutcome::NotApplicable,
+                    stranded: None,
+                },
+                mcp: McpOutcome::NotApplicable,
+                append_system: AppendSystemOutcome::NotApplicable,
+                extension,
+                mcp_extension,
+                surface_extension,
+                pi_settings,
+                spike_warning: false,
+            })
+        }
         Harness::Claude => {
             // SL-250 PHASE-04: the arm merges the WHOLE registry — five entries
             // across three events (SL-254 PHASE-04 retired the four confinement
@@ -3259,12 +3273,26 @@ fn write_pi_activation(
     if settings_written {
         files.push(PI_SETTINGS_REL.to_string());
     }
-    writeln!(
-        stdout,
-        "  {tag}pi: {verb} {}. Pi loads project settings after project trust; a running session needs /reload after trust to load these changes.",
-        files.join(", ")
-    )?;
+    // `/reload` loads what the settings file registers. Without the write there
+    // is nothing to load, so the tail must name the missing step rather than
+    // promise the files will take effect (RV-424 F-5, POL-003).
+    let tail = if settings_written {
+        "Pi loads project settings after project trust; a running session needs /reload after trust to load these changes."
+    } else {
+        "Pi loads project settings after project trust; these files stay unloaded until the registration line above is added, then a running session needs /reload after trust."
+    };
+    writeln!(stdout, "  {tag}pi: {verb} {}. {tail}", files.join(", "))?;
     Ok(())
+}
+
+/// The line printed when `PI_SETTINGS_REL` cannot be updated automatically.
+/// It names the requirement, not a mechanical edit: the file may be
+/// unparseable or carry a non-array `extensions`, so "add this line to the
+/// array" is advice the operator cannot follow (RV-424 F-5).
+fn pi_settings_fallback_line() -> String {
+    format!(
+        "  pi: left {PI_SETTINGS_REL} untouched (unreadable or malformed); it must list \"{PI_EXT_SETTINGS_ENTRY}\" under its extensions array"
+    )
 }
 
 /// The reporting rider for one generated pi extension: a line for
@@ -3617,10 +3645,7 @@ pub(crate) fn apply_wire(
                         if dry_run { "would write" } else { "wrote" }
                     )?,
                     PiSettingsOutcome::ManualFallback => {
-                        writeln!(
-                            stdout,
-                            "  pi: left {PI_SETTINGS_REL} untouched (unreadable or malformed); add this line to its extensions array: \"{PI_EXT_SETTINGS_ENTRY}\""
-                        )?;
+                        writeln!(stdout, "{}", pi_settings_fallback_line())?;
                     }
                     PiSettingsOutcome::NoOp | PiSettingsOutcome::NotApplicable => {}
                 }
@@ -8295,6 +8320,57 @@ weight = 0
         let mut output = Vec::new();
         write_pi_activation(&mut output, "", false, &[], false).unwrap();
         assert!(output.is_empty());
+    }
+
+    /// RV-424 F-5: with the registration unwritten, `/reload` cannot load the
+    /// extensions — the notice must say what is still missing instead of
+    /// promising the write will take effect.
+    #[test]
+    fn pi_activation_notice_without_registration_does_not_promise_reload() {
+        let mut output = Vec::new();
+        write_pi_activation(&mut output, "", false, &["index.ts"], false).unwrap();
+        let notice = String::from_utf8(output).unwrap();
+        assert!(notice.contains(PI_EXT_DIR_REL), "{notice}");
+        assert!(notice.contains("trust"), "{notice}");
+        assert!(
+            !notice.contains("to load these changes"),
+            "an unregistered extension is not loaded by reload: {notice}"
+        );
+    }
+
+    /// RV-424 F-5: the fallback names the requirement, never a mechanical edit
+    /// the operator cannot perform (a non-array `extensions` has no array).
+    #[test]
+    fn pi_settings_fallback_line_names_the_requirement() {
+        let line = pi_settings_fallback_line();
+        assert!(line.contains(PI_SETTINGS_REL), "{line}");
+        assert!(line.contains(PI_EXT_SETTINGS_ENTRY), "{line}");
+        assert!(!line.contains("add this line"), "{line}");
+    }
+
+    /// RV-424 F-2: the settings leg runs last, so a failure there leaves three
+    /// extensions on disk. The error must say so (STD-003).
+    #[test]
+    fn settings_write_failure_names_the_landed_extensions() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // A dangling `.pi` symlink: the settings read is NotFound (so the
+        // planner proceeds), and creating the parent dir fails. Permissions
+        // cannot be used — tests may run as root — but a dangling link fails
+        // for everyone.
+        std::os::unix::fs::symlink("missing", root.join(".pi")).unwrap();
+
+        let err = match install_refresh(&Harness::Pi, root, Path::new(FAKE_EXEC), false) {
+            Err(e) => e,
+            Ok(_) => panic!("the settings write cannot succeed under a dangling .pi"),
+        };
+        let msg = format!("{err:#}");
+        assert!(msg.contains(PI_EXT_DIR_REL), "names what landed: {msg}");
+        assert!(msg.contains("unregistered"), "{msg}");
+        assert!(
+            root.join(PI_EXT_DIR_REL).join("index.ts").exists(),
+            "precondition: the extensions did land"
+        );
     }
 
     // =======================================================================

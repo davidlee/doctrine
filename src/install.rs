@@ -758,7 +758,8 @@ const OFFER_AGENT_DEFS: &str = "agent defs";
 const OFFER_WORKFLOWS: &str = "workflows";
 
 /// What confirming `agent` installs: its skills route, then the def sets its
-/// registry entry links.
+/// registry entry links. An entry with no link route installs nothing — say
+/// so, rather than a dangling " for <agent>" (RV-424 F-12).
 fn install_offer(agent: &str, registry: &Registry) -> String {
     let h = registry.get(agent);
     let parts: Vec<&str> = [
@@ -770,6 +771,9 @@ fn install_offer(agent: &str, registry: &Registry) -> String {
     .into_iter()
     .flatten()
     .collect();
+    if parts.is_empty() {
+        return format!("nothing (no link routes for {agent})");
+    }
     format!("{} for {agent}", parts.join(" + "))
 }
 
@@ -924,8 +928,8 @@ fn print_ownership_plan(
     )
 }
 
-/// Run the forward steps: memory sync → boot wire → skills per agent. The
-/// install's one prompt already covered them all. Partial failure is non-fatal — errors are printed, the next step proceeds, and each leg's
+/// Run the forward steps: memory sync → boot wire → legacy starters →
+/// convergence. The install's one prompt already covered them all. Partial failure is non-fatal — errors are printed, the next step proceeds, and each leg's
 /// outcome is returned (SL-282: a caught failure must block the stamps).
 fn run_forward_steps(
     plan: &InstallPlan,
@@ -6721,7 +6725,7 @@ mod tests {
     }
 
     // SL-282 PHASE-03: the AGENTS.md rule is `boot::resolve_harnesses`' own,
-    // so install's skills legs and boot wiring see one set.
+    // so install's convergence and boot wiring see one set.
 
     #[test]
     fn resolve_install_harnesses_adds_codex_for_a_lone_agents_md() {
@@ -7689,6 +7693,15 @@ mod tests {
         ] {
             assert_eq!(install_offer(agent, &reg), offer);
         }
+        // A registry entry with no link route must not render as a dangling
+        // " for <agent>" (RV-424 F-12).
+        let empty = parse_manifest("[harness.hollow]\ndetect = \".hollow\"\n")
+            .unwrap()
+            .harness;
+        assert_eq!(
+            install_offer("hollow", &empty),
+            "nothing (no link routes for hollow)"
+        );
         assert_eq!(
             canon_convergence(Scope::Global),
             "converge framework canon (reporting orphans)"
