@@ -1,0 +1,924 @@
+id    = 424
+slug  = "audit-of-sl-284"
+title = "audit of SL-284"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Conformance audit of SL-284 against design.md sec-2..sec-7, plan.toml
+PHASE-01..05 EX/VT, and slice-284.md's scope, over the range
+9b368b541^..38d1f4f9a (implementation 9b368b541..2841ac1d3).
+
+Evidence: `doctrine check gate` green at the range tip and again after the
+audit's fixes; `doctrine slice verify-vt 284` all rows PASS; conformance algebra
+(10 conformant / 12 undeclared / 1 undelivered) dispositioned cell by cell; the
+full diff read, including the two surfaces the per-phase reviews could not see
+(inter-phase seams, docs outside every phase's edited region); two independent
+read-only reviews of disjoint halves of the diff (install/skills and pi boot),
+their findings adjudicated rather than adopted; REV-074 read against design
+sec-6 row for row, with both required spec searches re-run.
+
+12 findings, all terminal: 4 fix-now (3b7090881), 3 design-wrong routed to the
+reconciliation brief, 3 follow-up (8557a881f: IMP-520, IMP-521, ISS-527), 2
+tolerated with stated rationale. No blocker. VH-1/VH-2 remain close-time.
+"""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-284"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Governance truth: DEC-377 still asserts the npx delegation and pi→codex boot routing this slice deleted"
+detail = """
+Expected: an accepted decision that describes installation matches the landed
+behaviour, or is marked superseded.
+
+Observed: DEC-377 ("Global installs report orphans; unregistered harnesses keep
+npx skills", accepted 2026-10-16) states:
+
+  - "Unregistered harness names keep their npx skills route. `--agent <name>`
+    with no `[harness.<name>]` table ... its skills are still delegated to
+    `npx skills add --agent <name>`";
+  - "the boot adapter: claude → claude, pi → codex, codex → codex,
+    universal → none".
+
+Both are falsified by the landed slice: `resolve_install_harnesses` refuses an
+unregistered name before any write (src/install.rs:672), the delegation is gone,
+and `[harness.pi] boot = "pi"` (install/manifest.toml).
+
+DEC-388 (remove the npx delegation) and DEC-389 (pi's own adapter) are later,
+narrower accepted decisions, so time-precedence resolves them in the slice's
+favour — but neither records a `supersede` edge: `doctrine inspect DEC-388` shows
+only `shapes: SL-284`, and DEC-377's inbound set is `concerned by: ISS-520`. And
+design sec-6's REV clause table covers SPEC-009/010/011 only, so no revision row
+touches DEC-377 either.
+
+Why it matters: a future agent reading DEC-377 alone (tier-2 authority) is
+instructed to reimplement the mechanism this slice deleted. Two binding sources
+that contradict each other is drift: surface it instead of silently choosing one.
+"""
+disposition = "design-wrong"
+response = """
+The observation is confirmed and the design is the defect surface: design sec-6
+scoped REV-074 to SPEC-009/010/011 and never considered DEC-377, which the slice
+falsifies on two of its three paragraphs.
+
+Remediation (reconciliation brief, governance surface):
+- design.md sec-6 gains a DEC-377 row in the clause table.
+- REV-074 gains `[[change]] target = "DEC-377" action = "modify"` plus a
+  replacement statement that keeps the still-true first paragraph (global
+  installs converge without pruning — untouched by this slice) and rewrites the
+  second (unregistered names are refused, not delegated) and the third's
+  `pi → codex` routing (pi has its own adapter).
+- After apply, `doctrine inspect DEC-377` should show the revision inbound; no
+  full `supersede` edge is correct, because DEC-377's global-no-prune clause
+  still stands.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+The observation is confirmed and the design is the defect surface: design sec-6
+scoped REV-074 to SPEC-009/010/011 and never considered DEC-377, which the slice
+falsifies on two of its three paragraphs.
+
+Remediation (reconciliation brief, governance surface):
+- design.md sec-6 gains a DEC-377 row in the clause table.
+- REV-074 gains `[[change]] target = "DEC-377" action = "modify"` plus a
+  replacement statement that keeps the still-true first paragraph (global
+  installs converge without pruning — untouched by this slice) and rewrites the
+  second (unregistered names are refused, not delegated) and the third's
+  `pi → codex` routing (pi has its own adapter).
+- After apply, `doctrine inspect DEC-377` should show the revision inbound; no
+  full `supersede` edge is correct, because DEC-377's global-no-prune clause
+  still stands.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. The remedy targets the actual defect — a governance clause table that
+never looked at the decision the slice falsifies — and correctly refuses a blanket
+`supersede`, since DEC-377's global-no-prune clause survives untouched.
+"""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Reporting: a pi settings-write failure drops the three extension outcomes already written"
+detail = """
+Expected: when part of a harness arm has landed, the failure discloses what landed
+(STD-003 — no silent skip).
+
+Observed (pre-fix): `install_refresh`'s Pi arm (src/boot.rs:1839-1855) built one
+`RefreshReport` literal whose fields each used `?`, with
+`pi_settings: install_pi_settings(...)?` last. `install_pi_settings` can return
+`Err` from `fs::create_dir_all` or `fsutil::write_atomic`, so an I/O failure there
+propagated out of `install_refresh` and destroyed the three already-computed
+extension outcomes. `apply_wire` then recorded `result: Err(..)` and printed only
+"refresh failed" — three files on disk under `.doctrine/state/pi/extensions`,
+unregistered, and absent from the commit hint.
+
+The settings leg necessarily runs last (the registration names the directory the
+extensions live in), so the failure mode is structural, not incidental.
+
+Fixed in 3b7090881; see this finding's disposition.
+"""
+disposition = "fix-now"
+response = """
+Confirmed and fixed in 3b7090881.
+
+The Pi arm now binds the three extension outcomes to locals and attaches context
+to the settings write:
+
+  let pi_settings = install_pi_settings(root, dry_run).with_context(|| {
+      format!("pi settings registration failed; the extensions in {PI_EXT_DIR_REL}
+               were written but are unregistered ({extension:?}, {mcp_extension:?},
+               {surface_extension:?})")
+  })?;
+
+so the propagated error names the directory and each extension outcome instead of
+discarding them. Pinned by `settings_write_failure_names_the_landed_extensions`,
+which induces the failure with a dangling `.pi` symlink (permissions cannot be
+used — tests may run as root) and asserts both the disclosure and that
+`index.ts` really did land.
+
+`doctrine check gate` green after the change.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Confirmed and fixed in 3b7090881.
+
+The Pi arm now binds the three extension outcomes to locals and attaches context
+to the settings write:
+
+  let pi_settings = install_pi_settings(root, dry_run).with_context(|| {
+      format!("pi settings registration failed; the extensions in {PI_EXT_DIR_REL}
+               were written but are unregistered ({extension:?}, {mcp_extension:?},
+               {surface_extension:?})")
+  })?;
+
+so the propagated error names the directory and each extension outcome instead of
+discarding them. Pinned by `settings_write_failure_names_the_landed_extensions`,
+which induces the failure with a dangling `.pi` symlink (permissions cannot be
+used — tests may run as root) and asserts both the disclosure and that
+`index.ts` really did land.
+
+`doctrine check gate` green after the change.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. Verified against 3b7090881: the new test fails without the context
+attachment (it asserts the message names PI_EXT_DIR_REL and "unregistered") and
+passes with it; gate green.
+"""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Scope: write_atomic gained mode preservation — a global behaviour change to a leaf primitive the design never declares"
+detail = """
+Expected: shared machinery changed by a slice appears in the design's code-impact
+section and the scope's affected surface, because every caller inherits it.
+
+Observed: src/fsutil.rs adds `preserve_mode` inside `write_atomic`, so every
+atomic write in the binary now preserves an existing target's mode. Design sec-7's
+selector list does not name src/fsutil.rs, slice-284.md § Affected surface does not
+list it, and no design section records the change. `git diff 9b368b541..2841ac1d3`
+shows +39 lines there.
+
+The change is well-motivated — PHASE-04's review found that rewriting a private
+0600 `.pi/settings.json` republished it at the umask default, and `write_atomic` is
+the right home for the fix — and it is test-covered
+(`write_atomic_preserves_an_existing_files_mode`) with the gate green. The defect
+is that canon is silent about a primitive-wide behaviour change.
+
+Why it matters: the next reader of `write_atomic` has no design record explaining
+why a rewrite now preserves modes, and the slice's conformance algebra reports it
+as undeclared (see the conformance finding).
+"""
+disposition = "design-wrong"
+response = """
+Confirmed. The design is what is wrong: it records no change to a leaf primitive
+that every atomic write in the binary inherits, and the scope doc's affected
+surface omits it too.
+
+Remediation (reconciliation brief, per-slice direct edit): design sec-5 records
+that the pi settings write required hardening the shared writer — `write_atomic`
+now preserves an existing target's mode, because a rewrite of a private 0600
+settings file would otherwise republish it at the umask default. Cite PHASE-04's
+review finding as the origin. The residual hardening gaps are deliberately NOT
+folded in here; they are IMP-520.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Confirmed. The design is what is wrong: it records no change to a leaf primitive
+that every atomic write in the binary inherits, and the scope doc's affected
+surface omits it too.
+
+Remediation (reconciliation brief, per-slice direct edit): design sec-5 records
+that the pi settings write required hardening the shared writer — `write_atomic`
+now preserves an existing target's mode, because a rewrite of a private 0600
+settings file would otherwise republish it at the umask default. Cite PHASE-04's
+review finding as the origin. The residual hardening gaps are deliberately NOT
+folded in here; they are IMP-520.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. The design omission is the defect, and recording it in sec-5 keeps the
+shared-primitive behaviour change discoverable without pretending the residual
+gaps belong to this slice.
+"""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Hardening: write_atomic writes the temp before applying the preserved mode, and copies setuid/setgid/sticky bits"
+detail = """
+Expected: a mode-preservation fix closes the disclosure window it was written for,
+and preserves permission bits rather than special bits.
+
+Observed (src/fsutil.rs:74-98), in this order:
+
+  1. `fs::write(&tmp, bytes)` — the temp is created at the umask default
+     (typically 0644) holding the full settings content;
+  2. `preserve_mode(path, &tmp)` — `fs::metadata(existing).mode() & 0o7777`
+     applied via `set_permissions`;
+  3. `fs::rename(&tmp, path)`.
+
+So the steady state is fixed but the content is briefly world-readable in the
+target's directory, and if `set_permissions` fails the function returns `Err`
+leaving that temp on disk. The inverse order fixes it: derive the mode from the
+target, create the temp with it, then write. Separately, `& 0o7777` replicates
+setuid/setgid/sticky across a content rewrite, which is not what the disclosure
+argument needs (0o777 is the permission set that matters for a file).
+
+Only the 0600 case is tested.
+
+Captured as IMP-520.
+"""
+disposition = "follow-up"
+response = """
+Confirmed by inspection of src/fsutil.rs:74-98: `fs::write` precedes
+`preserve_mode`, and `mode & 0o7777` carries setuid/setgid/sticky.
+
+Routing: IMP-520, captured at 8557a881f. It is genuinely separate work — the fix
+belongs in a leaf-module change with the behaviour-preservation gate on every
+`write_atomic` caller, not in an audit-side patch to a shared primitive. The
+finding is real and stays on the record; the remediation is owned by IMP-520.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "follow-up"
+response = """
+Confirmed by inspection of src/fsutil.rs:74-98: `fs::write` precedes
+`preserve_mode`, and `mode & 0o7777` carries setuid/setgid/sticky.
+
+Routing: IMP-520, captured at 8557a881f. It is genuinely separate work — the fix
+belongs in a leaf-module change with the behaviour-preservation gate on every
+`write_atomic` caller, not in an audit-side patch to a shared primitive. The
+finding is real and stays on the record; the remediation is owned by IMP-520.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. IMP-520 exists, states both gaps precisely, and names the ordering fix
+and the 0o777 narrowing — the follow-up is actionable without this ledger.
+"""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Operator guidance: the pi settings fallback is unactionable for a non-array extensions, and the notice then promises a /reload that cannot load"
+detail = """
+Expected: an error fallback names what the operator must achieve; an activation
+notice claims no more than the state supports (POL-003).
+
+Observed (pre-fix), two coupled defects on one path:
+
+  1. `plan_pi_settings` returns `ManualFallback` for BOTH an unparseable file AND
+     `{"extensions":"other"}` (a string, not an array). `apply_wire` printed one
+     line for both: "add this line to its extensions array" — impossible advice
+     when `extensions` is not an array.
+  2. The three extensions were still `Generated`, so `write_pi_activation` fired
+     with `settings_written = false` and said "a running session needs /reload
+     after trust to load these changes". Nothing was registered: reload cannot
+     load them. The notice did not claim activation, but it did promise the files
+     would take effect.
+
+Fixed in 3b7090881: the fallback now names the requirement ("it must list
+"../.doctrine/state/pi/extensions" under its extensions array") instead of
+prescribing a mechanical edit, and the notice's tail is conditional on the
+registration having been written.
+"""
+disposition = "fix-now"
+response = """
+Confirmed and fixed in 3b7090881, on both halves.
+
+- The fallback line is now `pi_settings_fallback_line()`, which names the
+  requirement ("it must list "../.doctrine/state/pi/extensions" under its
+  extensions array") instead of prescribing an edit that a non-array
+  `extensions` makes impossible. Pinned by
+  `pi_settings_fallback_line_names_the_requirement`, which also asserts the old
+  "add this line" phrasing is gone.
+- `write_pi_activation`'s tail is conditional on `settings_written`: only a
+  written registration promises that `/reload` will load the changes; otherwise
+  the notice says the files stay unloaded until the registration line is added.
+  Pinned by `pi_activation_notice_without_registration_does_not_promise_reload`
+  (and the write case still asserts the original promise).
+
+`doctrine check gate` green after the change.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Confirmed and fixed in 3b7090881, on both halves.
+
+- The fallback line is now `pi_settings_fallback_line()`, which names the
+  requirement ("it must list "../.doctrine/state/pi/extensions" under its
+  extensions array") instead of prescribing an edit that a non-array
+  `extensions` makes impossible. Pinned by
+  `pi_settings_fallback_line_names_the_requirement`, which also asserts the old
+  "add this line" phrasing is gone.
+- `write_pi_activation`'s tail is conditional on `settings_written`: only a
+  written registration promises that `/reload` will load the changes; otherwise
+  the notice says the files stay unloaded until the registration line is added.
+  Pinned by `pi_activation_notice_without_registration_does_not_promise_reload`
+  (and the write case still asserts the original promise).
+
+`doctrine check gate` green after the change.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. Verified against 3b7090881: both new tests fail before the change (the
+fallback test on "add this line", the notice test on "to load these changes") and
+pass after.
+"""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Fidelity: the pi settings round-trip silently changes foreign numbers beyond u64/f64 exactness"
+detail = """
+Expected: design sec-5's "Other entries are preserved in order" holds for the
+values, not just the keys.
+
+Observed: `plan_pi_settings` parses the whole document into `serde_json::Value`
+and re-serialises it. `serde_json` is declared with no features (Cargo.toml:168,
+`serde_json = "1"`), so `arbitrary_precision` is off and `Number` is
+PosInt(u64) / NegInt(i64) / Float(f64). A foreign integer that fits neither
+integer arm — e.g. 18446744073709551617 (u64::MAX + 2) — is parsed as f64 and
+re-emitted as 1.8446744073709552e19, a different value, on any write that adds the
+extension entry.
+
+PHASE-04's phase sheet accepted "JSON serialization may reformat other keys" —
+reformatting is not value change, so this is outside that accepted risk.
+
+Scope of exposure: a pi settings file carrying an integer above 2^64. The
+alternative mechanism (a textual splice of the `extensions` array) is materially
+more complex and brittle than the accepted whole-document round-trip.
+
+Dispositioned `tolerated`; design sec-5 should record the caveat.
+"""
+disposition = "tolerated"
+response = """
+Confirmed as a real mechanism property: `serde_json::Value` without
+`arbitrary_precision` cannot round-trip an integer outside i64/u64, and the
+planner re-serialises the whole document.
+
+Tolerated, with the rationale stated: the exposure needs a foreign integer above
+2^64 in a pi settings file, and the alternative — a textual splice of the
+`extensions` array — is materially more complex and brittle than the accepted
+whole-document round-trip. This is a conscious acceptance, not an unnoticed one.
+
+The caveat is carried to the reconciliation brief so design sec-5's "Other
+entries are preserved in order" is read as ordering-and-structure, not
+bit-exact value fidelity.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "tolerated"
+response = """
+Confirmed as a real mechanism property: `serde_json::Value` without
+`arbitrary_precision` cannot round-trip an integer outside i64/u64, and the
+planner re-serialises the whole document.
+
+Tolerated, with the rationale stated: the exposure needs a foreign integer above
+2^64 in a pi settings file, and the alternative — a textual splice of the
+`extensions` array — is materially more complex and brittle than the accepted
+whole-document round-trip. This is a conscious acceptance, not an unnoticed one.
+
+The caveat is carried to the reconciliation brief so design sec-5's "Other
+entries are preserved in order" is read as ordering-and-structure, not
+bit-exact value fidelity.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted as tolerated. The rationale is a real tradeoff, not a shrug: the
+exposure is narrow, the alternative mechanism is worse, and the caveat is carried
+to the brief so the design's "preserved in order" is not read as bit-exactness.
+"""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Conformance: design sec-7's selector list disagrees with the recorded registry — five touched paths undeclared, one untouched path declared"
+detail = """
+Expected: the design's declared code impact and `slice-284.toml`'s `design-target`
+selectors are the same set, so `doctrine slice conformance` measures what the
+design promised.
+
+Observed — `doctrine slice conformance 284` reports 10 conformant, 12 undeclared,
+1 undelivered. Dispositioning each cell:
+
+UNDECLARED, no design record (scope creep or unstated consequences):
+  - install/doctrine.toml, install/doctrine.toml.example — removing the
+    `[install] repo` key necessarily removes its documentation; design sec-3
+    names the key, not these files.
+  - src/dtoml.rs — deletes `install_table_roundtrip`, the test of the removed key.
+  - src/fsutil.rs — see the write_atomic scope finding.
+  - .gitignore — the re-spliced managed block (PHASE-02's own consequence).
+
+UNDECLARED because the registry disagrees with the design:
+  - README.md — design sec-7 lists it as a design-target selector; the registry
+    records it `scope-relevant`, so conformance cannot match it.
+  - tests/e2e_install_ownership.rs — touched, named by plan PHASE-01 EX-4, but
+    absent from the selector registry AND from design sec-3's test table.
+
+UNDELIVERED:
+  - src/commands/cli.rs — declared unconditionally in the registry, though design
+    sec-7 hedges "(only if `--only-memory` plumbing needs it)". It did not:
+    PHASE-02 fixed both call sites inside install.rs, and cli.rs already refused
+    `--only-memory` with `--skill`/`--domain` (line 105-109). Legitimately
+    untouched, but the selector makes conformance report a false "declared but
+    not delivered".
+
+Transients, not findings: .doctrine/revision/074/** (the REV is an authored
+entity, not a code path) and .doctrine/slice/284/slice-284.toml (the uncommitted
+lifecycle flip).
+
+Why it matters: conformance is the mechanical drift signal for every later slice;
+a registry that misdescribes the design is worse than no registry.
+"""
+disposition = "design-wrong"
+response = """
+Confirmed: the registry and design sec-7 disagree, and the drift has three
+distinct causes, so it needs three distinct edits rather than one.
+
+Remediation (reconciliation brief — the load-bearing change is the SELECTOR
+REGISTRY, which is what `slice conformance` reads; design sec-7 is its human
+mirror):
+- `doctrine slice selector rm 284 src/commands/cli.rs` — it was conditional and
+  the condition resolved false; leaving it makes conformance report a false
+  "declared but not delivered".
+- `doctrine slice selector add 284 README.md --intent design-target` (replacing
+  the `scope-relevant` row) — design sec-7 names it a design-target.
+- `doctrine slice selector add 284 tests/e2e_install_ownership.rs --intent
+  design-target` — plan PHASE-01 EX-4 explicitly rewrites its pi_without_npx_*
+  tests.
+- `doctrine slice selector add` for install/doctrine.toml,
+  install/doctrine.toml.example, src/dtoml.rs, src/fsutil.rs (or record them as
+  accepted consequences in design sec-3/sec-5 — but pick one; do not leave the
+  algebra red without a disposition).
+- design.md sec-3's rewritten-test table gains e2e_install_ownership.rs so the
+  prose mirror matches.
+
+`.gitignore` and `.doctrine/revision/074/**` need no selector: the first is
+install's own output, the second is authored governance, not a code path.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Confirmed: the registry and design sec-7 disagree, and the drift has three
+distinct causes, so it needs three distinct edits rather than one.
+
+Remediation (reconciliation brief — the load-bearing change is the SELECTOR
+REGISTRY, which is what `slice conformance` reads; design sec-7 is its human
+mirror):
+- `doctrine slice selector rm 284 src/commands/cli.rs` — it was conditional and
+  the condition resolved false; leaving it makes conformance report a false
+  "declared but not delivered".
+- `doctrine slice selector add 284 README.md --intent design-target` (replacing
+  the `scope-relevant` row) — design sec-7 names it a design-target.
+- `doctrine slice selector add 284 tests/e2e_install_ownership.rs --intent
+  design-target` — plan PHASE-01 EX-4 explicitly rewrites its pi_without_npx_*
+  tests.
+- `doctrine slice selector add` for install/doctrine.toml,
+  install/doctrine.toml.example, src/dtoml.rs, src/fsutil.rs (or record them as
+  accepted consequences in design sec-3/sec-5 — but pick one; do not leave the
+  algebra red without a disposition).
+- design.md sec-3's rewritten-test table gains e2e_install_ownership.rs so the
+  prose mirror matches.
+
+`.gitignore` and `.doctrine/revision/074/**` need no selector: the first is
+install's own output, the second is authored governance, not a code path.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. It names the load-bearing verb (`doctrine slice selector`), not a prose
+edit, which is what keeps conformance meaningful; and it separates the three
+causes instead of collapsing them into "conformance is red".
+"""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "nit"
+title = "Docs: two comments still describe the removed skills leg"
+detail = """
+Expected: after `Leg::Skills` is deleted, nothing claims a separate
+post-convergence skills step.
+
+Observed (pre-fix):
+
+  - src/install.rs:927 — "Run the forward steps: memory sync → boot wire →
+    skills per agent." The actual order is memory sync → boot wire → legacy
+    starters → convergence, and the skills work happens inside convergence.
+  - src/install.rs:6724 — "... so install's skills legs and boot wiring see one
+    set." There is one convergence leg, not several skills legs.
+
+This is the residue named in the handover as "(c) run_forward_steps no longer has
+a Skills leg, so any doc/comment implying a post-convergence skills step is
+stale" — four per-phase reviews and PHASE-05's docs sweep all missed it.
+
+Fixed in 3b7090881.
+"""
+disposition = "fix-now"
+response = """
+Confirmed and fixed in 3b7090881. src/install.rs:927 now reads "memory sync →
+boot wire → legacy starters → convergence" (the real leg order), and the
+resolve-comment now says "install's convergence and boot wiring see one set".
+
+Worth recording why it survived four per-phase reviews: each review was scoped to
+a phase's own diff, and these two comments sit outside every phase's edited
+region — the residue was named in the handover, not found by a review. The audit's
+whole-range diff read is what caught it.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Confirmed and fixed in 3b7090881. src/install.rs:927 now reads "memory sync →
+boot wire → legacy starters → convergence" (the real leg order), and the
+resolve-comment now says "install's convergence and boot wiring see one set".
+
+Worth recording why it survived four per-phase reviews: each review was scoped to
+a phase's own diff, and these two comments sit outside every phase's edited
+region — the residue was named in the handover, not found by a review. The audit's
+whole-range diff read is what caught it.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. Verified in 3b7090881; both comments now match the leg order the code
+actually runs.
+"""
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "nit"
+title = 'Forward summary: an empty-route registry entry renders a dangling " for <agent>"'
+detail = """
+Expected: a summary line states coherently what will be installed.
+
+Observed (pre-fix): `install_offer` (src/install.rs:762) built `parts` from the
+entry's skills/agents/workflows routes and then unconditionally
+`format!("{} for {agent}", parts.join(" + "))`. With no routes, `parts` is empty
+and the result is " for hollow", printed as `install  for hollow` (double space).
+
+Reachability is nil today: the shipped registry gives every entry a skills route,
+and the manifest is an embedded asset a client cannot extend (design sec-2). It is
+still a latent formatting bug for the first registry entry that carries only
+`detect`.
+
+Fixed in 3b7090881 — the empty case now renders
+"nothing (no link routes for <agent>)", pinned by a new case in
+`install_offer_names_what_confirming_mutates`.
+"""
+disposition = "fix-now"
+response = """
+Confirmed and fixed in 3b7090881. `install_offer` now returns
+`"nothing (no link routes for <agent>)"` when no route contributes, and the new
+case in `install_offer_names_what_confirming_mutates` pins it against a
+`[harness.hollow]` registry entry.
+
+Reachability is nil with the shipped registry and an embedded manifest (design
+sec-2), which is why this is a nit rather than a behaviour fix — but the render
+was provably wrong the moment a route-less entry appeared.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Confirmed and fixed in 3b7090881. `install_offer` now returns
+`"nothing (no link routes for <agent>)"` when no route contributes, and the new
+case in `install_offer_names_what_confirming_mutates` pins it against a
+`[harness.hollow]` registry entry.
+
+Reachability is nil with the shipped registry and an embedded manifest (design
+sec-2), which is why this is a nit rather than a behaviour fix — but the render
+was provably wrong the moment a route-less entry appeared.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. Verified in 3b7090881 against a route-less registry entry.
+"""
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "Durability: SL-119's pi APPEND_SYSTEM delivery is unreachable and was recorded only in slice notes"
+detail = """
+Expected: a done slice's claimed behaviour is reachable, or its retirement is
+recorded; a known-unwired feature is captured where it will be acted on.
+
+Observed: `boot::install_append_system` (src/boot.rs:2876) has NO production
+caller — only its definition and three unit tests (a grep for the symbol yields
+lines 2876 and 7803-7839 only). Both `install_refresh` arms set
+`append_system: AppendSystemOutcome::NotApplicable`, so `.pi/APPEND_SYSTEM.md` is
+never created by `boot install` or `doctrine install`, and `AppendSystemOutcome`'s
+three reporting arms plus their two `refresh_touched` entries in `apply_wire` are
+unreachable.
+
+SL-119 is `done` and IMP-116 `closed`. The regression is pre-existing, and design
+sec-4 scopes it out correctly ("has no production caller; it is noted as a
+follow-up, not revived here") — so this is NOT a conformance failure of SL-284. It
+is a durability gap: the only record was a bullet in notes.md's Open list, which
+nothing acts on after the slice closes.
+
+Captured as ISS-527.
+"""
+disposition = "follow-up"
+response = """
+Confirmed by grep: `install_append_system` has a definition and three tests, no
+caller. Both arms carry `AppendSystemOutcome::NotApplicable`.
+
+I do NOT treat this as an SL-284 conformance failure: design sec-4 scopes it out
+in terms, and the regression predates the slice. What this audit owes is
+durability — notes.md's Open list is not a sink anything acts on.
+
+Routing: ISS-527, captured at 8557a881f, which states the decision the follow-up
+must make (revive it on the pi arm, or retire the leg and the enum with a
+decision record) rather than just noting the symptom.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "follow-up"
+response = """
+Confirmed by grep: `install_append_system` has a definition and three tests, no
+caller. Both arms carry `AppendSystemOutcome::NotApplicable`.
+
+I do NOT treat this as an SL-284 conformance failure: design sec-4 scopes it out
+in terms, and the regression predates the slice. What this audit owes is
+durability — notes.md's Open list is not a sink anything acts on.
+
+Routing: ISS-527, captured at 8557a881f, which states the decision the follow-up
+must make (revive it on the pi arm, or retire the leg and the enum with a
+decision record) rather than just noting the symptom.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. ISS-527 records the finding and, importantly, the decision the follow-up
+must make — a done slice's dead delivery path is otherwise indistinguishable from
+a live one.
+"""
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "Consistency: the pi arm guards a symlinked settings file, the Claude and codex arms still do not"
+detail = """
+Expected: one hazard, one handling, across the arms that share the settings-merge
+machinery.
+
+Observed: `install_pi_settings` checks `symlink_metadata` and takes
+`ManualFallback` when `.pi/settings.json` is a symlink, precisely because
+`fsutil::write_atomic` reads through the link and then renames over it — severing
+a dotfiles-managed file while leaving its target stale (pinned by
+`symlinked_pi_settings_falls_back_without_replacing_the_link`).
+
+The same hazard is live on the older arms, which reach `write_atomic` through the
+shared hook/settings merge core: Claude `.claude/settings.json`,
+`.claude/settings.local.json`, `.mcp.json`; codex `.codex/hooks.json`,
+`.codex/config.toml`. Pre-existing, not introduced here — but the slice has now
+made the arms visibly inconsistent, and the asymmetry is exactly what a later
+reader will not notice.
+
+Captured as IMP-521 (hoist the guard into the shared seam rather than triplicate
+it).
+"""
+disposition = "follow-up"
+response = """
+Confirmed. `install_pi_settings` guards the symlink; the Claude and codex arms
+reach `write_atomic` without that guard and would rename over a linked settings
+file.
+
+Pre-existing, so not a conformance failure of this slice — and PHASE-04's review is
+what surfaced the pattern in the first place. Routing: IMP-521, captured at
+8557a881f, which recommends hoisting the guard into the shared settings-merge seam
+so the three arms cannot diverge again, rather than triplicating it.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "follow-up"
+response = """
+Confirmed. `install_pi_settings` guards the symlink; the Claude and codex arms
+reach `write_atomic` without that guard and would rename over a linked settings
+file.
+
+Pre-existing, so not a conformance failure of this slice — and PHASE-04's review is
+what surfaced the pattern in the first place. Routing: IMP-521, captured at
+8557a881f, which recommends hoisting the guard into the shared settings-merge seam
+so the three arms cannot diverge again, rather than triplicating it.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. IMP-521 exists with the shared-seam recommendation, so the asymmetry is
+owned rather than merely observed.
+"""
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "nit"
+title = "Test quality: splice_of_hinted_block_is_byte_stable cannot detect the hint's removal"
+detail = """
+Expected: a test named for the hinted block pins the hint.
+
+Observed: `splice_of_hinted_block_is_byte_stable` (src/install_ownership.rs:1084)
+builds its input via `sample_block()`, which calls `render_block`. Deleting
+`CUSTOMISING_HINT` from the renderer would leave this test green — it would splice
+a hint-free block and find it byte-stable.
+
+The claimed coverage is not actually missing: the sibling
+`render_block_carries_customising_hint` asserts the hint's text under `BLOCK_START`,
+so the removal is caught. This is a naming/scoping defect, not a coverage hole.
+
+Dispositioned `tolerated`: the fix (hard-coding the hinted block as a literal
+fixture) buys little while the sibling test holds the line.
+"""
+disposition = "tolerated"
+response = """
+Confirmed: both sides of the assertion come from `render_block`, so the test
+cannot detect the hint's removal. Its name overclaims.
+
+Tolerated, with the rationale stated: the claimed coverage is supplied by the
+sibling `render_block_carries_customising_hint`, which asserts the hint text under
+`BLOCK_START`. Hard-coding a literal hinted block as the fixture would make this
+test independent, but that buys little while the sibling holds the line — and a
+literal fixture would drift from the renderer it is meant to mirror.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "tolerated"
+response = """
+Confirmed: both sides of the assertion come from `render_block`, so the test
+cannot detect the hint's removal. Its name overclaims.
+
+Tolerated, with the rationale stated: the claimed coverage is supplied by the
+sibling `render_block_carries_customising_hint`, which asserts the hint text under
+`BLOCK_START`. Hard-coding a literal hinted block as the fixture would make this
+test independent, but that buys little while the sibling holds the line — and a
+literal fixture would drift from the renderer it is meant to mirror.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted as tolerated. The sibling test genuinely holds the line, and a literal
+fixture would drift from the renderer — tolerating the overclaiming name is the
+better trade than duplicating the block.
+"""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

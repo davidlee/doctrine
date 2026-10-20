@@ -1,9 +1,9 @@
 id = 284
 slug = "embedded-agents-skills"
 title = "Embedded skills for non-Claude harnesses"
-status = "started"
+status = "reconcile"
 created = "2026-10-18"
-updated = "2026-10-19"
+updated = "2026-10-20"
 tags = ["area:install", "area:skills", "harness"]
 
 [relationships]
