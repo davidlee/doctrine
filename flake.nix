@@ -64,10 +64,10 @@
         inherit (pkgs) stdenv;
         isLinux = stdenv.hostPlatform.isLinux;
 
-        jailLib =
-          if isLinux
-          then inputs.agents.lib.${system}.mkJailedAgents {}
-          else {};
+        # Evaluates on every system: agentsByName/unjailed (the bare agent
+        # CLIs) exist on darwin too; only the jail builders are Linux-only,
+        # and those are read solely under isLinux guards (ISS-526).
+        jailLib = inputs.agents.lib.${system}.mkJailedAgents {};
 
         # The tool set minus the jailed agents: what a doctrine working
         # environment needs, independent of how it is confined. Exported as
@@ -121,15 +121,10 @@
 
         projectPkgs =
           devToolPkgs
-          # Linux only: jailLib is {} off Linux, and the agents flake publishes
-          # no claude/codex for darwin (ISS-526).
-          ++ lib.optionals isLinux (
-            with jailLib.agentsByName; [
-              (jailLib.unjailed.codex or codex)
-              claude
-              # pi
-            ]
-          );
+          ++ (with jailLib.unjailed; [
+            codex
+            claude
+          ]);
 
         # No provider key enters these jails: mkJail defaults to the LLM
         # gateway (`gatewayClient "pi"`), and the jail gets only the gateway
@@ -383,13 +378,11 @@
             # Bare (unjailed) agents on the host PATH, from agents's eval
             # (jailLib.unjailed): pi and claude are the drvs the jails bundle;
             # dirge has no jail, and here == packages.dirge below.
-            ++ lib.optionals isLinux (
-              with jailLib.unjailed; [
-                pi
-                dirge
-                claude
-              ]
-            )
+            ++ (with jailLib.unjailed; [
+              pi
+              dirge
+              claude
+            ])
             ++ lib.optionals isLinux (lib.attrValues jailPkgs);
 
           # darwin + nix: rustc's link line emits `-liconv` with `-nodefaultlibs`,
