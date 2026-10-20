@@ -1,0 +1,42 @@
+memory_uid = "mem_01a156ab8bc07462acd23bdb560d3b4b"
+memory_key = "mem.pattern.reporting.app-propagation-discards-partial-outcomes"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A report built by ? per field cannot report partial success"
+summary = "Building a multi-field outcome struct with `?` per field means a late field's error destroys every earlier field's outcome, so a partially-completed sequence reports as total failure."
+created = "2026-10-20"
+updated = "2026-10-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["error-handling", "reporting", "std-003"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "dc51a6c62284fd35bd2914b56eb5c5f1cd3ff0f3"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5f43294e7a2e99f6eded2f10b503296c4f404cf5d60794c403a2bcd7e49608ec"
+base_commit = "bb7d66e46394c7d39f6d2f32d0a4abf7c787ab7a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

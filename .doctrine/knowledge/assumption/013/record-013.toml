@@ -1,0 +1,30 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 13
+slug = "pi-and-codex-follow-symlinked-skill-dirs-under-agentsskills"
+title = "Pi and codex follow symlinked skill dirs under .agents/skills"
+record_kind = "assumption"
+status = "held"
+created = "2026-10-20"
+updated = "2026-10-20"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+claim = "Pi and codex both discover and follow doctrine's skill links at .agents/skills/<id>, and pi does not warn about a duplicate when .pi/skills is absent."
+confidence = "medium"
+basis = "operator-judgement"
+validation_plan = "Human check at SL-284 close (design sec-7 VH-2 / A1): start live pi and codex sessions in a doctrine-installed project and confirm the skills load through the .agents/skills symlinks with no duplicate warning, and that pi loads its extensions from .doctrine/state/pi/extensions. Requires the one-off checkout cleanup first, so the stale npx copies at .agents/skills and .pi/skills cannot mask or duplicate the links."
+validated_by    = ""
+validated_on    = ""
+invalidated_by  = ""
+invalidated_on  = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
