@@ -37,3 +37,13 @@ The settled input behind this slice (IMP-406 `OQ-1`) is that pi warns when skill
 are present in *both* `.pi/skills/` and `.agents/skills/`, which is why doctrine
 deliberately never links into `.pi/skills`. That is a separate, already-decided
 fact — not part of what this assumption asserts.
+
+
+## Validation (2026-10-20, SL-284 close, VH-2)
+
+User-run live sessions after the VH-1 cleanup (stale npx copies under
+`.agents/skills` and `.pi/_skills`, and `.pi/extensions/doctrine/`, removed;
+`doctrine install` relinked `.agents/skills/<id>` into `.doctrine/skills/<id>`).
+User report: "live pi works fine" and "codex is checked" — both harnesses load
+doctrine skills through the symlinks; pi loads its extensions from
+`.doctrine/state/pi/extensions`.

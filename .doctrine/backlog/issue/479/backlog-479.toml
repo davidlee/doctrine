@@ -5,10 +5,10 @@ id = 479
 slug = "explicit-codex-boot-install-also-writes-pi-extensions"
 title = "Explicit codex boot install also writes pi extensions"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-09-24"
-updated = "2026-09-24"
+updated = "2026-10-20"
 tags = ["area:boot", "area:harness", "cluster:ambient-memory"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
