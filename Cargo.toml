@@ -1,6 +1,6 @@
 [package]
 name = "doctrine"
-version = "0.46.8"
+version = "0.46.9"
 edition = "2024"
 rust-version.workspace = true
 description = "Project tooling CLI"
