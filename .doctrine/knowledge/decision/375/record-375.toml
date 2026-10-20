@@ -7,7 +7,7 @@ title = "Framework gitignore entries live in a managed block derived from the ow
 record_kind = "decision"
 status = "accepted"
 created = "2026-10-16"
-updated = "2026-10-16"
+updated = "2026-10-20"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)

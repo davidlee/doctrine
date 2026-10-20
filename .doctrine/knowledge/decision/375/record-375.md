@@ -3,3 +3,6 @@ Install writes framework gitignore entries into a delimited managed block in the
 
 
 Amended at RV-418 (F-5): npx-written copies under `.agents/skills/<id>` get **no** block lines. Doctrine has no evidence it wrote them (npx creates real directories and reports only success), so claiming them could ignore user-owned copies. They are neither ignored nor pruned; IMP-406 (doctrine links for those harnesses) brings them into the block.
+
+
+Amended by DEC-391 (SL-284): doctrine no longer delegates to npx, so the npx clauses above and in the RV-418 amendment are historical. Entries under `.agents/skills/<id>` are now doctrine's own links into the embedded canon, so they take the ordinary rule: one block line per link, pruned with the link. Leftover npx-written real directories there are foreign — kept, reported as shadowing, given no block line (DEC-387: no migration).

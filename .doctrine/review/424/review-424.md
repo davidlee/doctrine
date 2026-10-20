@@ -311,6 +311,10 @@ folded in (G1–G3) and one dispositioned (G4).
   including the `detect`/`boot` registry rule (pi → pi), which the brief's
   successor outline omitted (G1). `supersede DEC-391 DEC-377`; DEC-377 →
   `superseded`; DEC-391 `shapes` SL-284 (F-1).
+- DEC-373 and DEC-375 (accepted) still carried npx clauses, surfaced by
+  REV-074's `npx` re-search; with user assent ("yeah do the amends") each gained
+  an "Amended by DEC-391" body note in their existing amendment idiom, rather
+  than supersession, since the rest of each record stands.
 
 ### REVs completed
 - REV-074: approved, applied, done. REQ-480 `pending → active` auto-landed;
