@@ -2,11 +2,11 @@ memory_uid = "mem_019face292237eb0a0d43e25acd934fb"
 memory_key = "mem.fact.doctrine.agents-skill-mirror-is-published-source"
 schema_version = 1
 memory_type = "fact"
-status = "active"
+status = "archived"
 title = "The .agents/ skill mirror is fetched from the published repo, not the working tree"
 summary = "Editing a skill master under plugins/ never updates .agents/skills/ until the change is published — the mirror is npx-fetched from the github slug."
 created = "2026-07-29"
-updated = "2026-07-29"
+updated = "2026-10-20"
 
 [scope]
 paths = ["plugins/doctrine/skills", "src/install.rs"]

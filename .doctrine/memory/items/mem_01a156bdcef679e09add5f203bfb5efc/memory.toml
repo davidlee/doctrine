@@ -1,0 +1,46 @@
+memory_uid = "mem_01a156bdcef679e09add5f203bfb5efc"
+memory_key = "mem.pattern.reconcile.recheck-brief-against-post-audit-state"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Reconcile: re-check the brief against post-audit state and the decision chain"
+summary = "Before landing a reconciliation brief, re-check pre-drafted REV payloads against fix-now commits and walk the falsified decision amendment chain"
+created = "2026-10-20"
+updated = "2026-10-20"
+
+[scope]
+paths = [".doctrine/revision", ".doctrine/review"]
+globs = []
+commands = []
+tags = ["reconcile", "audit", "revision", "knowledge"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8d6b12815919e386acfb4904cf812f12db391e73"
+ref_name = "refs/heads/edge"
+checkout_state_id = "9873e1d08de1026a3b7539004052a50b4f133697620ee11e21cbe24a7614ace6"
+base_commit = "4577f2e115c49bba9552787439deab2692558452"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-424"
+
