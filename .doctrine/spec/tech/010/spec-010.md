@@ -21,9 +21,9 @@ serves a consumer who already holds the binary. No skill is duplicated across
 channels — both read the same embedded tree.
 
 What this container owns is the *binary-side* mechanism: catalog discovery from
-the embed, the dual-path install plan (Claude direct, every harness without a
-doctrine skills route delegated — pi and codex via the `universal` target), the
-canonical-tree-plus-symlink lay-down with its proven-ownership never-clobber
+the embed, the per-harness install plan (every registered harness with a
+`skills` route links the embedded catalog — Claude at `.claude/skills`, codex,
+pi and universal at `.agents/skills`), the canonical-tree-plus-symlink lay-down with its proven-ownership never-clobber
 contract, and the `claude install` surface. It rides
 the install container (SPEC-009) for the shared project-root walk, the embedded
 `install/` gitignore helper, and the confirm prompt, and restates none of that.
@@ -31,8 +31,8 @@ the install container (SPEC-009) for the shared project-root walk, the embedded
 ## Responsibilities
 
 Mirrors the structured `responsibilities` list: carry the embedded canonical
-source; discover and validate the catalog; plan the dual-path per-agent install;
-reconcile each Claude link by proven ownership; materialise the canonical tree
+source; discover and validate the catalog; plan the per-harness install from
+the embed; reconcile each registered harness link by proven ownership; materialise the canonical tree
 and links atomically; cover the derived tree with the project's managed
 gitignore block; and surface the `install` command.
 
@@ -43,8 +43,9 @@ each domain a self-contained Claude Code plugin. The whole `plugins/` tree is
 embedded by `#[derive(RustEmbed)] #[folder = "plugins/"]` — a second embed
 alongside the install container's `install/` one — so the running binary carries
 every skill with no network fetch and no sidecar bundle. The same on-disk tree is
-what the marketplace channel and `npx skills` discover when pointed at the repo,
-so the two channels never fork or maintain the skill set twice. Because the embed
+what the marketplace channel discovers when pointed at the repo (third-party
+installers can read it too; doctrine's install path uses none of them), so the
+two channels never fork or maintain the skill set twice. Because the embed
 is fixed at compile time, an edited `SKILL.md` is invisible until the embedding
 crate recompiles — the refresh discipline the install container documents applies
 here unchanged.
@@ -62,26 +63,25 @@ catalog: their skills are symlinks back into the canonical `doctrine` domain, so
 the embed carries them as path duplicates that would collide on id. They exist
 only to publish a standalone subset on the marketplace channel.
 
-### Dual-path routing
+### Registry routing
 
-Each target harness takes one of two paths. A harness with a doctrine `skills`
-route — today only **Claude** — **is installed directly**: the binary owns its
-layout and needs no Node. **Every harness routed `skills_via` is delegated** (pi
-and codex via the `universal` target) to `npx skills add davidlee/doctrine`, the universal external
-installer (vercel-labs/skills) that already understands ~71 agent layouts and
-Claude plugin marketplaces. Doctrine does not reimplement per-agent install
-logic; it special-cases only the agent it owns and defers the rest. The
-delegate argv is assembled purely (subset `--skill` flags, `--global`, always
-`--yes` since the plan is already confirmed) and surfaced verbatim in the plan so
-a user can run it by hand. Node absent on the delegate path is a hard error with
-guidance, never a silent fallback.
+Every registered harness with a `skills` route (the `[harness.*]` registry,
+SPEC-009 `D4`) is installed directly from the embedded catalog: the binary owns
+the layout and needs no Node, network or external runner. The route names the
+harness's link site — `.claude/skills` for Claude; `.agents/skills` for codex,
+pi and universal, which share that directory, so selecting several of them
+yields one link per skill. An explicit `--agent` absent from the registry is
+refused before any write, naming the registered harnesses and suggesting
+`universal` for another harness that reads `.agents/skills`. `--only-memory`
+subsets every selected harness to the memory pair.
 
 ### Canonical tree and proven-ownership links
 
-The direct Claude path does not copy skill dirs into `.claude/skills/`. It
-materialises a *derived* canonical tree at `.doctrine/skills/<id>` and points a
-**relative** agent symlink (`.claude/skills/<id> → ../../.doctrine/skills/<id>`)
-at it. The link target is computed from the two directories, never hard-coded, so
+Install does not copy skill dirs into a harness's link site. It materialises a
+*derived* canonical tree at `.doctrine/skills/<id>` and points a **relative**
+symlink at it from each selected link site
+(`.claude/skills/<id> → ../../.doctrine/skills/<id>`, and likewise
+`.agents/skills/<id>`). The link target is computed from the two directories, never hard-coded, so
 it stays correct under a shared `--global` ($HOME) base.
 
 Reconciliation is by *proven ownership*: a link is Doctrine's iff it is a
@@ -116,8 +116,8 @@ writes no ignore.
 
 Catalog enumeration is internal — there is no public list verb. `claude install`
 selects a subset by `--skill`/`--domain` or the derived `--only-memory` subset,
-targets one or more `--agent`s (default: detect `.claude/`, else error — Doctrine
-does not guess non-Claude agents), scopes to project or `--global`, and gates on
+targets one or more registered `--agent`s (default: each registered harness
+whose `detect` directory is present), scopes to project or `--global`, and gates on
 `--dry-run` / the shared confirm prompt / `--yes`. The pure planner builds an
 inspectable plan; the thin shell prints it, prompts, and executes.
 
@@ -127,24 +127,20 @@ inspectable plan; the thin shell prints it, prompts, and executes.
   user's pinned skill (a real dir or a foreign symlink); ownership by
   target-inside-a-framework-root re-proven at mutation time is what upholds it
   across the confirm/concurrency window.
-- **Delegate version skew (accepted).** Delegated installs pull the repo at
-  `HEAD`, not the embedded snapshot in the running binary, so a non-Claude agent
-  can receive newer or older skills than the binary carries. v1 tracks `HEAD`;
-  pinning to a build ref is backlogged.
 - **Embed staleness across recompiles.** Like the install container, the embed is
   fixed at compile time — an edited `SKILL.md` is invisible until the embedding
   crate recompiles; a refresh discipline, not a runtime fault.
-- **Multi-agent status fidelity.** Install status is authoritative only for
-  Claude (a directory Doctrine owns); for delegated agents it is best-effort and
-  may read as not-tracked.
+- **`universal --global` destination differs from npx (accepted).** A global
+  universal install links under `$HOME/.agents/skills`, not npx's
+  `~/.config/agents/skills`; doctrine models no per-scope route override.
 
 ## Hypotheses
 
-- **Delegate the long tail, special-case only what we own.** Reimplementing ~71
-  agent layouts is not worth it; delegating every harness routed `skills_via` to
-  the universal installer and direct-installing only `skills`-routed harnesses
-  (today only Claude, whose layout and embed Doctrine already owns) is preferred, keeping the default agent working offline
-  with no Node.
+- **Register the supported harnesses, share the embedded canon.** Most
+  non-Claude harnesses read `.agents/skills`, so a registry entry with a declared
+  link site covers them from the embed the binary already carries — no external
+  installer, no version skew against the running binary, offline, no Node. A new
+  harness is a registry entry; an unknown name is refused.
 - **A canonical tree with symlinks beats copies.** Materialising one derived
   `.doctrine/skills/<id>` tree and pointing relative agent links at it is
   preferred over copying skill dirs per agent, so a refresh updates one tree and
@@ -161,15 +157,16 @@ inspectable plan; the thin shell prints it, prompts, and executes.
 - **D1 — one embedded source, two channels.** `plugins/` is the single
   source-of-truth, embedded by a second rust-embed folder parallel to `install/`;
   the marketplace and the binary both read it, and no skill is duplicated.
-- **D2 — `skills` route direct, `skills_via` delegated.** The net routing rule is
-  a harness with a doctrine `skills` route (today only Claude) ⇒ direct lay-down;
-  a harness routed `skills_via` ⇒ `npx skills add davidlee/doctrine`. Doctrine
-  owns only the `skills`-routed layouts and defers the rest to the universal
-  installer.
+- **D2 — registered `skills` routes link the embedded catalog.** Every
+  registered harness with a `skills` route gets the canonical tree and links at
+  its declared site; there is no runner, delegated argv or Node fallback. An
+  explicit unknown `--agent` is refused before any write with the `universal`
+  suggestion, and `--only-memory` selects the memory pair.
 - **D3 — direct install is a canonical tree plus relative symlinks, reconciled by
-  proven ownership.** Claude gets a derived `.doctrine/skills/<id>` tree and a
-  relative link into it; a link is ours iff it is a symlink whose target lies
-  inside a framework canon root — ours and mapped to a shipped member is relinked
+  proven ownership.** The selected harnesses share one derived
+  `.doctrine/skills/<id>` tree, each with a relative link into it from its link
+  site; a link is ours iff it is a symlink whose target lies inside a framework
+  canon root — ours and mapped to a shipped member is relinked
   to the current layout, ours and unmapped is unlinked on a project install and
   reported on a global one, anything else is kept foreign — re-proven at mutation
   time.

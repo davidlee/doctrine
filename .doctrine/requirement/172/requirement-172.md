@@ -1,4 +1,4 @@
-# REQ-172: Install does not absorb memory sync, and delegates skills only for harnesses routed through npx
+# REQ-172: Install owns the embedded skill canon and the links for every registered harness with a `skills` route (SPEC-010); it does not absorb global-memory materialisation, which remains the standalone `doctrine memory sync` verb install only hints at.
 
 ## Statement
 

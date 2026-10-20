@@ -73,6 +73,10 @@ non-Claude target; doctrine must not also link into `.pi/skills/`.
 - `src/boot.rs` — pi adapter, `install_refresh` arms, extension dir,
   `.pi/settings.json` merge.
 - `README.md` and comments teaching npx.
+- `install/doctrine.toml`, `install/doctrine.toml.example`, `src/dtoml.rs` —
+  the `[install] repo` key's documentation and round-trip test.
+- `src/fsutil.rs` — `write_atomic` preserves an existing target's mode
+  (design sec-5).
 - `.doctrine/spec/tech/{009,010,011}/` — via REV only.
 
 ## Risks & assumptions
@@ -87,7 +91,7 @@ non-Claude target; doctrine must not also link into `.pi/skills/`.
 - **R4 — disposable extension dir.** Wiping `.doctrine/state/` removes the pi
   extensions until `doctrine boot install` re-runs (design sec-5).
 - **A1** — pi and codex follow symlinked skill dirs under `.agents/skills/`
-  (VH at close).
+  (VH at close). Recorded as ASM-013.
 
 ## Verification intent
 

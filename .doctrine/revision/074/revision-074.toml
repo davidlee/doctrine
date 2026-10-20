@@ -1,9 +1,9 @@
 id      = 74
 slug    = "embed-sourced-skills-and-the-pi-boot-adapter"
 title   = "Embed-sourced skills and the pi boot adapter"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
-approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
-updated = "2026-10-19"
+status = "done"
+approval = "approved"
+updated = "2026-10-20"
 tags    = []
 
 # A Revision (REV) is a first-class change-axis entity: a pending

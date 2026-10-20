@@ -36,7 +36,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "README.md"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".doctrine/spec/tech/009/**"
@@ -67,7 +67,23 @@ selector = "tests/e2e_surface_neutral_roundtrip.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/commands/cli.rs"
+selector = "tests/e2e_install_ownership.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/doctrine.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "install/doctrine.toml.example"
+intent = "design-target"
+
+[[selector]]
+selector = "src/dtoml.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/fsutil.rs"
 intent = "design-target"
 
 [[relation]]

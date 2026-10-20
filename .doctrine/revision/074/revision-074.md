@@ -61,11 +61,12 @@ codex, not pi.
 the shared ownership-aware descriptor core (generate absent, regenerate changed
 owned files, skip foreign files), reporting each file separately; it ensures
 `.pi/settings.json` lists `../.doctrine/state/pi/extensions` while preserving
-foreign entries. A malformed settings file, or an `extensions` key that is not
-an array, is left untouched with the line to add printed; that outcome is
-reported, a settings write counts as touched, and the fallback leaves the boot
-leg incomplete. A write prints a project-trust/`/reload` activation notice and
-never claims activation. `surface.ts` retains the existing neutral-envelope
+foreign entries. A malformed or symlinked settings file, or an `extensions` key
+that is not an array, is left untouched and the required entry is named; that
+outcome is reported, a settings write counts as touched, and the fallback leaves
+the boot leg incomplete. A write prints a project-trust notice that promises
+`/reload` loads the changes only when the registration was written, and never
+claims activation. `surface.ts` retains the existing neutral-envelope
 bounded fail-open memory-surface adapter contract. Codex writes no pi files.
 
 ## Prose payload (manual, at reconcile — no peer FK, so no rows)
@@ -123,3 +124,27 @@ specification retains a `skills_via` route.
 Backlog items that reference the old npx path keep their own identity; they are
 not edited by this revision. `mem.fact.doctrine.agents-skill-mirror-is-published-source`
 is retired in the slice close work, not here.
+
+## Reconcile narrative
+
+Applied at SL-284 reconcile from RV-424's reconciliation brief (items 8–9).
+
+- `REQ-480` status `pending → active` auto-landed: the audit confirmed the pi
+  adapter against the requirement (`Harness::Pi` arm, runtime-tier extensions,
+  `.pi/settings.json` registration with its outcome, disjoint-arm tests, PHASE-04
+  VT rows PASS).
+- `modify` rows landed by hand as the statements above (REQ title = statement).
+  REQ-480's statement was corrected at reconcile: the draft predated RV-424 F-5's
+  fix, so it said the fallback prints "the line to add", where the landed code
+  names the required entry and conditions the `/reload` promise on the write; it
+  also omitted the symlinked-settings fallback (`src/boot.rs` `install_pi_settings`).
+- Prose payload landed in SPEC-009 (overview, `D4`, `D5`), SPEC-010 (overview,
+  responsibilities and structured responsibility 3, routing, canonical-tree and
+  command-surface prose, `D2`, `D3`, concerns, hypotheses; the `delegate` tag
+  dropped) and SPEC-011 (responsibilities, boot-install prose, the pi arm and its
+  settings outcome, concerns, `D6`, two structured responsibilities).
+  `doctrine spec validate` is clean on all three.
+- Not covered here: DEC-377, which a REV cannot target (RV-424 F-1). It is
+  superseded by DEC-391.
+- REQ slugs (e.g. REQ-175's npx-bearing slug) are left as minted: slugs are never
+  authoritative (STD-002).

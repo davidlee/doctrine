@@ -119,6 +119,7 @@ unchanged (RV-423 F-2):**
 | `tests/e2e_install_flow.rs:368-400` | `NPX_REVIEW` disclosure | no npx disclosure; `.agents/skills` links listed |
 | `tests/e2e_install_executor.rs:242-269` | `agents universal (delegate)` | direct links for universal |
 | `tests/e2e_claude_install.rs:350-375` | npx offer text | offer reads `skills` for every registered harness |
+| `tests/e2e_install_ownership.rs` (`pi_without_npx_*`) | pi skills need npx | pi links `.agents/skills` from the embed (plan PHASE-01 EX-4) |
 | `tests/e2e_surface_neutral_roundtrip.rs:111-129` | codex writes pi extension at old path | pi writes it under the runtime dir |
 | `src/boot.rs:8234-8265`, `:9223-9242` | `Harness::Codex` writes pi files | split: codex writes none, pi writes them |
 
@@ -168,7 +169,10 @@ applicable MCP outcome, so pi never names a Claude or codex MCP file.
 settings only after project trust, and a running session needs `/reload` (pi
 0.99.1 `docs/configuration.md:3-5`). The pi arm prints one activation notice on
 any extension or settings write, mirroring `write_codex_activation` (`:3312`).
-It states what was written, never that it is active.
+It states what was written, never that it is active. Its closing line promises
+that `/reload` loads the changes only when the settings registration was
+written; otherwise it says the files stay unloaded until the registration is
+added (RV-424 F-5).
 
 **Install registry:** `[harness.pi] boot = "pi"`. `boot_names`
 (`src/install.rs:637`) needs no change: it maps the registry value through
@@ -194,14 +198,28 @@ DEC-390: generated extensions leave the client's source tree.
     narrow-key `serde_json::Value` precedent, reusing `parse_settings`.
   - Absent file or key: write. Entry already present: no-op. Other entries are
     preserved in order.
-  - Malformed file, or `extensions` that is not an array: leave the file
-    untouched and print the line to add (STD-003; the existing fallback idiom).
-    The outcome is reported per sec-4.
+  - Malformed file, `extensions` that is not an array, or a settings file that
+    is a symlink (a rename would sever a dotfiles-managed link): leave the file
+    untouched and print what it must list — the entry, under its `extensions`
+    array — rather than a mechanical edit a non-array `extensions` makes
+    impossible (STD-003; RV-424 F-5). The outcome is reported per sec-4.
   - An empty or whitespace-only file counts as an empty object, as
     `parse_settings` (`src/boot.rs:1648`) already does for Claude and codex
     settings. It is written, since an empty file holds nothing to lose. This is
     deliberate, not the malformed case (RV-423 F-8).
   - The literal is a named constant (STD-001).
+  - **Fidelity caveat, accepted (RV-424 F-6).** The planner re-serialises the
+    whole document through `serde_json::Value` (no `arbitrary_precision`), so
+    "preserved in order" means order and structure: an integer outside the
+    i64/u64 range is not preserved bit-exactly. A textual splice of the array
+    would be more complex and more brittle for a vanishingly rare input.
+
+**Shared-writer change (RV-424 F-3).** The settings write required hardening
+`fsutil::write_atomic`, which every atomic write in the binary uses: it now
+preserves an existing target's mode. Without it, rewriting a private `0600`
+settings file republished it at the umask default (found by PHASE-04's review).
+The residual gaps — the temp is written before the mode is applied, and special
+bits are copied — are IMP-520, not this slice.
 
 **Risk, accepted.** `.doctrine/state/` is disposable. Wiping it removes the
 extensions (and `boot.md`) until `doctrine boot install` runs again, and pi
@@ -231,6 +249,11 @@ specs after it is applied.
 | SPEC-011 | `REQ-185` + its responsibility (import targets, auto-detect) | Add pi: `AGENTS.md` import, `.pi/` detection |
 | SPEC-011 | `REQ-480` + its responsibility (generated pi extensions) | Owned by the pi adapter; runtime-tier location; `.pi/settings.json` registration with its outcome and activation notice; codex arm writes no pi files |
 
+**DEC-377 is superseded, not revised (RV-424 F-1).** DEC-377 still described
+the npx delegation and pi→codex boot routing. A decision record is not a legal
+`revises` target, so it has no row here: reconcile minted DEC-391
+and superseded DEC-377 with it. The spec half of the same claims is this REV.
+
 The REV's own scan repeats `doctrine search npx -k all` and
 `doctrine search skills_via -k all`, so no hit is left unaddressed.
 <!-- doctrine:section sec-7 -->
@@ -238,8 +261,11 @@ The REV's own scan repeats `doctrine search npx -k all` and
 
 **Design-target selectors:** `install/manifest.toml`, `src/install.rs`,
 `src/install_config.rs`, `src/boot.rs`, `src/install_ownership.rs` (block
-hint), `src/commands/cli.rs` (only if `--only-memory` plumbing needs it),
-`README.md`, `justfile`, and the `tests/` suites in sec-3.
+hint), `src/fsutil.rs` (sec-5), `install/doctrine.toml`,
+`install/doctrine.toml.example`, `src/dtoml.rs` (the `[install] repo` key),
+`README.md`, `justfile`, and the `tests/` suites in sec-3. `src/commands/cli.rs`
+was conditional on `--only-memory` plumbing needing it; it did not, and its
+selector is removed (RV-424 F-7).
 
 **Tests (VT):**
 - An install selecting pi, codex or universal, run with a runner seam absent

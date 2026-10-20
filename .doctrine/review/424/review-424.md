@@ -278,3 +278,49 @@ follow-ups live in backlog (`8557a881f`), and neither is a reconcile surface.
 - **IMP-520, IMP-521, ISS-527** — backlog items, already committed. Reconcile
   should not touch them.
 - **VH-1 / VH-2** — close-time, human-facing, outstanding by design.
+
+## Reconciliation Outcome
+
+Reconcile pass on SL-284, user assent 2026-10-20 ("agreed") to the batch below.
+Before writing, the brief was spot-checked against source; three gaps were
+folded in (G1–G3) and one dispositioned (G4).
+
+### Direct edits applied
+- design.md sec-3: rewritten-test table gains `tests/e2e_install_ownership.rs` (F-7).
+- design.md sec-4: activation notice's `/reload` promise is conditional on the
+  registration write (G3, from F-5's fix).
+- design.md sec-5: `write_atomic` mode preservation recorded with PHASE-04 origin,
+  residuals to IMP-520 (F-3); whole-document round-trip fidelity caveat (F-6);
+  fallback names the required entry and covers a symlinked settings file (G3,
+  from F-5 / F-11).
+- design.md sec-6: note that DEC-377 is superseded by DEC-391, not revised (F-1).
+- design.md sec-7: selector prose mirrors the registry; `cli.rs` removal recorded (F-7).
+- slice-284.md § Affected surface: `src/fsutil.rs`, `install/doctrine.toml`,
+  `install/doctrine.toml.example`, `src/dtoml.rs` (F-3, F-7); A1 cites ASM-013.
+
+### Selector registry
+- `src/commands/cli.rs` removed; `README.md` → `design-target`; added
+  `tests/e2e_install_ownership.rs`, `install/doctrine.toml`,
+  `install/doctrine.toml.example`, `src/dtoml.rs`, `src/fsutil.rs` (F-7).
+- `slice conformance 284`: 16 conformant, 0 undelivered, 6 undeclared — all
+  authored or install-output paths (REV-074's files, `plan.toml`,
+  `slice-284.toml`, `.gitignore`), dispositioned in F-7 and G4.
+
+### Knowledge record
+- DEC-391 minted, restating all three DEC-377 rules as they now stand —
+  including the `detect`/`boot` registry rule (pi → pi), which the brief's
+  successor outline omitted (G1). `supersede DEC-391 DEC-377`; DEC-377 →
+  `superseded`; DEC-391 `shapes` SL-284 (F-1).
+
+### REVs completed
+- REV-074: approved, applied, done. REQ-480 `pending → active` auto-landed;
+  REQ-175/172/185/480 statements and SPEC-009/010/011 prose landed by hand;
+  `spec validate` clean on all three. REQ-480's statement corrected for F-5's
+  fix and the symlink fallback (G2). Narrative in revision-074.md.
+
+### Withdrawn / tolerated
+- F-6, F-12: tolerated, rationale in their dispositions (F-6's caveat now in sec-5).
+- F-4, F-10, F-11: follow-ups IMP-520, ISS-527, IMP-521 — not reconcile surfaces.
+- F-2, F-5, F-8, F-9: fixed in `3b7090881`.
+
+Reconcile pass complete — handoff to /close.

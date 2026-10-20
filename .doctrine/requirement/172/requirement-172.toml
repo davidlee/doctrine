@@ -3,7 +3,7 @@ version = 1
 
 id = 172
 slug = "install-owns-neither-skills-distribution-nor-memory-sync-treating-both-as-a-sibling-verb-it-hints-at-or-defers-to"
-title = "Install does not absorb memory sync, and delegates skills only for harnesses routed through npx"
+title = "Install owns the embedded skill canon and the links for every registered harness with a `skills` route (SPEC-010); it does not absorb global-memory materialisation, which remains the standalone `doctrine memory sync` verb install only hints at."
 status = "active"
 kind = "quality"
 

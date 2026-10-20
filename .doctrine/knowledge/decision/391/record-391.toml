@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 391
+slug = "global-no-prune-unregistered-refused"
+title = "Global installs report orphans; unregistered harnesses are refused"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-20"
+updated = "2026-10-20"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-377 (SL-281) set three install rules. SL-284 deleted the npx skills delegation (DEC-388) and gave pi its own boot adapter (DEC-389), falsifying two of them (RV-424 F-1). This record restates the whole rule set as it now stands."
+choice = "Global installs converge without pruning: --global refreshes canon copies and relinks doctrine links under $HOME but prunes nothing, reporting orphans instead; project installs keep exact convergence (DEC-374). An explicit --agent absent from the [harness.*] registry is refused before any write, naming the registered harnesses and suggesting universal for another harness that reads .agents/skills; no npx delegation survives. The registry carries detection and boot routing: each [harness.<name>] table has detect (the directory implying the harness) and boot (claude -> claude, codex -> codex, pi -> pi, universal -> none)."
+alternatives = ["global prune under the shared ownership rule (cross-project and cross-version hazard)", "delegate unregistered names to npx skills add (removed by DEC-388)", "route pi through the codex adapter (removed by DEC-389)"]
+rationale = "$HOME/.doctrine is shared by every project that installs globally, possibly at different binary versions, so no single catalog owns it and an older binary pruning a newer one would be a silent regression. Every supported harness is now a registry entry linking the embedded canon, so an unregistered name has no route to fall back to; refusing before any write is honest where a silent no-op or an external runner is not. POL-003: one harness selection writes no other harness files."
+consequences = ["a new harness is added by a registry entry with a declared link site", "unregistered agents such as cursor get nothing until registered or until they read .agents/skills via universal"]
+decided_by = "user"
+decided_on = "2026-10-20"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-377"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-284"

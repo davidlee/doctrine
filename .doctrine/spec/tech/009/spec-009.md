@@ -36,13 +36,10 @@ ADR-019: templates / composable guidance / sealed definitions / curated
 reference / integrations / base-projection policy / memory corpus) rather than a
 single `install/` root — exact root names are left to the implementing slice.
 
-Two boundaries are deliberate. Install owns the skill canon tree and its links
-for harnesses with a `skills` route (true since SL-250); SPEC-010 specifies that
-mechanism. For harnesses routed `skills_via`, install delegates to `npx skills
-add`, a peer it uses but does not own. That
-peer `uses` edge (not containment) is authored as a durable `spec interactions`
-edge by the implementing slice, not asserted here. **Global-memory
-materialisation is not orchestrated here**: install prints a next-step hint
+Two boundaries are deliberate. Install owns the embedded skill canon tree and
+its links for every registered harness with a `skills` route (SL-250, SL-284);
+SPEC-010 specifies that mechanism, and no external installer is involved.
+**Global-memory materialisation is not orchestrated here**: install prints a next-step hint
 pointing at the standalone `doctrine memory sync` verb rather than running it as a
 hidden side effect.
 
@@ -188,15 +185,13 @@ declared.
   edit, not by base-projecting its tree or changing install code. It also
   declares ownership: `[framework] roots` (the canon roots install converges) and
   the `[harness.*]` registry — per harness its detect dir, boot adapter, agent
-  link dir and one skills route (`skills` link dir or `skills_via` npx target).
-  The harness vocabulary is the registry; an unregistered name gets no defs or
-  links and is disclosed.
-- **D5 — memory sync is not absorbed; skills are delegated only for `skills_via`
-  harnesses.** Install owns the skill canon tree and its links for harnesses with a `skills` route (true since
-  SL-250); SPEC-010 specifies that mechanism. For harnesses routed `skills_via`,
-  install delegates to `npx skills add`, a peer it uses but does not own.
-  Global-memory materialisation is a standalone `memory sync` verb install only
-  hints at.
+  link dir and exactly one skills route, its `skills` link dir. The harness
+  vocabulary is the registry; an explicit unregistered name is refused before
+  any write, not disclosed after the fact.
+- **D5 — memory sync remains separate; install owns the registered skills
+  links.** Install owns the skill canon tree and its links for every registered
+  harness with a `skills` route (SPEC-010). Global-memory materialisation is a
+  standalone `memory sync` verb install only hints at.
 - **D6 — the seven independent asset properties (ADR-019).** Cite ADR-019's
   canonical vocabulary *unchanged* — owned, versioned, distributed, embedded,
   runtime-loaded, published, projected — no property implies another; in

@@ -29,7 +29,8 @@ and sweeping the abandoned sibling; merge the codex hook registry into
 `.codex/hooks.json` with the memory-surface limit and timeout on each handler;
 register the doctrine MCP server edit-preservingly per harness (Claude
 `.mcp.json`, codex `.codex/config.toml`), owning only a shape doctrine emitted;
-plan and install the generated pi extensions, one report leg per file; and run
+plan and install pi's generated extensions in the runtime tier and register them
+through `.pi/settings.json`, one report leg per file; and run
 `boot --check` as a disk-scoped sentry.
 
 ### The pure assembly seam
@@ -88,10 +89,11 @@ the agent's cached session-start prefix, so an unchanged regenerate reports
 ### `boot install` — import wiring, hook merge and MCP registration
 
 `boot install` resolves target harnesses (explicit `--agent` wins, else
-auto-detect by `.claude/` / `.codex/` markers), then does two things behind a
+auto-detect by `.claude/` / `.codex/` / `.pi/` markers, where `AGENTS.md` alone
+implies codex, not pi), then does two things behind a
 pure-plan / imperative-apply split. First it prepends the `@.doctrine/state/boot.md`
 import **once** into each harness's committed file — Claude reads `CLAUDE.md`,
-codex `AGENTS.md`, one file per harness so the snapshot never inlines twice —
+codex and pi `AGENTS.md`, so the snapshot never inlines twice —
 canonicalising each target so a `CLAUDE.md → AGENTS.md` symlink is updated
 through to its single inode and same-inode targets dedup to one write. The
 prepend is idempotent: a file already carrying the ref line plans no write.
@@ -146,11 +148,25 @@ absolute path (POL-002). Neither leg's report claims the harness has activated
 the server: a `wrote` line is a statement about the file, never about a live
 entry (POL-003 facet 3).
 
-The codex arm also plans and installs the generated **pi extensions** —
-`index.ts`, the `mcp.ts` bridge and the `surface.ts` memory-surface adapter —
-through one ownership-aware descriptor core: generate when absent, regenerate
-when the owned content differs, skip a foreign file. Each file reports as its own
-`RefreshReport` leg. `surface.ts` maps pi's `read`/`edit`/`write` and `bash`
+The arms are disjoint: the codex arm writes only its hooks, its MCP entry and
+the `AGENTS.md` import, and writes no pi file. The **pi arm** plans and installs
+the generated **pi extensions** — `index.ts`, the `mcp.ts` bridge and the
+`surface.ts` memory-surface adapter — into the disposable runtime tier
+(`.doctrine/state/pi/extensions`) through one ownership-aware descriptor core:
+generate when absent, regenerate when the owned content differs, skip a foreign
+file. Each file reports as its own `RefreshReport` leg; legs that do not apply to
+an arm (pi's hooks and MCP, codex's extensions) report as not applicable.
+
+Pi loads extensions from the directories its settings list, so the pi arm then
+ensures `.pi/settings.json`'s `extensions` array contains
+`../.doctrine/state/pi/extensions`, preserving foreign entries in order. That
+settings outcome is reported separately: a write counts as touched; a malformed
+or symlinked file, or an `extensions` that is not an array, is left untouched
+with the required entry named, and leaves the boot leg incomplete. On any
+extension or settings write it prints one activation notice: pi loads project
+settings only after project trust, and `/reload` is promised to load the changes
+only when the registration was written. A no-op prints nothing, and the notice
+never claims activation. `surface.ts` maps pi's `read`/`edit`/`write` and `bash`
 tool results onto doctrine's neutral envelope and writes it to
 `memory surface --input neutral --format plain` on an async, bounded, fail-open
 child. The envelope schema and its decoder are the memory engine's (SPEC-007),
@@ -185,10 +201,13 @@ edit lags until `/clear` or restart. Closing that lag is the freshen-now ritual
   is left untouched and a manual snippet printed instead, and an entry is owned
   only in a shape doctrine emitted, so a user's own `env_vars` value, extra key
   or third argument is never modified. A generated pi extension without
-  doctrine's ownership marker is foreign and skipped, never overwritten.
+  doctrine's ownership marker is foreign and skipped, never overwritten. The
+  `.pi/settings.json` registration is a narrow-key merge with the same
+  fail-soft rule, and it never renames over a symlinked settings file.
 - **Written is not active.** A codex hook the operator has not trusted is skipped
   by codex at runtime. The installer can disclose the manual trust step; it
-  cannot verify it, and never reports a written hook as active.
+  cannot verify it, and never reports a written hook as active. The same holds
+  for pi's extensions, which load only after project trust and `/reload`.
 - **The sweep is the one destructive write.** Evicting the abandoned scope is
   what keeps a scope flip from leaving two live copies of every hook — a failure
   that presents as mild slowness and nothing else. It is bounded by the same
@@ -233,4 +252,5 @@ edit lags until `/clear` or restart. Closing that lag is the freshen-now ritual
   hook, and print a manual snippet rather than clobbering a malformed file; the
   MCP registration owns only a shape doctrine emitted and leaves a foreign or
   uninterpretable entry alone with a snippet; a generated pi extension lacking
-  doctrine's ownership marker is skipped and reported.
+  doctrine's ownership marker is skipped and reported, and a `.pi/settings.json`
+  it cannot merge is left untouched with the required entry named.
