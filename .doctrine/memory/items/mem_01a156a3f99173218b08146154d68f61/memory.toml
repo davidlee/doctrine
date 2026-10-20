@@ -1,0 +1,42 @@
+memory_uid = "mem_01a156a3f99173218b08146154d68f61"
+memory_key = "mem.pattern.governance.time-precedence-is-not-recorded"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A later accepted decision does not retire an earlier one"
+summary = "Time-precedence resolves contradictory accepted decisions for an agent applying the rule, but the corpus records nothing — no supersede edge, no REV row — so the earlier decision keeps reading as a live instruction."
+created = "2026-10-20"
+updated = "2026-10-20"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["governance", "adr", "drift"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "64c0f736da4fbc362c81eab81ccf1df8985b5a00"
+ref_name = "refs/heads/edge"
+checkout_state_id = "7abdaf8b03e3ae7494db2861b7c855d69b6ef6fc9ec5d0763acdfd2144437506"
+base_commit = "043acddf96b9d395042bd08a964de870e7a49c1a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

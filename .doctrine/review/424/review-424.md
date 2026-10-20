@@ -189,8 +189,12 @@ follow-ups live in backlog (`8557a881f`), and neither is a reconcile surface.
    `pi_without_npx_*` tests; the design's table names the other four suites
    only) (RV-424 F-7).
 
-4. **design.md sec-6** — the clause table gains a `DEC-377` row (RV-424 F-1).
-   See the REV item below for its payload.
+4. **design.md sec-6** — add a **note**, not a clause row (RV-424 F-1): DEC-377
+   is superseded at reconcile by a successor decision (see the knowledge-record
+   item below). A DEC is **not** a legal `revises` target — `src/relation.rs:668`
+   restricts `revises` to `[SPEC, PRD, REQ, ADR, POL, STD]` — so DEC-377 must not
+   appear in the REV clause table. Record the supersession so a reader of sec-6
+   knows the decision half was handled elsewhere.
 
 5. **slice-284.md § Affected surface** — add `src/fsutil.rs`,
    `install/doctrine.toml`, `install/doctrine.toml.example`, `src/dtoml.rs`.
@@ -215,26 +219,47 @@ follow-ups live in backlog (`8557a881f`), and neither is a reconcile surface.
    - `.gitignore` and `.doctrine/revision/074/**` need no selector: install's own
      output, and authored governance rather than a code path.
 
+### Knowledge record (NOT a Revision)
+
+7. **DEC-377 goes through `supersede`, not `REV`** (RV-424 F-1).
+
+   Correction, recorded because the first draft of this brief got it wrong: a
+   Revision cannot revise a knowledge record. `src/relation.rs:668` gives
+   `revises` the target kinds `[SPEC, PRD, REQ, ADR, POL, STD]`, so
+   `doctrine revision change add 74 --target DEC-377` is **refused**. This was
+   caught by corpus memory `mem.fact.revision.no-knowledge-record-target` and
+   then verified against the source rather than taken on trust.
+
+   The route, in order — every step is separate and skipping one leaves drift:
+   1. `doctrine knowledge new decision "<successor title>"` — mint the successor.
+   2. Author its `[facet]` with `doctrine knowledge edit decision <ID>`:
+      - **global installs converge without pruning** — unchanged from DEC-377,
+        this slice does not touch it;
+      - an explicit `--agent` absent from the registry is **refused before any
+        write**, naming the registered harnesses and suggesting `universal` for
+        another harness that reads `.agents/skills`; no npx delegation survives;
+      - pi has its own boot adapter (`[harness.pi] boot = "pi"`, DEC-389), so
+        codex's arm writes no pi files and pi's arm writes no codex files.
+   3. `doctrine supersede <NEW> DEC-377` — writes `supersedes` on the successor
+      and `superseded_by` on DEC-377.
+   4. **`doctrine knowledge status DEC-377 superseded` — a separate step.**
+      `supersede` writes only the relation edges; without this, DEC-377 stays
+      `accepted` and `doctrine validate` reports *corpus clean*, so nothing
+      surfaces two live records for one rule.
+   5. `doctrine link <NEW> shapes SL-284` — DEC-377 carries `shapes: SL-281`, and
+      relations do not migrate with a supersession.
+
+   This is the half REV-074 cannot cover. **Both halves are needed** — the DEC
+   supersession here and the spec payload in item 8 — because SPEC-009's `D4`,
+   SPEC-010's `D2`/`REQ-175` and SPEC-011's `REQ-480` restate the same claims in
+   their own words.
+
 ### Governance/spec (REV)
 
-7. **REV-074 gains a DEC-377 row** (RV-424 F-1):
-   `doctrine revision change add 74 --target DEC-377 --action modify`, plus a
-   replacement statement in `revision-074.md` that:
-   - **keeps** DEC-377's first paragraph — global installs converge without
-     pruning — untouched; this slice does not change it, so a full `supersede`
-     edge would be wrong;
-   - **rewrites** the second paragraph: an explicit `--agent` absent from the
-     registry is refused before any write, suggesting `universal` for another
-     harness that reads `.agents/skills`; no npx delegation survives;
-   - **rewrites** the third paragraph's `pi → codex` boot routing: pi has its own
-     adapter (`[harness.pi] boot = "pi"`), per DEC-389.
-
-   Also update design sec-6's table (item 4) so PHASE-05's VA-2 claim —
-   "REV's change list matches design sec-6 row for row" — stays true after both
-   change.
-
-8. **Approve and apply REV-074, then `doctrine spec validate`** on SPEC-009,
-   SPEC-010 and SPEC-011 (design sec-7's gate: "the REV approved and applied").
+8. **Approve and apply REV-074 as raised** (no DEC row; see item 7), then
+   `doctrine spec validate` on SPEC-009, SPEC-010 and SPEC-011 (design sec-7's
+   gate: "the REV approved and applied"). `REQ-480`'s status row is covered by
+   item 9.
 
 9. **REQ-480's `status` row (pending → active) may be applied.** The handover
    made it conditional on the audit confirming the landed pi adapter. It is

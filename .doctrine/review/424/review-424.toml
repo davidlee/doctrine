@@ -34,6 +34,27 @@ reconciliation brief, 3 follow-up (8557a881f: IMP-520, IMP-521, ISS-527), 2
 tolerated with stated rationale. No blocker. VH-1/VH-2 remain close-time.
 """
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Re-concluding after the F-1 remedy correction. The pass examined the same
+evidence: gate green at the range tip and after the audit's fixes, every VT row
+PASS, the conformance algebra dispositioned cell by cell, the whole-range diff
+read, two independent read-only reviews of disjoint halves adjudicated rather than
+adopted, REV-074 read against design sec-6 row for row with both spec searches
+re-run.
+
+Change since the first conclusion: F-1's remediation was re-routed from a REV
+`modify` row to a knowledge-record supersession, after verifying at source that a
+DEC is not a legal `revises` target. The finding, its severity and its evidence
+are unchanged.
+
+12 findings, all terminal: 4 fix-now (3b7090881), 3 design-wrong routed to the
+reconciliation brief, 3 follow-up (8557a881f), 2 tolerated with stated rationale.
+No blocker.
+"""
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-284"
 
@@ -72,20 +93,29 @@ that contradict each other is drift: surface it instead of silently choosing one
 """
 disposition = "design-wrong"
 response = """
-The observation is confirmed and the design is the defect surface: design sec-6
-scoped REV-074 to SPEC-009/010/011 and never considered DEC-377, which the slice
-falsifies on two of its three paragraphs.
+Re-disposed with the correct route; the observation stands unchanged, only the
+instrument was wrong.
 
-Remediation (reconciliation brief, governance surface):
-- design.md sec-6 gains a DEC-377 row in the clause table.
-- REV-074 gains `[[change]] target = "DEC-377" action = "modify"` plus a
-  replacement statement that keeps the still-true first paragraph (global
-  installs converge without pruning — untouched by this slice) and rewrites the
-  second (unregistered names are refused, not delegated) and the third's
-  `pi → codex` routing (pi has its own adapter).
-- After apply, `doctrine inspect DEC-377` should show the revision inbound; no
-  full `supersede` edge is correct, because DEC-377's global-no-prune clause
-  still stands.
+A DEC is not a legal `revises` target (`src/relation.rs:668`: SPEC, PRD, REQ, ADR,
+POL, STD), so the remediation is a knowledge-record supersession, not a REV row.
+
+Remediation (reconciliation brief item 7 — knowledge-record surface):
+1. `doctrine knowledge new decision "<successor title>"`.
+2. Author its `[facet]` via `doctrine knowledge edit decision <ID>`, restating
+   the whole rule: global installs converge without pruning (unchanged from
+   DEC-377); an explicit `--agent` absent from the registry is refused before any
+   write, naming the registry and suggesting `universal`; pi has its own boot
+   adapter per DEC-389.
+3. `doctrine supersede <NEW> DEC-377`.
+4. `doctrine knowledge status DEC-377 superseded` — a SEPARATE step, or DEC-377
+   stays `accepted` and `doctrine validate` still reports corpus clean.
+5. `doctrine link <NEW> shapes SL-284` (DEC-377 carries `shapes: SL-281`;
+   relations do not migrate).
+
+The spec half stays with REV-074, unchanged: SPEC-009 `D4`, SPEC-010
+`D2`/`REQ-175` and SPEC-011 `REQ-480` restate the same claims. Both halves are
+needed. Design sec-6 gains a NOTE about the supersession rather than a clause row,
+since a DEC cannot appear in that table.
 """
 
 [[finding.turn]]
@@ -120,6 +150,63 @@ note = """
 Accepted. The remedy targets the actual defect — a governance clause table that
 never looked at the decision the slice falsifies — and correctly refuses a blanket
 `supersede`, since DEC-377's global-no-prune clause survives untouched.
+"""
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = """
+Reopening on new evidence. The disposition verified the observation correctly but
+routed the remediation wrongly: it told reconcile to add a `DEC-377` row to
+REV-074. A Revision cannot revise a knowledge record — `src/relation.rs:668`
+restricts the `revises` target kinds to [SPEC, PRD, REQ, ADR, POL, STD] — so
+`doctrine revision change add 74 --target DEC-377` is refused and reconcile would
+have stalled on its first command.
+
+Caught by corpus memory mem.fact.revision.no-knowledge-record-target, then
+verified against the source rather than taken on trust. The finding itself
+(DEC-377 is unmarked drift) is unchanged; only the remedy was wrong.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """
+Re-disposed with the correct route; the observation stands unchanged, only the
+instrument was wrong.
+
+A DEC is not a legal `revises` target (`src/relation.rs:668`: SPEC, PRD, REQ, ADR,
+POL, STD), so the remediation is a knowledge-record supersession, not a REV row.
+
+Remediation (reconciliation brief item 7 — knowledge-record surface):
+1. `doctrine knowledge new decision "<successor title>"`.
+2. Author its `[facet]` via `doctrine knowledge edit decision <ID>`, restating
+   the whole rule: global installs converge without pruning (unchanged from
+   DEC-377); an explicit `--agent` absent from the registry is refused before any
+   write, naming the registry and suggesting `universal`; pi has its own boot
+   adapter per DEC-389.
+3. `doctrine supersede <NEW> DEC-377`.
+4. `doctrine knowledge status DEC-377 superseded` — a SEPARATE step, or DEC-377
+   stays `accepted` and `doctrine validate` still reports corpus clean.
+5. `doctrine link <NEW> shapes SL-284` (DEC-377 carries `shapes: SL-281`;
+   relations do not migrate).
+
+The spec half stays with REV-074, unchanged: SPEC-009 `D4`, SPEC-010
+`D2`/`REQ-175` and SPEC-011 `REQ-480` restate the same claims. Both halves are
+needed. Design sec-6 gains a NOTE about the supersession rather than a clause row,
+since a DEC cannot appear in that table.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Accepted. I verified the target-kind restriction in the engine source myself
+rather than relying on the memory that surfaced it — `revises` is
+`TargetSpec::Kinds(&[SPEC, PRD, REQ, ADR, POL, STD])`. The corrected remedy is
+executable end to end and keeps DEC-377's still-true paragraph alive in the
+successor, which a blanket supersede alone would have muddled.
 """
 
 [[finding]]
