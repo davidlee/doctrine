@@ -100,3 +100,19 @@ settling before implementing, not now:
   accidental partial cover.
 - The counts above reproduce with a per-worktree `ls` of `.doctrine/skills`,
   `.doctrine/agents`, `.doctrine/memory/shipped`.
+
+## Further evidence (2026-10-22): client repo, pi harness
+
+A client project reported `doctrine worktree fork` → "provisioned … 0 copied",
+and the fork had no `.pi/agents/` (the pi harness agent-link directory,
+`install/manifest.toml` `[harness.pi] agents`) and no `.doctrine/agents/pi/`
+that its `dispatch-worker.md` symlink points into. The user copied both in by
+hand (recorded in that project's IMP-050).
+
+The workaround first offered was to list both in `.worktreeinclude`. That works
+mechanically — `allowlist_violations` checks only `WITHHELD`, not
+`DERIVED_RUNTIME` — but it copies a projection that `install` owns and should
+regenerate, so it can carry a stale or foreign agent def into the fork. It is a
+stopgap a client may choose, not the fix; this item remains the fix. It also
+shows the gap extends to the harness link directories (`.claude/agents`,
+`.pi/agents`, `.agents/skills`), not only the `.doctrine/` roots.
