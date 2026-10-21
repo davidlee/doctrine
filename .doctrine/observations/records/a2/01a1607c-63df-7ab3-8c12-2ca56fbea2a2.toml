@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1607c-63df-7ab3-8c12-2ca56fbea2a2"
+recorded_at = "2026-10-21T22:02:07.199035478Z"
+kind = "friction"
+summary = "slice skill: 'doctrine link SL-NNN specs SPEC-NNN' (in skill + slice toml template) refused — specs not a legal SL label"
+detail = "slice skill step 4 and the scaffolded slice-NNN.toml comment both cite 'doctrine link SL-NNN specs SPEC-NNN'; link refuses it (legal: references/supersedes/governed_by/related/fulfils). Used references --role implements."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
