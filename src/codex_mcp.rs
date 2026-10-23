@@ -29,6 +29,19 @@ pub(crate) const CODEX_MCP_TABLE: &str = "mcp_servers";
 /// test holds them together (STD-001).
 pub(crate) const CODEX_MCP_SERVER_KEY: &str = "doctrine";
 
+// The keys of a `[mcp_servers.<key>]` table. Named so that "which key is the
+// invocation itself" has one answer rather than a literal per classifier.
+/// The command codex execs.
+pub(crate) const KEY_COMMAND: &str = "command";
+/// The argv that command is given.
+pub(crate) const KEY_ARGS: &str = "args";
+/// A url transport — not a stdio server doctrine can own.
+pub(crate) const KEY_URL: &str = "url";
+/// Codex's own on/off switch for a server.
+pub(crate) const KEY_ENABLED: &str = "enabled";
+/// The env whitelist codex honours; doctrine's own entry carries one value.
+pub(crate) const KEY_ENV_VARS: &str = "env_vars";
+
 /// The shell that reads `DOCTRINE_BIN` for the codex entry — codex execs
 /// `command` literally (no `${VAR:-default}` interpolation), so the override
 /// must run through a shell (DEC-323). That POSIX-shell dependency is declared
@@ -80,10 +93,10 @@ pub(crate) fn normalise(line: &str) -> String {
 /// Every other key on the table is ignored: ownership of the *shape* is what
 /// this answers, not an opinion on extra keys.
 pub(crate) fn is_wrapper_form(table: &dyn toml_edit::TableLike) -> bool {
-    let Some(args) = table.get("args").and_then(|i| i.as_array()) else {
+    let Some(args) = table.get(KEY_ARGS).and_then(|i| i.as_array()) else {
         return false;
     };
-    table.get("command").and_then(|i| i.as_str()) == Some(CODEX_MCP_SHELL)
+    table.get(KEY_COMMAND).and_then(|i| i.as_str()) == Some(CODEX_MCP_SHELL)
         && args.len() == 2
         && args.get(0).and_then(|v| v.as_str()) == Some(CODEX_MCP_SHELL_FLAG)
         && args
@@ -117,8 +130,6 @@ pub(crate) enum Degraded {
     UserUnparseable,
     /// The destination parses but the entry's shape is not interpretable.
     UserMalformed,
-    /// The running binary is not the `doctrine` on `PATH`, so a baked path would
-    /// not be the binary the user actually runs.
     /// A `doctrine` is on `PATH` but it is not the running binary. Both paths
     /// are carried, because the report's remedy is naming them side by side
     /// ("bake `on_path`" vs "run install as `exec`").
@@ -267,11 +278,11 @@ pub(crate) fn classify_user(read: FileRead<'_>, bake: &Path) -> Result<UserEntry
         EntryLookup::NotATable => return Err(Degraded::UserMalformed),
         EntryLookup::Entry(table) => table,
     };
-    let Some(command) = table.get("command").and_then(|i| i.as_str()) else {
+    let Some(command) = table.get(KEY_COMMAND).and_then(|i| i.as_str()) else {
         return Err(Degraded::UserMalformed);
     };
     // A url transport is a server doctrine cannot own — never silently replaced.
-    if table.get("url").is_some() {
+    if table.get(KEY_URL).is_some() {
         return Err(Degraded::UserMalformed);
     }
     let Some(args) = string_args(table) else {
@@ -279,13 +290,13 @@ pub(crate) fn classify_user(read: FileRead<'_>, bake: &Path) -> Result<UserEntry
     };
     // `enabled` is the one key that can veto: codex honours a disabled server,
     // so a matching entry that is switched off is not the entry we want.
-    let enabled_off = table.get("enabled").and_then(toml_edit::Item::as_bool) == Some(false);
+    let enabled_off = table.get(KEY_ENABLED).and_then(toml_edit::Item::as_bool) == Some(false);
     if !enabled_off && Path::new(command) == bake && args_are_serve(&args) {
         return Ok(UserEntry::Current);
     }
     let dropped: Vec<String> = table
         .iter()
-        .filter(|(key, _)| !matches!(*key, "command" | "args"))
+        .filter(|(key, _)| !is_invocation_key(key))
         .flat_map(|(key, item)| render_dropped(key, item))
         .collect();
     Ok(UserEntry::Replace {
@@ -376,22 +387,22 @@ pub(crate) fn classify_project(read: FileRead<'_>) -> ProjectEntry {
     if is_wrapper_form(table) {
         let extra_keys = table
             .iter()
-            .filter(|(key, _)| !matches!(*key, "command" | "args" | "env_vars"))
+            .filter(|(key, item)| !is_invocation_key(key) && !is_emitted_env_vars(key, item))
             .flat_map(|(key, item)| render_dropped(key, item))
             .collect();
         return ProjectEntry::OwnedWrapper { extra_keys };
     }
     // A url transport is a server doctrine cannot replace with a stdio entry —
     // an explicit choice, like a path command.
-    if let Some(url) = table.get("url") {
+    if let Some(url) = table.get(KEY_URL) {
         return match url.as_str() {
-            Some(url) => ProjectEntry::Override {
+            Some(url) if !url.is_empty() => ProjectEntry::Override {
                 target: url.to_string(),
             },
-            None => ProjectEntry::Malformed,
+            _ => ProjectEntry::Malformed,
         };
     }
-    let Some(command) = table.get("command").and_then(|i| i.as_str()) else {
+    let Some(command) = table.get(KEY_COMMAND).and_then(|i| i.as_str()) else {
         return ProjectEntry::Malformed;
     };
     if command.is_empty() {
@@ -399,7 +410,7 @@ pub(crate) fn classify_project(read: FileRead<'_>) -> ProjectEntry {
     }
     // Absent `args` is fine here (a bare command is a complete entry); present
     // but unreadable is not.
-    if table.get("args").is_some() && string_args(table).is_none() {
+    if table.get(KEY_ARGS).is_some() && string_args(table).is_none() {
         return ProjectEntry::Malformed;
     }
     if command.contains('/') {
@@ -416,9 +427,25 @@ pub(crate) fn classify_project(read: FileRead<'_>) -> ProjectEntry {
 /// non-string.
 fn string_args(table: &dyn toml_edit::TableLike) -> Option<Vec<String>> {
     table
-        .get("args")
+        .get(KEY_ARGS)
         .and_then(|i| i.as_array())
         .and_then(|a| a.iter().map(|v| v.as_str().map(String::from)).collect())
+}
+
+/// Whether this key spells the invocation itself — replaced by a write, so never
+/// named as a loss by either classifier.
+fn is_invocation_key(key: &str) -> bool {
+    matches!(key, KEY_COMMAND | KEY_ARGS)
+}
+
+/// Whether this is the `env_vars` list doctrine itself emitted: exactly one
+/// entry, [`CODEX_MCP_ENV`]. Any other list is the user's — it drops the
+/// forwarding doctrine needs or adds its own — so the report names it.
+fn is_emitted_env_vars(key: &str, item: &toml_edit::Item) -> bool {
+    key == KEY_ENV_VARS
+        && item.as_array().is_some_and(|list| {
+            list.len() == 1 && list.get(0).and_then(|v| v.as_str()) == Some(CODEX_MCP_ENV)
+        })
 }
 
 /// Whether `args` is exactly the serve invocation — derived from
@@ -438,19 +465,32 @@ fn invocation(command: &str, args: &[String]) -> String {
         .join(" ")
 }
 
-/// How one key about to be dropped is named in the report. A value keeps its
-/// TOML spelling (`enabled = false`); a sub-table lists its keys (`env.FOO`),
-/// because a nested value's spelling is not what the user is being asked about.
+/// How one key about to be dropped is named in the report. A top-level value
+/// keeps its TOML spelling (`enabled = false`) on a single line — its own layout
+/// is not part of what the user loses. A sub-table is walked to its leaves, each
+/// named by its full dotted path only (`env.sub.FOO`), because a nested value's
+/// spelling is not what the user is being asked about; a table with no leaves has
+/// nothing to spell and appears as its bare dotted path.
 fn render_dropped(key: &str, item: &toml_edit::Item) -> Vec<String> {
+    walk_dropped(key, item, false)
+}
+
+/// [`render_dropped`]'s recursion, where `nested` says whether this item was
+/// reached by descending into a table.
+fn walk_dropped(path: &str, item: &toml_edit::Item, nested: bool) -> Vec<String> {
     if let Some(table) = item.as_table_like() {
-        return table
+        let mut leaves: Vec<String> = table
             .iter()
-            .map(|(sub, _)| format!("{key}.{sub}"))
+            .flat_map(|(key, child)| walk_dropped(&format!("{path}.{key}"), child, true))
             .collect();
+        if leaves.is_empty() {
+            leaves.push(path.to_string());
+        }
+        return leaves;
     }
-    match item.as_value() {
-        Some(value) => vec![format!("{key} = {}", value.to_string().trim())],
-        None => vec![key.to_string()],
+    match (item.as_value(), nested) {
+        (Some(value), false) => vec![format!("{path} = {}", normalise(&value.to_string()))],
+        _ => vec![path.to_string()],
     }
 }
 
@@ -604,7 +644,12 @@ pub(crate) fn consent_block(plan: &CodexUserPlan) -> Option<String> {
         let lost = if extra_keys.is_empty() {
             String::new()
         } else {
-            format!(" (with {})", extra_keys.join(", "))
+            format!(
+                "{}{}{}",
+                text::WITH_OPEN,
+                extra_keys.join(", "),
+                text::WITH_CLOSE
+            )
         };
         let removes = format!("{} {CODEX_CONFIG_REL}{lost}", text::REMOVES_LEAD);
         lines.push(labelled(CONSENT_LABEL_COLUMN, "removes", &removes));
@@ -730,28 +775,24 @@ pub(crate) fn path_shadow(command: &str) -> String {
 /// there is no command to offer.
 #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn skipped(plan: &CodexUserPlan) -> Option<String> {
-    let cause = cause(plan.degraded.as_ref()?, plan);
+    let cause = cause(plan.degraded.as_ref()?, plan.user_config.as_deref());
     let mut lines = vec![format!("{} {} {cause}", text::PREFIX, text::SKIPPED)];
     if let Some(bake) = &plan.bake {
-        lines.push(format!("  run: {}", add_command(bake)));
+        lines.push(format!("{}{}", text::RUN_LEAD, add_command(bake)));
     }
     Some(lines.join("\n"))
 }
 
-/// The cause clause of a skip line. The file-specific causes only arise after
-/// [`destination`] resolved; [`config_text`] keeps the function total for the
-/// two that never have a file to name.
-fn cause(degraded: &Degraded, plan: &CodexUserPlan) -> String {
+/// The cause clause of a skip line. The three file-specific causes only arise
+/// after [`destination`] resolved, so they take that path directly and name the
+/// file when one is there (`file_cause`).
+fn cause(degraded: &Degraded, user_config: Option<&Path>) -> String {
     match degraded {
         Degraded::BadCodexHome => text::CAUSE_BAD_CODEX_HOME.to_string(),
         Degraded::NoHome => text::CAUSE_NO_HOME.to_string(),
-        Degraded::UserUnreadable => {
-            format!("{} {}", config_text(plan), text::CAUSE_UNREADABLE)
-        }
-        Degraded::UserUnparseable => {
-            format!("{} {}", config_text(plan), text::CAUSE_UNPARSEABLE)
-        }
-        Degraded::UserMalformed => format!("{} {}", config_text(plan), text::CAUSE_MALFORMED),
+        Degraded::UserUnreadable => file_cause(user_config, text::CAUSE_UNREADABLE),
+        Degraded::UserUnparseable => file_cause(user_config, text::CAUSE_UNPARSEABLE),
+        Degraded::UserMalformed => file_cause(user_config, text::CAUSE_MALFORMED),
         Degraded::ExecNotOnPath { exec, on_path } => match on_path {
             Some(on_path) => format!(
                 "{} ({}) {} ({})",
@@ -772,12 +813,13 @@ fn cause(degraded: &Degraded, plan: &CodexUserPlan) -> String {
     }
 }
 
-/// The user config path as the report names it.
-fn config_text(plan: &CodexUserPlan) -> String {
-    plan.user_config
-        .as_ref()
-        .map(|path| path.display().to_string())
-        .unwrap_or_default()
+/// A cause about the user config file: names the file, then the reason. The path
+/// is always resolved when a file cause arises, so nothing here invents one.
+fn file_cause(user_config: Option<&Path>, reason: &str) -> String {
+    match user_config {
+        Some(path) => format!("{} {reason}", path.display()),
+        None => reason.to_string(),
+    }
 }
 
 /// The user said no: nothing changed, the risk is named (EVD-032), and the exact
@@ -787,7 +829,7 @@ pub(crate) fn declined(bake: &Path) -> String {
     [
         format!("{} {}", text::PREFIX, text::DECLINED),
         format!("  {}", text::DECLINED_WARN),
-        format!("  to register later: {}", add_command(bake)),
+        format!("{}{}", text::REGISTER_LATER_LEAD, add_command(bake)),
     ]
     .join("\n")
 }
@@ -806,6 +848,12 @@ mod text {
         "Codex asks you to trust each new folder before doctrine connects there.";
     pub(super) const ASK_WRITE: &str = "Write user config? [y/N]";
     pub(super) const ASK_REMOVE: &str = "Remove it? [y/N]";
+    /// Precedes the command a skip or a decline offers to run.
+    pub(super) const RUN_LEAD: &str = "  run: ";
+    pub(super) const REGISTER_LATER_LEAD: &str = "  to register later: ";
+    /// The bracket a removal's lost extra keys are named in.
+    pub(super) const WITH_OPEN: &str = " (with ";
+    pub(super) const WITH_CLOSE: &str = ")";
 
     // --- report (lower-case register: doctrine describing its own actions) ---
     pub(super) const PREFIX: &str = "codex:";
@@ -1158,10 +1206,13 @@ mod tests {
             "[mcp_servers.doctrine]\ncommand = \"{BAKE}\"\nargs = [\"serve\", \"--mcp\"]\nurl = \"https://example.test/mcp\"\n"
         );
         assert_eq!(classify(&with_command), Err(Degraded::UserMalformed));
+        let bad_url = format!(
+            "[mcp_servers.doctrine]\ncommand = \"{BAKE}\"\nargs = [\"serve\", \"--mcp\"]\nurl = 3\n"
+        );
         assert_eq!(
-            classify("[mcp_servers.doctrine]\nurl = \"https://example.test/mcp\"\n"),
+            classify(&bad_url),
             Err(Degraded::UserMalformed),
-            "a url entry is not a stdio server doctrine can own"
+            "the url branch is what stops a valid command+args reading as Current"
         );
     }
 
@@ -1208,6 +1259,52 @@ mod tests {
         assert_eq!(
             classify_user(FileRead::Unreadable, Path::new(BAKE)),
             Err(Degraded::UserUnreadable)
+        );
+    }
+
+    // --- render_dropped (how the report names a key being dropped) ---
+
+    /// Render every top-level key of a parsed body as the report names it.
+    fn dropped(body: &str) -> Vec<String> {
+        let doc: toml_edit::DocumentMut = body.parse().unwrap();
+        doc.iter()
+            .flat_map(|(key, item)| render_dropped(key, item))
+            .collect()
+    }
+
+    #[test]
+    fn render_dropped_names_nested_leaves_by_their_full_path() {
+        assert_eq!(
+            dropped("[env.sub]\nFOO = \"x\"\nBAR = true\n"),
+            vec!["env.sub.FOO".to_string(), "env.sub.BAR".to_string()],
+            "a nested leaf is named where it lives, not spelled out"
+        );
+    }
+
+    #[test]
+    fn render_dropped_renders_a_multi_line_top_level_value_on_one_line() {
+        assert_eq!(
+            dropped("args2 = [\n  \"a\",\n  \"b\"\n]\n"),
+            vec!["args2 = [ \"a\", \"b\" ]".to_string()],
+            "a top-level value keeps its spelling, its layout is not the user's loss"
+        );
+    }
+
+    #[test]
+    fn render_dropped_renders_a_nested_multi_line_value_as_its_path() {
+        assert_eq!(
+            dropped("[env]\nARGS = [\n  \"a\",\n  \"b\"\n]\n"),
+            vec!["env.ARGS".to_string()],
+            "an array inside a table is named by path, never spelled out"
+        );
+    }
+
+    #[test]
+    fn render_dropped_renders_a_table_without_leaves_as_its_key() {
+        assert_eq!(
+            dropped("x = {}\n"),
+            vec!["x".to_string()],
+            "nothing to spell leaves the bare dotted key"
         );
     }
 
@@ -1266,6 +1363,22 @@ mod tests {
     }
 
     #[test]
+    fn classify_project_owned_wrapper_lists_a_mutated_env_vars() {
+        let entry = format!(
+            "[mcp_servers.doctrine]\ncommand = \"{CODEX_MCP_SHELL}\"\n\
+             args = [\"{CODEX_MCP_SHELL_FLAG}\", '{CODEX_MCP_WRAPPER}']\n\
+             env_vars = [\"DOCTRINE_BIN\", \"FOO\"]\n"
+        );
+        assert_eq!(
+            project(&entry),
+            ProjectEntry::OwnedWrapper {
+                extra_keys: vec!["env_vars = [\"DOCTRINE_BIN\", \"FOO\"]".to_string()],
+            },
+            "env_vars is doctrine's only at exactly its own single value"
+        );
+    }
+
+    #[test]
     fn classify_project_override_for_an_absolute_command() {
         assert_eq!(
             project("[mcp_servers.doctrine]\ncommand = \"/opt/doctrine\"\n"),
@@ -1301,6 +1414,20 @@ mod tests {
         assert_eq!(
             project("[mcp_servers.doctrine]\nurl = 3\n"),
             ProjectEntry::Malformed
+        );
+        assert_eq!(
+            project("[mcp_servers.doctrine]\ncommand = \"doctrine\"\nurl = 3\n"),
+            ProjectEntry::Malformed,
+            "the url branch is what stops this reading as a PATH shadow"
+        );
+    }
+
+    #[test]
+    fn classify_project_malformed_when_url_is_empty() {
+        assert_eq!(
+            project("[mcp_servers.doctrine]\nurl = \"\"\n"),
+            ProjectEntry::Malformed,
+            "an empty url names no server, like an empty command"
         );
     }
 
