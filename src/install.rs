@@ -1082,6 +1082,153 @@ fn run_forward_steps(
     Ok(outcomes)
 }
 
+/// Regenerate the derived runtime tier in `dest` — a fresh worktree of
+/// `source` — from the running binary: install's forward legs minus
+/// `LegacyStarters`. No stamps and no marker move (SL-285 DEC-402, DEC-393,
+/// DEC-399).
+///
+/// Harness detection reads `source` (`dest` may be a bare fork); every write
+/// lands in `dest` and every line on `out`. The legs are bounded twice: the
+/// preflight refuses when boot wiring would rewrite a tracked path, and the
+/// drift check refuses when a leg did.
+///
+/// A `source` that was never installed prints the skip line and returns `Ok`.
+///
+/// # Errors
+///
+/// Refuses when `source`'s stamp is unreadable, when `dest`'s stamp outranks the
+/// running binary without `allow_downgrade`, when the preflight hits tracked
+/// wiring, or when a leg fails.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "consumed by the regeneration verb, SL-285 PHASE-02"
+    )
+)]
+pub(crate) fn regenerate(
+    source: &Path,
+    dest: &Path,
+    allow_downgrade: bool,
+    out: &mut impl Write,
+) -> anyhow::Result<()> {
+    match &read_tracked_stamp(source) {
+        StampRead::Absent => {
+            writeln!(
+                out,
+                "derived tier not regenerated — doctrine not installed in {}",
+                source.display()
+            )?;
+            return Ok(());
+        }
+        StampRead::Unreadable { path, reason } => {
+            bail!(
+                "cannot read {} ({reason}): refusing to regenerate the derived tier",
+                path.display()
+            );
+        }
+        StampRead::Version(_) => {}
+    }
+
+    let manifest = load_manifest()?;
+    let names = resolve_install_harnesses(&[], source, &manifest.harness)?.names;
+    let boot = boot_harnesses(&names, dest, &manifest.harness);
+    let exec = crate::boot::resolve_exec()?;
+
+    let binary = binary_version()?;
+    let dest_stamp = read_tracked_stamp(dest);
+    if let StampRead::Unreadable { path, reason } = &dest_stamp {
+        bail!(
+            "cannot read {} ({reason}): cannot verify the regeneration is not a downgrade",
+            path.display()
+        );
+    }
+    let findings = classify(&dest_stamp, &StampRead::Absent, &binary);
+    if let Some(from) = downgrade_from(&findings)
+        && !allow_downgrade
+    {
+        bail!(
+            "{}; {}",
+            downgrade_warning(from, &binary),
+            ALLOW_DOWNGRADE_HINT
+        );
+    }
+
+    let planned = crate::boot::plan_wire(dest, &exec, &boot)?;
+    let tracked = git::tracked_paths(dest)
+        .context("listing the tracked files of the regeneration destination")?;
+    let stale = tracked_hits(&planned, &tracked);
+    if !stale.is_empty() {
+        bail!(
+            "stale source wiring: regeneration would change tracked {}; run 'doctrine install' in the source and commit",
+            path_list(&stale)
+        );
+    }
+
+    let status_context = "reading the regeneration destination's tracked status";
+    let before = git::tracked_dirty_paths(dest).context(status_context)?;
+
+    sync_memory_leg(dest, &mut *out)?;
+    if let LegOutcome::Failed(failed) = wire_boot_leg(dest, &exec, &boot, &mut *out)? {
+        bail!("{failed}");
+    }
+
+    let args = InstallArgs {
+        agents: &[],
+        skills: &[],
+        domains: &[],
+        only_memory: false,
+        global: false,
+        dry_run: false,
+        yes: true,
+        allow_downgrade,
+    };
+    let catalog = discover()?;
+    let selected = select_for_install_args(&catalog, &args)?;
+    let converged = converge_leg(
+        dest, &args, &manifest, &names, &catalog, &selected, &mut *out,
+    )?;
+    if let LegOutcome::Failed(failed) = converged {
+        bail!("{failed}");
+    }
+
+    let after = git::tracked_dirty_paths(dest).context(status_context)?;
+    let changed = new_tracked_changes(&before, &after);
+    if !changed.is_empty() {
+        bail!(
+            "regeneration changed tracked files: {}",
+            path_list(&changed)
+        );
+    }
+    Ok(())
+}
+
+/// PURE. The tracked paths `after` reports that `before` did not, sorted — a
+/// leg's net new dirt, not the pre-existing kind.
+fn new_tracked_changes(before: &BTreeSet<PathBuf>, after: &BTreeSet<PathBuf>) -> Vec<PathBuf> {
+    after.difference(before).cloned().collect()
+}
+
+/// PURE. The paths a planned wiring would write that are tracked, sorted.
+fn tracked_hits(planned: &[Touched], tracked: &BTreeSet<PathBuf>) -> Vec<PathBuf> {
+    planned
+        .iter()
+        .map(|t| t.path.clone())
+        .filter(|path| tracked.contains(path))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+/// PURE. `paths` comma-joined for a refusal line.
+fn path_list(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// The progress line for one removed legacy starter (`rel`: its root-relative `.md`).
 fn legacy_removed_line(rel: &Path) -> String {
     format!(
@@ -7788,6 +7935,142 @@ mod tests {
                 harness: Registry::default(),
             }
         }
+    }
+}
+
+// ── Tests: install::regenerate (SL-285 PHASE-01) ─────────────
+
+#[cfg(test)]
+mod tests_regenerate {
+    use super::*;
+    use crate::worktree::test_helpers::{git, init_repo};
+
+    /// A repo with a base commit, returned canonical. `stamp` writes the
+    /// committed tracked install version; `None` leaves the repo uninstalled.
+    fn repo_with_stamp(dir: &Path, stamp: Option<&str>) -> PathBuf {
+        let repo = init_repo(dir);
+        let Some(version) = stamp else {
+            return repo;
+        };
+        let toml = repo.join(crate::config_file::DOCTRINE_TOML);
+        fs::create_dir_all(toml.parent().unwrap()).unwrap();
+        fs::write(
+            &toml,
+            format!("[install]\ninstalled-version = \"{version}\"\n"),
+        )
+        .unwrap();
+        git(&repo, &["add", "."]);
+        git(&repo, &["commit", "-q", "-m", "stamp"]);
+        repo
+    }
+
+    fn text(out: &[u8]) -> String {
+        String::from_utf8(out.to_vec()).unwrap()
+    }
+
+    /// EX-6: an uninstalled source is not regenerated — one exact line, no writes.
+    #[test]
+    fn regenerate_skips_an_uninstalled_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_stamp(&tmp.path().join("repo"), None);
+        let mut out = Vec::new();
+        regenerate(&repo, &repo, false, &mut out).unwrap();
+        assert_eq!(
+            text(&out),
+            format!(
+                "derived tier not regenerated — doctrine not installed in {}\n",
+                repo.display()
+            ),
+            "the skip names the source, byte-exact",
+        );
+        assert!(
+            crate::git::tracked_dirty_paths(&repo).unwrap().is_empty(),
+            "a skipped regeneration writes nothing tracked",
+        );
+        assert!(
+            !repo.join(".doctrine/memory/shipped").exists(),
+            "no leg ran — the corpus was not materialised",
+        );
+    }
+
+    /// EX-3: a dest stamp newer than the binary refuses before any write; the
+    /// lever gets past it.
+    #[test]
+    fn regenerate_refuses_a_downgrade_unless_allowed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_stamp(&tmp.path().join("repo"), Some("999.0.0"));
+
+        let mut out = Vec::new();
+        let refused = regenerate(&repo, &repo, false, &mut out).unwrap_err();
+        assert!(
+            format!("{refused:#}").contains("999.0.0"),
+            "the refusal names the newer stamp: {refused:#}",
+        );
+        assert!(
+            !repo.join(".doctrine/memory/shipped").exists(),
+            "refused before any write",
+        );
+
+        // With the lever the downgrade gate passes; this bare repo detects no
+        // harness, so the harness legs are no-ops and the corpus leg runs.
+        let mut allowed = Vec::new();
+        match regenerate(&repo, &repo, true, &mut allowed) {
+            Ok(()) => assert!(
+                repo.join(".doctrine/memory/shipped").is_dir(),
+                "the lever ran the legs",
+            ),
+            Err(e) => assert!(
+                !format!("{e:#}").contains("999.0.0"),
+                "the lever got past the downgrade gate: {e:#}",
+            ),
+        }
+    }
+
+    /// EX-4 (RV-425 F-1): the preflight refuses a tracked file boot wiring would
+    /// rewrite — and refuses it before any write.
+    #[test]
+    fn regenerate_refuses_stale_tracked_wiring() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_stamp(&tmp.path().join("repo"), Some(env!("CARGO_PKG_VERSION")));
+        // Claude is detected by its `detect` dir; `.mcp.json` is tracked and
+        // carries no doctrine entry, so the wiring would rewrite it.
+        fs::create_dir_all(repo.join(".claude")).unwrap();
+        let mcp = repo.join(".mcp.json");
+        fs::write(&mcp, "{}\n").unwrap();
+        git(&repo, &["add", ".mcp.json"]);
+        git(&repo, &["commit", "-q", "-m", "mcp"]);
+        let before = fs::read(&mcp).unwrap();
+
+        let mut out = Vec::new();
+        let refused = regenerate(&repo, &repo, false, &mut out).unwrap_err();
+        assert!(
+            format!("{refused:#}").contains(".mcp.json"),
+            "F-1: the refusal names the stale tracked wiring: {refused:#}",
+        );
+        assert_eq!(
+            fs::read(&mcp).unwrap(),
+            before,
+            "refused before any write — the file is byte-identical",
+        );
+    }
+
+    /// EX-5's lever, isolated: drift is `after` minus `before`, sorted.
+    #[test]
+    fn new_tracked_changes_is_after_minus_before() {
+        let set = |names: &[&str]| -> BTreeSet<PathBuf> {
+            names.iter().map(|n| PathBuf::from(*n)).collect()
+        };
+        let before = set(&["b.txt", "a.txt"]);
+        let after = set(&["a.txt", "c.txt"]);
+        assert_eq!(
+            new_tracked_changes(&before, &after),
+            vec![PathBuf::from("c.txt")],
+            "only paths new to `after`, sorted",
+        );
+        assert!(
+            new_tracked_changes(&after, &after).is_empty(),
+            "no new dirt, no drift",
+        );
     }
 }
 

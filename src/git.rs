@@ -1932,6 +1932,63 @@ pub(crate) fn tree_clean(root: &Path) -> Result<bool, CaptureError> {
     Ok(status.is_empty())
 }
 
+/// The paths tracked in `root`'s index, root-relative — `git ls-files -z`,
+/// split on NUL so newline-bearing names survive. The same frame as install's
+/// `Touched::path` and [`tracked_dirty_paths`], so a caller may intersect the
+/// two directly (SL-285 T4).
+///
+/// # Errors
+///
+/// Returns [`CaptureError::Git`] if `git ls-files` fails or a path is not UTF-8.
+pub(crate) fn tracked_paths(
+    root: &Path,
+) -> Result<std::collections::BTreeSet<PathBuf>, CaptureError> {
+    let raw = git_bytes(root, &["ls-files", "-z"])?;
+    raw.split(|b| *b == 0)
+        .filter(|chunk| !chunk.is_empty())
+        .map(|chunk| {
+            std::str::from_utf8(chunk)
+                .map(PathBuf::from)
+                .map_err(|e| CaptureError::Git(format!("non-utf8 path from git ls-files: {e}")))
+        })
+        .collect()
+}
+
+/// The tracked paths in `root` whose bytes differ from the index — `git status
+/// --porcelain --untracked-files=no`, the path from column 4 (a rename `R  a ->
+/// b` reports its destination). Untracked scratch is excluded by design: it is
+/// not part of the tracked tree. [`git_text`] is deliberately not used here — it
+/// trims, which would eat the first line's leading status column.
+///
+/// # Errors
+///
+/// Returns [`CaptureError::Git`] if `git status` fails or its output is not UTF-8.
+pub(crate) fn tracked_dirty_paths(
+    root: &Path,
+) -> Result<std::collections::BTreeSet<PathBuf>, CaptureError> {
+    let bytes = git_bytes(root, &["status", "--porcelain", "--untracked-files=no"])?;
+    let status = std::str::from_utf8(&bytes)
+        .map_err(|e| CaptureError::Git(format!("non-utf8 output from git status: {e}")))?;
+    Ok(parse_porcelain_paths(status))
+}
+
+/// PURE. The paths in `git status --porcelain` output: porcelain v1 puts the
+/// status in columns 1-2 and the path from column 4. A rename or copy names
+/// both sides — the destination is the one that exists.
+fn parse_porcelain_paths(status: &str) -> std::collections::BTreeSet<PathBuf> {
+    status
+        .lines()
+        .filter_map(|line| {
+            let path = line.get(3..)?;
+            let renamed = line.starts_with('R') || line.starts_with('C');
+            Some(match (renamed, path.rsplit_once(" -> ")) {
+                (true, Some((_from, to))) => PathBuf::from(to),
+                _ => PathBuf::from(path),
+            })
+        })
+        .collect()
+}
+
 // --- SL-228 PHASE-01: the funnel read surface — git primitives (design §8) ----
 // Four orchestrator-facing reads the dispatch funnel needs, each a thin git seam
 // the read verbs (`dispatch tree-state|delta|history|ignored`) compose so the
@@ -2978,7 +3035,8 @@ mod tests {
         diff_doctrine_paths, empty_tree_oid, explicit_identity, index_matches, last_corpus_commit,
         list_worktrees, live_worktree_for_ref, log_oneline, normalize_remote_url,
         parse_worktree_for_ref, parse_worktree_records, restore_paths, sha256, three_dot_diff,
-        tree_clean, tree_clean_untracked, worktree_blob_oid, worktree_for_ref,
+        tracked_dirty_paths, tracked_paths, tree_clean, tree_clean_untracked, worktree_blob_oid,
+        worktree_for_ref,
     };
 
     use crate::kinds::DISPATCH_REF_PREFIX;
@@ -5812,6 +5870,33 @@ branch refs/heads/main
         assert!(
             !super::tree_clean(repo.path()).expect("dirty"),
             "tracked modification is dirt",
+        );
+    }
+
+    /// `tracked_paths` lists the index root-relative and `tracked_dirty_paths`
+    /// reports the tracked paths whose bytes moved — the pair SL-285's
+    /// regeneration preflight and drift check intersect.
+    #[test]
+    fn tracked_paths_and_dirty_paths_share_the_root_relative_frame() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "1", "first");
+        repo.write("untracked.txt", "x");
+
+        assert_eq!(
+            tracked_paths(repo.path()).expect("tracked"),
+            std::collections::BTreeSet::from([PathBuf::from("a.txt")]),
+            "the index, root-relative — untracked scratch is not tracked",
+        );
+        assert!(
+            tracked_dirty_paths(repo.path()).expect("clean").is_empty(),
+            "untracked scratch is not tracked dirt (--untracked-files=no)",
+        );
+
+        repo.write("a.txt", "changed");
+        assert_eq!(
+            tracked_dirty_paths(repo.path()).expect("dirty"),
+            std::collections::BTreeSet::from([PathBuf::from("a.txt")]),
+            "a modified tracked file is tracked dirt, in the same frame",
         );
     }
 
