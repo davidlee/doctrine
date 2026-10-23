@@ -215,6 +215,72 @@
           bubblewrap = pkgs.bubblewrap;
         };
 
+        # quotient `form-1` forms (`quotient help form`): the jails quotient's
+        # `pi_agent` runs a delegate in, carrying this project's toolchain and
+        # env. Interim copy of satan's `quotientFormFamily` (satan flake.nix);
+        # retire for quotient IMP-003's shared builder (CHR-183).
+        #
+        # The root is the server-supplied cwd, bound at its own absolute path:
+        # read-only or writable is the capability's one word. The form's one
+        # positional is the session directory; pi's argv follows verbatim.
+        quotientForms = let
+          sessionVar = "QUOTIENT_ACTIVE_SESSION_DIR";
+          rawArg = jailLib.combinators.unsafe-add-raw-args;
+          mkForm = capability: let
+            name = "doctrine-quotient-${capability}";
+            formJail = mkJail jailLib.makeJailedPi {
+              inherit name;
+              # No /workspace launch-dir mount and no env-sourced deps: the
+              # root and session dir below are the form's whole addition.
+              mountLaunchDir = false;
+              workspaceDepsFromEnv = false;
+              extraOptions =
+                jailEnvOptions
+                ++ [
+                  # The root is bound at its host path, so host and delegate
+                  # share `target/`: differing rustflags (.envrc's mold flag)
+                  # would make each rebuild over the other. Not RUSTC_WRAPPER:
+                  # sccache's host cache dir is unwritable here, and the
+                  # wrapper does not enter cargo's fingerprint.
+                  (jailLib.combinators.try-fwd-env "CARGO_BUILD_RUSTFLAGS")
+                  (rawArg (
+                    if capability == "read"
+                    then ''--ro-bind "$PWD" "$PWD"''
+                    else ''--bind "$PWD" "$PWD"''
+                  ))
+                  (rawArg ("--bind \"$" + sessionVar + "\" \"$" + sessionVar + "\""))
+                  (rawArg "--tmpfs /tmp")
+                  # After the generator's own --chdir "$HOME": the later wins.
+                  (rawArg ''--chdir "$PWD"'')
+                  (rawArg "--die-with-parent")
+                ];
+            };
+          in
+            pkgs.writeShellScriptBin name ''
+              set -euo pipefail
+              if [ "$#" -lt 1 ]; then
+                echo "${name}: missing the session directory (the one positional)" >&2
+                exit 64
+              fi
+              session_dir=$1
+              shift
+              case "$session_dir" in
+                /*) ;;
+                *) echo "${name}: session directory must be absolute: $session_dir" >&2; exit 64 ;;
+              esac
+              if [ ! -d "$session_dir" ]; then
+                echo "${name}: no session directory at $session_dir" >&2
+                exit 64
+              fi
+              export ${sessionVar}="$session_dir"
+              exec ${formJail}/bin/jailed-${name} "$@"
+            '';
+        in
+          lib.optionalAttrs isLinux {
+            doctrine-quotient-read = mkForm "read";
+            doctrine-quotient-write = mkForm "write";
+          };
+
         # Frontend: hermetic bun build → web/map/dist, embedded into the binary
         # via rust-embed (release profile reads web/map/dist/, debug reads
         # web/map/). dist is gitignored, so crane's git-based cleanCargoSource
@@ -343,6 +409,7 @@
 
         packages =
           jailPkgs
+          // quotientForms
           // {
             inherit doctrine;
             # Unjailed dirge pulled straight from the agents flake — same pkgs +

@@ -59,6 +59,10 @@ subagents for bounded work; keep judgement and acceptance for yourself.
 | `research` | read-only, low thinking | judgement over the tree: governance applicability, tradeoffs, first-pass review |
 | `write` | read/write | mechanical edits: renames, fixture updates, boilerplate, doc sweeps |
 
+- **Always pass `cwd`** (the repo root, `/home/david/dev/doctrine`). This project's quotient
+  server is launched outside the repo (IMP-522), so the default cwd is not an
+  allowed root. Its forms carry the Rust toolchain; a `write` call may root at
+  the repo root.
 - **Prompts.** Self-contained: name files, the exact question, and the output
   shape. Ask for batched reads and a capped answer — the policy ceiling is a
   handful of requests, and a one-file-per-turn delegate runs out before it answers.

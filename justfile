@@ -211,6 +211,15 @@ clean:
 ## INSTALL
 ##
 
+# Build doctrine's quotient forms (flake.nix `quotientForms`) to fixed,
+# GC-rooted links, which the doctrine quotient policy names as
+# `<state>/forms/doctrine-<capability>/bin/doctrine-quotient-<capability>`.
+# Interim until quotient IMP-003 (CHR-183).
+quotient-forms state=(env("XDG_STATE_HOME", env("HOME") / ".local/state") / "quotient"):
+  mkdir -p {{state}}/forms
+  nix build -o {{state}}/forms/doctrine-read .#doctrine-quotient-read
+  nix build -o {{state}}/forms/doctrine-write .#doctrine-quotient-write
+
 # Catches source-filter / asset-embed gaps `cargo build` can't (it reads the real
 # web/map/dist on disk; the ix sandbox builds the frontend hermetically). Slow
 # first run, crane-cached after. Host-real; a genuine failure exits non-zero, but
