@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1690f-9b0e-7ed0-9a85-fbcf5a525f09"
+recorded_at = "2026-10-23T13:59:52.846348177Z"
+kind = "friction"
+summary = "[phase-plan; SL-286] pi judgement profile ended its first turn with no answer after 9 requests"
+detail = "quotient pi_agent profile=judgement (deepseek-flash, high thinking): read all files as asked, then stopped (termination=stop) with result=null. A follow-up turn in the same session asking for the answer produced it in 2 requests. Also: transcript_budget_bytes=14000 made the transcript repeat the full result, doubling the tokens returned to the orchestrator."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
