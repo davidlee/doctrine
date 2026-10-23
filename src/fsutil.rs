@@ -51,26 +51,8 @@ pub(crate) fn create_new_file(path: &Path) -> std::io::Result<File> {
 /// The pid disambiguates distinct processes; a process-global counter disambiguates
 /// concurrent same-process writers (the map-server's axum/tokio tasks), so neither
 /// renames a temp the other already consumed (SL-113 D4). Last rename wins.
-/// A symlinked `path` is written *through* to its resolved target, so the link
-/// survives; an unresolvable (dangling or cyclic) link is an error naming the
-/// link, never a silent replace (RV-427 F-7).
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     static TEMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    // A rename onto a link path would replace the link itself, so target the
-    // resolved file: temp, mode, and rename all live beside the real target.
-    let resolved;
-    let path = match fs::symlink_metadata(path) {
-        Ok(meta) if meta.file_type().is_symlink() => {
-            resolved = fs::canonicalize(path).with_context(|| {
-                format!(
-                    "Failed to resolve symlink {} — refusing to replace it",
-                    path.display()
-                )
-            })?;
-            resolved.as_path()
-        }
-        _ => path,
-    };
     let dir = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -93,6 +75,32 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     preserve_mode(path, &tmp)?;
     fs::rename(&tmp, path)
         .with_context(|| format!("Failed to rename {} -> {}", tmp.display(), path.display()))
+}
+
+/// Write `bytes` to the file `path` names *through* a symlink, keeping the link.
+///
+/// Opt-in for a file the user may have linked (RV-427 F-7): an in-repo engine
+/// write stays on [`write_atomic`], which replaces a link rather than following
+/// it out of the tree — a repo-committed symlink must never redirect doctrine's
+/// own writes. Here a symlinked `path` is resolved and its target rewritten; an
+/// unresolvable (dangling or cyclic) link is an error naming the link, never a
+/// silent replace.
+pub(crate) fn write_atomic_through_link(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+    let Ok(meta) = fs::symlink_metadata(path) else {
+        return write_atomic(path, bytes);
+    };
+    if !meta.file_type().is_symlink() {
+        return write_atomic(path, bytes);
+    }
+    // A rename onto the link path would replace the link itself, so target the
+    // resolved file: temp, mode, and rename all live beside the real target.
+    let resolved = fs::canonicalize(path).with_context(|| {
+        format!(
+            "Failed to resolve symlink {} — refusing to replace it",
+            path.display()
+        )
+    })?;
+    write_atomic(&resolved, bytes)
 }
 
 /// Give `tmp` the mode of `existing` when `existing` is already on disk. A
@@ -568,7 +576,7 @@ mod tests {
     }
 
     #[test]
-    fn write_atomic_through_a_symlink_updates_the_target_and_keeps_the_link() {
+    fn write_atomic_through_link_updates_the_target_and_keeps_the_link() {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("settings.json");
         fs::write(&target, "{}").unwrap();
@@ -576,7 +584,7 @@ mod tests {
         let link = dir.path().join("alias.json");
         std::os::unix::fs::symlink("settings.json", &link).unwrap();
 
-        write_atomic(&link, b"{\"a\":1}").unwrap();
+        write_atomic_through_link(&link, b"{\"a\":1}").unwrap();
 
         assert!(
             fs::symlink_metadata(&link)
@@ -597,12 +605,12 @@ mod tests {
     }
 
     #[test]
-    fn write_atomic_through_a_dangling_symlink_errors_and_keeps_the_link() {
+    fn write_atomic_through_link_errors_on_a_dangling_link_and_keeps_it() {
         let dir = tempfile::tempdir().unwrap();
         let link = dir.path().join("alias.toml");
         std::os::unix::fs::symlink("absent.toml", &link).unwrap();
 
-        let err = write_atomic(&link, b"v1").unwrap_err();
+        let err = write_atomic_through_link(&link, b"v1").unwrap_err();
 
         assert!(
             err.to_string().contains(&link.display().to_string()),
@@ -616,6 +624,31 @@ mod tests {
             "an unresolvable link is never replaced"
         );
         assert!(!dir.path().join("absent.toml").exists());
+    }
+
+    #[test]
+    fn write_atomic_replaces_a_symlink_rather_than_following_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("settings.json");
+        fs::write(&target, "{}").unwrap();
+        let link = dir.path().join("alias.json");
+        std::os::unix::fs::symlink("settings.json", &link).unwrap();
+
+        write_atomic(&link, b"{\"a\":1}").unwrap();
+
+        assert!(
+            !fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "a plain write replaces the link, it does not follow it"
+        );
+        assert_eq!(fs::read_to_string(&link).unwrap(), "{\"a\":1}");
+        assert_eq!(
+            fs::read_to_string(&target).unwrap(),
+            "{}",
+            "the link's old target is left untouched"
+        );
     }
 
     #[test]

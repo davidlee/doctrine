@@ -882,7 +882,8 @@ fn project_refusal(entry: &ProjectEntry) -> Option<String> {
 fn remove_project_wrapper(project_config: &Path) -> Result<(), String> {
     let text = fs::read_to_string(project_config).map_err(|e| e.to_string())?;
     let stripped = remove_wrapper(&text).ok_or_else(|| NOT_OUR_WRAPPER.to_string())?;
-    crate::fsutil::write_atomic(project_config, stripped.as_bytes()).map_err(|e| format!("{e:#}"))
+    crate::fsutil::write_atomic_through_link(project_config, stripped.as_bytes())
+        .map_err(|e| format!("{e:#}"))
 }
 
 /// Print one report block as its own paragraph: the leg prints whole blocks, so
@@ -2293,6 +2294,38 @@ mod tests {
         assert_eq!(
             project(&fs::read_to_string(&project_config).unwrap()),
             ProjectEntry::Absent
+        );
+    }
+
+    #[test]
+    fn execute_removal_writes_through_a_symlinked_project_config() {
+        let wrapper = wrapper_entry("");
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".codex")).unwrap();
+        let target = dir.path().join("cfg.toml");
+        fs::write(&target, &wrapper).unwrap();
+        let project_config = dir.path().join(CODEX_CONFIG_REL);
+        std::os::unix::fs::symlink("../cfg.toml", &project_config).unwrap();
+        let planned = plan_of(&current_user(), &wrapper);
+
+        let (outcome, _, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert!(codex.calls.borrow().is_empty());
+        assert_eq!(
+            outcome,
+            CodexUserOutcome::Done(vec![project_config.clone()])
+        );
+        assert!(
+            fs::symlink_metadata(&project_config)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "the user's link survives the rewrite"
+        );
+        assert_eq!(
+            project(&fs::read_to_string(&target).unwrap()),
+            ProjectEntry::Absent,
+            "the write went through to the linked target"
         );
     }
 
