@@ -23,3 +23,11 @@ Field-level preservation (the original choice) is impossible through `codex mcp 
 ## Amended (ASM-015 invalidated, 2026-10-23)
 
 `codex mcp get` reports the effective (merged) entry, not the user layer (user observation; ASM-015). The user-layer read is a direct, read-only parse of the user config file; the write stays `codex mcp add`.
+
+## Amended (RV-427, 2026-10-23)
+
+Adversarial design review (pi, RV-427). Integrated within the user's rulings; disclosed to the user.
+
+- F-2: a project wrapper is owned by shape — `command = "sh"`, `args = ["-c", line]` with line in `CODEX_MCP_WRAPPER_FORMS` — whatever other keys it carries. The strict DEC-332 predicate (keys within {command,args,env_vars}, exact env_vars) left near-miss wrappers foreign and still shadowing, which defeats the retirement this slice requires. Extra keys are listed as removed.
+- F-5: a user entry with `enabled = false` is not current; it is replaced (and re-enabled), and the prompt says so.
+- F-12: a `url`-transport project entry is an Override (PATH-independent). A `url`-transport user entry is malformed for doctrine's slot: degrade, never replaced.

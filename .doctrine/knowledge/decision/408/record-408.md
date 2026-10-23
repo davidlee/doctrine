@@ -19,3 +19,11 @@ Replaces the direct-file rules: path resolution, symlink write-through and missi
 ## Amended (ASM-015 invalidated, 2026-10-23)
 
 `codex mcp get` reports the effective (merged) entry, not the user layer (user observation; ASM-015). The user-layer read is a direct, read-only parse of the user config file; the write stays `codex mcp add`.
+
+## Amended (RV-427, 2026-10-23)
+
+Adversarial design review (pi, RV-427). Integrated within the user's rulings; disclosed to the user.
+
+- F-1: "degraded, not failed" means `LegOutcome::Done` with a disclosure line: no codex CLI or no home is an environment fact, so the install still completes and records its version. Only project-entry problems (PathShadow, Malformed, Unreadable) and codex command failures hold the install incomplete.
+- F-4: an unreadable or unparseable user config degrades with its own cause.
+- F-9: an empty `CODEX_HOME` degrades like a relative one (codex's handling is unprobed), instead of counting as unset.
