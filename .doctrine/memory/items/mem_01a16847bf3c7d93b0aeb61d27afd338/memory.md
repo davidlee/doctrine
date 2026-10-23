@@ -82,3 +82,17 @@ Calibration update, SL-286 PHASE-02 (2026-10-24), first repo-root phase:
   loss, vacuous tests); one finding rejected on the design text. A max-thinking
   request can die on an llm-gateway timeout (`termination: error`, cause only
   in `events.jsonl`); continuing the same `session` resumes with reads intact.
+
+Calibration update, SL-286 PHASE-03 (2026-10-24):
+
+- Rhythm held: `judgement` sheet draft (13 requests) → orchestrator rulings →
+  six `implement` runs, one task each, ~$0.15 total. A run that implements a
+  whole multi-branch function *and* its tests hit the 30-request ceiling at its
+  final check, leaving a green tree; split function and tests across runs.
+- The `review` pass caught a blocker in an **orchestrator ruling**, not delegate
+  code: a fix the design scoped to one caller was ruled onto a shared seam
+  (`fsutil::write_atomic`, 75 callers), opening a symlink trust-boundary escape.
+  Before ruling a change to a shared helper, count its callers and prefer an
+  opt-in sibling fn.
+- Ask delegates to print a notice when an environment-dependent test skips
+  (e.g. chmod under root), so a green gate cannot hide a vacuous test.

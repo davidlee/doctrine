@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 413
+slug = "codex-mcp-execute-implementation-deltas-from-the-sl-286-design"
+title = "codex_mcp execute: implementation deltas from the SL-286 design"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = ["codex", "mcp", "reconcile"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Implementing SL-286 PHASE-03 (codex_mcp execute shell) surfaced gaps in design.md sec-leg § Execute / sec-report and PHASE-03's objective wording."
+choice = "Adopt the execute deltas listed in the body; reconcile folds them into design.md."
+alternatives = []
+rationale = "Each delta resolves a case the design cannot express (project path, re-check at write time, removal-only failure) or narrows a risk the generic wording would open (symlink write-through on a shared seam)."
+consequences = ["reconcile: amend design.md sec-leg § Execute and sec-report", "PHASE-04 wires execute and maps CodexUserOutcome to LegOutcome", "new report wording awaits user review"]
+decided_by = "orchestrator (PHASE-03 rulings; review F1 adjudication)"
+decided_on = "2026-10-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)

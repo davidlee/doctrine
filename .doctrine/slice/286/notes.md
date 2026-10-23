@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-24 · PHASE-02 · 3112de99c
+fresh-as-of: 2026-10-24 · PHASE-03 · 49e58e65e
 
 ### Produced
 
@@ -24,6 +24,12 @@ fresh-as-of: 2026-10-24 · PHASE-02 · 3112de99c
   findings — 8 fixed (a742bc319), F5 rejected (design example binds text),
   F2 → DEC-412 item 9 by user ruling. Boundary carries foreign 4aea4ff19
   (IMP-407) mid-range — audit disposes it.
+- PHASE-03 done — codex_mcp `execute` shell: `CodexCli`/`ProcessCodex`,
+  `Consent`, `CodexUserOutcome`, `remove_wrapper`, new report lines;
+  `fsutil::write_atomic_through_link` (40f2c57d0..49e58e65e). Gate green at
+  49e58e65e; VT-1/VT-2 PASS; negative controls red. Per-phase pi `review`:
+  10 findings — F1 blocker (my ruling put symlink write-through on shared
+  `write_atomic`) fixed 4717b1f4e; 7 more fixed 49e58e65e; F6, F9 rejected.
 - Minted: ISS-533 — MCP server replies to JSON-RPC notifications (pre-existing).
 - Design-time decisions DEC-403..DEC-411; EVD-033; RV-427 (concluded).
 
@@ -31,7 +37,8 @@ fresh-as-of: 2026-10-24 · PHASE-02 · 3112de99c
 
 - mem.pattern.delegation.pi-writable-in-worktree — calibration appended
   (subtree write roots, judgement no-answer turns, transcript budget);
-  IMP-522 update (0e99dbcbf): repo-root writes, cargo + git in the write form.
+  IMP-522 update (0e99dbcbf): repo-root writes, cargo + git in the write form;
+  PHASE-03 update: ceiling on function+tests runs, shared-seam ruling check.
 - EVD-033 — `codex mcp add` replaces the whole table; `mcp get` shows the
   effective entry (ASM-015 invalidated).
 
@@ -40,6 +47,9 @@ fresh-as-of: 2026-10-24 · PHASE-02 · 3112de99c
 - DEC-412 — PHASE-02 design deltas (FileRead, destination split, blocking
   project entries, degraded/removal-only text); reconcile folds into design.md
   and amends PHASE-02 EX-4. Item 8 wording awaits user review.
+- DEC-413 — PHASE-03 execute deltas (project path param, write-time re-check,
+  opt-in symlink write-through, new report lines); reconcile folds into
+  design.md. Item 7 wording awaits user review.
 - ASM-014 — where codex shows the rootless instructions (VH in PHASE-05).
 - RSK-234 · IDE-069 · ISS-528 (partially resolved by DEC-406) · ISS-533.
 - Reconcile: REV for REQ-484 (SPEC-011) + rootless-serve requirement;
