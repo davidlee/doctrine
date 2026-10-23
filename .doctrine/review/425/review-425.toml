@@ -8,9 +8,163 @@ title = "design review of SL-285"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-285"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "major"
+title = "Tracked-file guard has no mechanism: apply_wire dry-run reports no touched paths"
+detail = "Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-1). design.md §3/§4 rely on 'git ls-files over the dry-run's touched paths', but apply_wire(dry_run=true) collects imports only when !dry_run (boot.rs:3448) and empties per-harness touches under dry run (boot.rs:3683); boot.rs:8013-8016 pins dry.touched() empty. As written the guard always passes, voiding DEC-402's refusal."
+disposition = "fix-now"
+response = "Verified boot.rs:3448, :3683, :8013-8016. Integrate: add boot::plan_wire(root, exec, harnesses) -> Result<Vec<Touched>> composing the existing dry-run halves (ensure_boot_import dry-run, install_refresh dry-run, refresh_touched); apply_wire and its pinned test unchanged. regenerate intersects plan_wire's paths with git ls-files before any write. Implementer must verify that each dry-run arm reports the paths it would write (reviewer cites boot.rs:3067, :3221)."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Verified boot.rs:3448, :3683, :8013-8016. Integrate: add boot::plan_wire(root, exec, harnesses) -> Result<Vec<Touched>> composing the existing dry-run halves (ensure_boot_import dry-run, install_refresh dry-run, refresh_touched); apply_wire and its pinned test unchanged. regenerate intersects plan_wire's paths with git ls-files before any write. Implementer must verify that each dry-run arm reports the paths it would write (reviewer cites boot.rs:3067, :3221)."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "coordinate.rs:234 caller missing; create.rs:228 mislabelled as coordination passthrough"
+detail = "Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-2). run_provision callers: fork.rs:189, create.rs:228 (WorktreeCreate hook passthrough), coordinate.rs:234 (coordination worktree), dispatch.rs:2247, :2466, mod.rs:388. design.md §2 omits coordinate.rs and calls create.rs the coordination passthrough; §5 per-caller compensation omits it."
+disposition = "fix-now"
+response = "Verified by grep. Integrate: §2 table gains coordinate.rs:234 (creation; existing rollback_fork/remove_worktree_dir at coordinate.rs:242-248); relabel create.rs:228 as the WorktreeCreate hook passthrough; §5 per-caller compensation covers fork, hook passthrough, coordination, clean candidate."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Verified by grep. Integrate: §2 table gains coordinate.rs:234 (creation; existing rollback_fork/remove_worktree_dir at coordinate.rs:242-248); relabel create.rs:228 as the WorktreeCreate hook passthrough; §5 per-caller compensation covers fork, hook passthrough, coordination, clean candidate."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "minor"
+title = "No post-regeneration check that tracked content stayed clean"
+detail = "Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-3). §3 assumes BootWiring is the only tracked-file hazard; convergence can PruneCanon/Unlink entries (install_ownership.rs:105, :290; applied install.rs:3295-3316). A client that un-ignores and commits an entry under a canon root could see a tracked deletion in the fork."
+disposition = "fix-now"
+response = "Observation accepted; prescription modified. Integrate a post-regeneration check: git status --porcelain -uno before vs after; any new tracked change is a regeneration failure (creation rolls back; repair discloses the paths and exits non-zero). No auto-restore on repair — restoring writes more and DEC-397 keeps repair minimal; the user decides. Also rewrite §3's premise: BootWiring is the predicted hazard (preflight), the post-check covers the rest."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Observation accepted; prescription modified. Integrate a post-regeneration check: git status --porcelain -uno before vs after; any new tracked change is a regeneration failure (creation rolls back; repair discloses the paths and exits non-zero). No auto-restore on repair — restoring writes more and DEC-397 keeps repair minimal; the user decides. Also rewrite §3's premise: BootWiring is the predicted hazard (preflight), the post-check covers the rest."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "minor"
+title = "Tangle handling should state the measured expectation, not 'examine if it grows'"
+detail = "Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-4). worktree is sub-classified, so the direction check skips it (tests/architecture_layering.rs:697-706); no tier/violation edit is needed. worktree→slice→state→install and install→boot→worktree already share a command SCC, so the expected tangle delta is +1 (reviewer's reconstruction). §4 lists a layering.toml '→ install' edit."
+disposition = "fix-now"
+response = "Verified sub-classified skip at tests/architecture_layering.rs:697-706. Integrate: no tier or accepted-violation edit; only the worktree comment line in layering.toml:130 gains install. Expected command tangle delta +1 (reviewer's reconstruction, unverified); run the gate, bump 76→77 only if the measured delta is +1 with that justification; otherwise examine the cycle first."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Verified sub-classified skip at tests/architecture_layering.rs:697-706. Integrate: no tier or accepted-violation edit; only the worktree comment line in layering.toml:130 gains install. Expected command tangle delta +1 (reviewer's reconstruction, unverified); run the gate, bump 76→77 only if the measured delta is +1 with that justification; otherwise examine the cycle first."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "minor"
+title = "Two entry points (run_provision + copy_allowlisted) let a caller silently skip regeneration"
+detail = "Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-5). The conflicted arm calling a bare copy_allowlisted reopens the ISS-352 door for future callers. A ProvisionMode {CopyOnly, CopyThenRegenerate{allow_downgrade}} argument keeps one entry and makes the exemption visible at the call site."
+disposition = "fix-now"
+response = "Accepted: one entry point. Integrate run_provision(path, fork, ProvisionMode) with ProvisionMode::{CopyOnly, CopyThenRegenerate { allow_downgrade }}; the copy stays a private function. Conflicted candidate passes CopyOnly. Supersedes the copy_allowlisted public seam in §2/§4."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Accepted: one entry point. Integrate run_provision(path, fork, ProvisionMode) with ProvisionMode::{CopyOnly, CopyThenRegenerate { allow_downgrade }}; the copy stays a private function. Conflicted candidate passes CopyOnly. Supersedes the copy_allowlisted public seam in §2/§4."
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "major"
+title = "Per-caller failure-compensation tests have no failure lever"
+detail = """Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-6). §5 requires compensation 'after an injected regeneration failure', but the worktree e2e tests drive the built binary as a subprocess (e.g. tests/e2e_worktree_fork.rs:293) — no in-process injection seam. A committed installed-version = "999.0.0" in the source's doctrine.toml triggers the downgrade refusal deterministically in every creation arm."""
+disposition = "fix-now"
+response = 'Accepted. Integrate into §5: failure lever = committed installed-version = "999.0.0" in the source doctrine.toml (the fork inherits it), which triggers the downgrade refusal before any write; asserts each creation arm leaves no worktree, ref, or ledger row. Repair test: same lever, worktree kept, non-zero exit; --allow-downgrade succeeds.'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Accepted. Integrate into §5: failure lever = committed installed-version = "999.0.0" in the source doctrine.toml (the fork inherits it), which triggers the downgrade refusal before any write; asserts each creation arm leaves no worktree, ref, or ledger row. Repair test: same lever, worktree kept, non-zero exit; --allow-downgrade succeeds.'
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "major"
+title = "Ignored harness files bake the running binary's absolute path (DEC-402 consequence wrong)"
+detail = "Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-7). CommandForm::Baked renders '<abs exec> <args>' for gitignored files (boot.rs:1105-1119); codex hooks are always Baked (boot.rs:2854); claude Local settings Baked (boot.rs:594-599). DEC-402's consequence 'hook commands use ${DOCTRINE_BIN:-doctrine}' holds only for tracked files. A fork's ignored config pins the orchestrator binary path."
+disposition = "fix-now"
+response = "Verified boot.rs:1105-1119, :2854, :594-599. Integrate: §6 risk — ignored harness config in a fork pins the running binary's absolute path; inside a confined worker jail with different mounts that path may not resolve (inference, not observed). Correct DEC-402's consequence text (portable form only for tracked files) via doctrine knowledge edit decision. Implementer to check one confined fork's hooks resolve; capture a backlog item if they do not."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Verified boot.rs:1105-1119, :2854, :594-599. Integrate: §6 risk — ignored harness config in a fork pins the running binary's absolute path; inside a confined worker jail with different mounts that path may not resolve (inference, not observed). Correct DEC-402's consequence text (portable form only for tracked files) via doctrine knowledge edit decision. Implementer to check one confined fork's hooks resolve; capture a backlog item if they do not."
+
+[[finding]]
+id = "F-8"
+status = "answered"
+severity = "nit"
+title = "LegacyStarters exclusion reason is imprecise"
+detail = "Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-8). LegacyStarters is a retire-once migration gated on an absent tracked stamp (install.rs:407) that removes unedited starter copies; it is not 'edits tracked files'. In a fork the tracked stamp is present, so it would be empty anyway."
+disposition = "fix-now"
+response = "Verified install.rs:407. Integrate: §1 reason becomes 'retire-once migration gated on an absent tracked stamp, removes unedited starters; never applies in a fork'."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Verified install.rs:407. Integrate: §1 reason becomes 'retire-once migration gated on an absent tracked stamp, removes unedited starters; never applies in a fork'."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
