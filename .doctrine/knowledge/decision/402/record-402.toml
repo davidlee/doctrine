@@ -15,7 +15,7 @@ context = "DEC-400 excluded BootWiring because it can edit tracked files, but Bo
 choice = "Regenerate = MemorySync + BootWiring + Convergence (install's forward legs minus LegacyStarters). No boot snapshot leg, no local marker, no tracked stamp. Guard: BootWiring is planned dry-run first; if it would change a tracked file, regeneration refuses (creation rolls back, repair leaves the worktree untouched) with 'run doctrine install in the source and commit'."
 alternatives = ["DEC-400 legs (no BootWiring; regenerate boot snapshot)", "Allow tracked wiring changes and disclose them"]
 rationale = "Forks need the ignored harness config for MCP and session hooks; hooks then regenerate boot.md in every harness, so no command_map plumbing. On a committed, wired source BootWiring writes only ignored files; a tracked change means stale source wiring, which a worker diff must not carry into the import funnel."
-consequences = ["Forks get doctrine MCP and session hooks for every installed harness", "Stale committed wiring in the source blocks provisioning until fixed", "Hook commands use ${DOCTRINE_BIN:-doctrine} so wiring is binary-path independent"]
+consequences = ["Forks get doctrine MCP and session hooks for every installed harness", "Stale committed wiring in the source blocks provisioning until fixed", "Hook commands in tracked files use ${DOCTRINE_BIN:-doctrine}; gitignored harness config bakes the provisioning binary's absolute path (CommandForm::Baked) so a fork's ignored hooks are bound to that path"]
 decided_by = "user"
 decided_on = "2026-10-23"
 

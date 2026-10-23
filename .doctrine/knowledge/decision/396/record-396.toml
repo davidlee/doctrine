@@ -11,8 +11,8 @@ updated = "2026-10-23"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-context = "Four sites provision a worktree via run_provision: fork_core, create.rs passthrough, dispatch candidate clean and conflicted arms. DEC-394 assumed no caller edits; the conflicted arm materialises T_c after provisioning (dispatch.rs:2466)."
-choice = "run_provision and the `worktree provision` verb compose copy then regenerate; the copy stays its own function. The conflicted candidate arm alone calls copy only, then materialises T_c, and discloses that the operator runs `doctrine worktree provision <dir>` after resolving. 'No caller edits' is an expectation, not a constraint."
+context = "Six sites provision a worktree via run_provision: fork_core; the WorktreeCreate hook passthrough (create.rs); the coordination worktree (coordinate.rs); the dispatch candidate clean and conflicted arms; and the worktree provision verb. DEC-394 assumed no caller edits; the conflicted arm materialises T_c after provisioning (dispatch.rs:2466)."
+choice = "run_provision stays the single entry point and takes a ProvisionMode: CopyThenRegenerate { allow_downgrade } for every caller except the conflicted candidate arm, which passes CopyOnly, then materialises T_c, and discloses that the operator runs 'doctrine worktree provision <dir>' after resolving. The copy stays a private function so skipping regeneration is visible at the call site (RV-425 F-5). 'No caller edits' is an expectation, not a constraint."
 alternatives = ["Regenerate only in fork_core", "Regenerate the conflicted arm before materialise", "Regenerate the conflicted arm after materialise"]
 rationale = "Every provisioned worktree gets the derived tier; the verb is the repair path. A conflicted tree describes neither base nor result, so deriving from it is meaningless."
 consequences = ["Supersedes DEC-394", "SPEC-012 REQ-189 wording states the copy/regenerate split"]
