@@ -27,23 +27,21 @@ skills, agent defs, or memory the governance assumes.
 ## Scope & Objectives
 
 - Every provisioned worktree — `worktree fork`, the coordination passthrough,
-  and dispatch candidate worktrees, all via `run_provision` — regenerates the
-  derived runtime tier after the copy step, so it is self-sufficient and
-  harness-independent (POL-003). `doctrine worktree provision <dir>` doubles as
-  the repair path (DEC-394).
+  and the clean dispatch candidate — regenerates the derived runtime tier after
+  the copy step, so it is self-sufficient and harness-independent (POL-003).
+  The conflicted candidate arm copies only and discloses the repair command;
+  `doctrine worktree provision <dir>` is the repair path (DEC-396).
 - Regenerated: shipped memory corpus, skills/agent defs/harness link dirs,
-  universal boot snapshot, local install marker. Not: boot wiring, legacy
-  starters, or the tracked version stamp (DEC-392). Harness set resolved in
-  the source tree (DEC-393); failure rolls back (DEC-395).
-- Every derived root `install` projects is covered, for every harness the source
-  tree has installed — not a hand-maintained list.
+  universal boot snapshot, local install marker (written last, on success).
+  Not: boot wiring, legacy starters, or the tracked version stamp (DEC-392,
+  DEC-398). Harness set resolved in the source tree (DEC-393).
+- Failure: creation compensates every resource it created — including the
+  existing clean-candidate worktree leak; repair never deletes, discloses, and
+  is re-runnable (DEC-397). Refuse a downgrade unless `--allow-downgrade`
+  (DEC-399).
 - The copy stays its own function; `run_provision` composes copy then
-  regenerate (`install::regenerate`).
-- Correct the `DERIVED_RUNTIME` doc claim so it states what actually happens,
-  and give the classification a non-test consumer if the design uses it.
-- Defined failure posture: a regeneration failure either rolls the fork back
-  (like the other legs) or degrades with a disclosed warning (STD-003) —
-  decided in design.
+  regenerate (`install::regenerate`, reusing install's legs unchanged).
+- Correct the `DERIVED_RUNTIME` doc comment and `expect` reason.
 
 ## Non-Goals
 
@@ -51,8 +49,9 @@ skills, agent defs, or memory the governance assumes.
   that may be stale or foreign).
 - Capsule provisioning (ADR-020) — this slice may expose a reusable
   "regenerate in a fresh checkout" seam, but wiring capsules is follow-up.
-- Hand-created worktrees that bypass `worktree fork`
-  (`mem_019f255d977c7f309d75a6f4dc198a1b`).
+- Classifying harness link dirs in the worktree tier map (CHR-181).
+- Automatic regeneration of hand-created worktrees; they are repaired with
+  `doctrine worktree provision <dir>`.
 - Changing what `install` projects or its ownership model (SL-281).
 
 ## Affected surface
@@ -67,36 +66,31 @@ skills, agent defs, or memory the governance assumes.
 - Docs: SPEC-012 (dispatch & worktree), worktree skill
   (`plugins/doctrine/skills/worktree/SKILL.md`).
 
-## Risks & open questions
+## Risks
 
-- **Cost.** A full `install` (memory sync, skills write) per fork may be
-  noticeably slow; measure before making it unconditional. A fork is meant to
-  be cheap.
-- **Which subset.** Full `install` vs a derived-only projection; full install
-  may also write authored/config files the fork should not diverge on.
-- **Harness detection.** Install detects harnesses by directory; a fork has the
-  tracked dirs but not the gitignored ones. Regeneration must reproduce the
-  source's harness set, not a different one.
-- **Boot snapshot.** Regenerate at fork time (self-sufficient) or leave to the
-  session hook (harness-conditional).
-- **Worker confinement.** A worker fork's `.git` is read-only and runs under a
-  jail; regeneration must run orchestrator-side, before spawn.
-- **Binary freshness.** Which `doctrine` binary regenerates — the running one
-  (source tree) or the fork's build; mismatched projections are possible.
+- **Layering tangle.** `worktree` → `install` may grow the command-tier tangle
+  count the ADR-001 gate ratchets; examine the actual cycle before any baseline
+  bump.
+- **Conflicted candidate** worktrees stay unregenerated until repaired.
+- **Binary freshness.** Regeneration uses the running binary's embedded assets
+  (forks have no `target/`, ADR-008 D-B1).
 
 ## Verification / closure intent
 
-- A test forks a tree with installed harnesses and asserts the fork's derived
-  roots (skills, agent defs, harness link dirs resolving to real files, shipped
-  memory) match the source's projection.
-- A failure-path test shows the chosen posture (rollback or disclosed warning).
-- ISS-352 resolved; `DERIVED_RUNTIME` doc corrected; SPEC-012 updated if its
-  provisioning contract changes.
+- Generated files and links match the running binary's projection built from
+  the destination's own inputs.
+- Tracked content unchanged; generated paths remain gitignored.
+- Repeated repair converges without damaging user-owned harness entries.
+- Second-generation fork (fork of a fork) regenerates the same harness set.
+- Failure compensation checked per caller (fork, passthrough, both candidate
+  arms) and repair preservation; downgrade refusal.
+- ISS-352 resolved; SPEC-012 REQ-189 wording updated for the copy/regenerate
+  split.
 
 ## Summary
 
-Wire the missing regeneration step into `worktree fork` so a fork carries the
-same install projection as its source, for every installed harness.
+Wire the missing regeneration step into worktree provisioning so every
+provisioned worktree carries the install projection for its source's harnesses.
 
 ## Follow-Ups
 

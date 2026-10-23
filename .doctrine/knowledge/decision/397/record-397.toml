@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 397
+slug = "provision-failure-creation-compensates-repair-preserves"
+title = "Provision failure: creation compensates, repair preserves"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-395 assumed existing rollback covers every caller; the clean candidate arm leaves its detached worktree on provision failure (dispatch.rs:2247) and standalone `worktree provision` has no wrapper (worktree/mod.rs:388)."
+choice = "Creation paths (fork_core, create.rs passthrough, both dispatch candidate arms) compensate every resource they created on any provision failure, including fixing the clean-candidate worktree leak. Repair (standalone `worktree provision`) never deletes: it discloses what changed, exits non-zero, and is safe to re-run."
+alternatives = ["Keep a created worktree and disclose degradation", "Uniform rollback for repair too"]
+rationale = "A created half-provisioned worktree reproduces ISS-352's quiet failure; deleting a worktree under repair would destroy user work."
+consequences = ["Supersedes DEC-395", "Per-caller failure-compensation tests"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-395"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-285"

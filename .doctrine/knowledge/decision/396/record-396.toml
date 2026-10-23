@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 396
+slug = "provision-composes-copy-and-regenerate"
+title = "Provision composes copy and regenerate"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Four sites provision a worktree via run_provision: fork_core, create.rs passthrough, dispatch candidate clean and conflicted arms. DEC-394 assumed no caller edits; the conflicted arm materialises T_c after provisioning (dispatch.rs:2466)."
+choice = "run_provision and the `worktree provision` verb compose copy then regenerate; the copy stays its own function. The conflicted candidate arm alone calls copy only, then materialises T_c, and discloses that the operator runs `doctrine worktree provision <dir>` after resolving. 'No caller edits' is an expectation, not a constraint."
+alternatives = ["Regenerate only in fork_core", "Regenerate the conflicted arm before materialise", "Regenerate the conflicted arm after materialise"]
+rationale = "Every provisioned worktree gets the derived tier; the verb is the repair path. A conflicted tree describes neither base nor result, so deriving from it is meaningless."
+consequences = ["Supersedes DEC-394", "SPEC-012 REQ-189 wording states the copy/regenerate split"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-394"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-285"

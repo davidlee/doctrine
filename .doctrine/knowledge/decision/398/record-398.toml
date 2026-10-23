@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 398
+slug = "regeneration-success-contract"
+title = "Regeneration success contract"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Convergence keeps shadowing real files and foreign symlinks and skips changed entries while returning Ok (install.rs:3155, :3216)."
+choice = "Ownership exceptions convergence already tolerates are acceptable and disclosed as 'kept'; any I/O or bake error is failure. The local install marker is written last, only on success."
+alternatives = ["Treat any kept/skipped entry as incomplete regeneration"]
+rationale = "Matches install's ownership model (SL-281) and respects user-owned harness entries."
+consequences = ["Marker presence means regeneration completed"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-285"
