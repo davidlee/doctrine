@@ -63,6 +63,10 @@ skills, agent defs, or memory the governance assumes.
 - `src/install.rs`, `src/install_ownership.rs` — the install entry/subset that
   regenerates derived runtime; `install/manifest.toml` (harness link dirs).
 - `src/dispatch.rs` — dispatch fork callers.
+- `src/worktree/create.rs`, `src/worktree/coordinate.rs` — hook passthrough and
+  coordination worktree callers.
+- `src/boot.rs` (`plan_wire`, wiring writer), `src/git.rs` (tracked-path
+  queries).
 - Tests: worktree fork integration tests.
 - Docs: SPEC-012 (dispatch & worktree), worktree skill
   (`plugins/doctrine/skills/worktree/SKILL.md`).

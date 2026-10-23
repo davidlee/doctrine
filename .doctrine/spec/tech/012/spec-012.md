@@ -99,6 +99,18 @@ copying if any `.worktreeinclude` pattern names a withheld tier — the same sme
 not a substitute for the copy-time `select_copies` guarantee that runs regardless —
 and `verify_sibling_worktree` refuses to provision the source tree onto itself.
 
+After the copy, provision regenerates the derived runtime tier that `doctrine
+install` projects — shipped memory, harness config and hooks, skills, agent
+defs and harness link dirs — in place, from the running binary
+(`install::regenerate`, SL-285). Every creation caller regenerates; a
+conflicted dispatch candidate copies only and prints the repair command
+(`doctrine worktree provision <dir>`). A source with no tracked
+`installed-version` is copied only, with a disclosure. Regeneration refuses
+before any write on an unreadable stamp, a downgrade (unless
+`--allow-downgrade`, repair only) or stale tracked wiring, and fails on any
+tracked drift its legs cause. Creation compensates a failure; repair never
+deletes.
+
 ### The orchestrator verb family — `fork` / `import` / `land` / `gc`
 
 The funnel is four `Orchestrator`-classed verbs, each refused under `worker_mode`

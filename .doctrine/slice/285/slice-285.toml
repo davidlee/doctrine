@@ -66,6 +66,41 @@ intent = "design-target"
 selector = "tests/common/mod.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/boot.rs"
+intent = "design-target"
+note = "RV-426 F-4: touched in delivery"
+
+[[selector]]
+selector = "src/git.rs"
+intent = "design-target"
+note = "RV-426 F-4: touched in delivery"
+
+[[selector]]
+selector = "src/worktree/create.rs"
+intent = "design-target"
+note = "RV-426 F-4: touched in delivery"
+
+[[selector]]
+selector = "src/worktree/coordinate.rs"
+intent = "design-target"
+note = "RV-426 F-4: touched in delivery"
+
+[[selector]]
+selector = "tests/e2e_dispatch_candidate.rs"
+intent = "design-target"
+note = "RV-426 F-4: touched in delivery"
+
+[[selector]]
+selector = "tests/e2e_worktree_coordinate.rs"
+intent = "design-target"
+note = "RV-426 F-4: touched in delivery"
+
+[[selector]]
+selector = "tests/e2e_worktree_create_fork.rs"
+intent = "design-target"
+note = "RV-426 F-4: touched in delivery"
+
 [[relation]]
 label = "fulfils"
 target = "ISS-352"

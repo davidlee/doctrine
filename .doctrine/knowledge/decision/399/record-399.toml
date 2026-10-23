@@ -12,7 +12,7 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "Install refuses an unattended downgrade (install.rs:229); a derived-only entry could bypass it."
-choice = "If the running binary is older than the destination's tracked installed-version (doctrine.toml), regeneration refuses: creation rolls back, repair leaves the worktree untouched. `worktree provision --allow-downgrade` is the escape."
+choice = "If the running binary is older than the destination's tracked installed-version (doctrine.toml), regeneration refuses: creation rolls back, repair leaves the worktree untouched. `worktree provision --allow-downgrade` is the escape. An absent destination stamp is not a downgrade. An unreadable source or destination stamp refuses. A source with no tracked stamp is not regenerated: copy only, disclose, exit 0 (amended at SL-285 reconcile, user 2026-10-23)."
 alternatives = ["Regenerate anyway and stamp", "Skip regeneration with a warning"]
 rationale = "Keeps the existing downgrade guard intact; the orchestrator binary is normally newer, so the refusal is rare."
 consequences = ["worktree provision gains --allow-downgrade"]

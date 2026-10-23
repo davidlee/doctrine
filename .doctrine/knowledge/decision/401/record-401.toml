@@ -12,7 +12,7 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "Convergence keeps shadowing real files and foreign symlinks and skips changed entries while returning Ok (install.rs:3155, :3216). DEC-398 also wrote the local marker last as a success signal; DEC-400 drops the marker leg."
-choice = "Ownership exceptions convergence already tolerates are acceptable and disclosed as 'kept'; any I/O or bake error in a regeneration leg is failure. No marker is written; failure is signalled by creation rollback (DEC-397) or a non-zero repair exit."
+choice = "Ownership exceptions convergence already tolerates are acceptable and disclosed as 'kept'; any I/O or bake error in a regeneration leg is failure. A leg that returns Refused halts regeneration like a failed one. No marker is written; failure is signalled by creation rollback (DEC-397) or a non-zero repair exit (amended at SL-285 reconcile, user 2026-10-23)."
 alternatives = ["Treat any kept/skipped entry as incomplete regeneration", "Write the local marker last as a success signal"]
 rationale = "Matches install's ownership model (SL-281) and respects user-owned harness entries; an explicit failure path needs no on-disk signal."
 consequences = ["Regeneration legs are fatal", " unlike install's non-fatal forward legs"]

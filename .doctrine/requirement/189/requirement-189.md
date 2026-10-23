@@ -1,4 +1,4 @@
-# REQ-189: Provision a fork only through `worktree provision`, copying solely allowlisted (`.worktreeinclude`) gitignored files; `select_copies` drops every coordination/runtime-tier path even under a broad `**` glob.
+# REQ-189: Provision a fork only through `worktree provision`: copy solely allowlisted (`.worktreeinclude`) gitignored files — `select_copies` drops every coordination/runtime-tier path even under a broad `**` glob — then regenerate the derived runtime tier in place from the running binary.
 
 ## Statement
 

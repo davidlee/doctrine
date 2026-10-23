@@ -94,3 +94,30 @@ Risks accepted:
 ### Governance/spec (REV)
 - None. The layering re-tier is a data edit inside ADR-001's mechanism
   (layering.toml), not a change to the ADR's rule.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- Selector registry (F-4): 7 design-target selectors added (boot.rs, git.rs,
+  worktree/create.rs, worktree/coordinate.rs, e2e_dispatch_candidate.rs,
+  e2e_worktree_coordinate.rs, e2e_worktree_create_fork.rs);
+  `slice conformance 285` undeclared = 0. Mirrored in design sec-4 and
+  slice-285.md § Affected surface.
+- design.md (F-5): notes § Reconcile carry integrated — uninstalled source
+  (sec-1/3/5), absent destination stamp not a downgrade, four pre-write
+  refusals, byte-level drift, `Refused` halts, stderr progress, layering
+  re-tier with baseline 76 (sec-4/6), `/.codex` fixture and ISS-531 (sec-5).
+- design.md (F-6): sec-4 `plan_wire` as the third `WirePass::DryRunPlan` pass.
+- design.md sec-6: baked-binary-path risk updated with the PHASE-03 F-7
+  observation (resolves in the Linux jail; residual stated).
+- DEC-399, DEC-401: choice amended per the carry (user agreed 2026-10-23).
+- The locked design run (rev 31) diverges from design.md by design; not
+  re-adopted (reconcile direct-edit surface).
+
+### REVs completed
+- REV-075 (`reconcile-sl-285`): done — REQ-189 title and SPEC-012 § Fork
+  provisioning amended to copy-then-regenerate. Not in the brief; named by
+  design sec-6; user chose to land it (2026-10-23).
+
+### Withdrawn / tolerated
+- None beyond the ledger dispositions.
