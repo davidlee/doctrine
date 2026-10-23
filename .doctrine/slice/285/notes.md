@@ -69,7 +69,7 @@ so every host absolute path is visible at the same location. No backlog item.
 Residual (already design sec-6 risk): the baked hook pins the *minting* binary;
 rebuilding or deleting that tree changes or breaks the fork's codex hooks, and a
 jail that stops binding `/` (or the macOS sandbox-exec arm, not probed) would
-need re-checking. Awaiting user confirmation (VH-1).
+need re-checking. VH-1 confirmed by the user 2026-10-23 ("VH-1: confirmed").
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
