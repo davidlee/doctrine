@@ -12,7 +12,7 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "SL-286 inq-6. The user-level write depends on a resolvable home and a writable, parseable config; in the bwrap jail `~/.codex` may be absent or read-only."
-choice = "Resolve `$CODEX_HOME`, else `$HOME/.codex`. No resolvable home, unreadable, unparseable or unwritable config: write nothing, disclose the cause, print the snippet; install reports degraded, not failed. A missing config file is created."
+choice = "Resolve `$CODEX_HOME` (an empty value counts as unset), else `$HOME/.codex`. A relative `CODEX_HOME` is not guessed at: degrade. A symlinked `config.toml` is resolved and the real file is written atomically, so the link survives; a read-only target degrades. No resolvable home, unreadable, unparseable or unwritable config: write nothing, disclose the cause, print the snippet; install reports degraded, not failed. A missing config file is created. Dry-run writes nothing."
 alternatives = ["Fail the install", "Silently skip"]
 rationale = "STD-003 (no silent skip) and the existing PrintedFallback posture."
 consequences = ["Jail installs normally degrade to a printed snippet"]

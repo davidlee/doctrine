@@ -1,0 +1,36 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 14
+slug = "codex-surfaces-mcp-instructions"
+title = "Codex surfaces MCP initialize instructions to the user"
+record_kind = "assumption"
+status = "held"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+claim = """Codex shows the user the `instructions` an MCP server returns at initialize, so DEC-405's "no doctrine project here" message is visible. Unprobed: SL-286 research verified startup and tool listing only (codex review F4)."""
+confidence = "low"
+basis = "design-inference"
+validation_plan = "VH at SL-286 verification: run interactive codex in a non-doctrine directory and check where (if anywhere) the instructions text appears. If hidden, DEC-405 still holds; the empty tool list is the only signal."
+validated_by    = ""
+validated_on    = ""
+invalidated_by  = ""
+invalidated_on  = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "DEC-405 disclosure path"
+target = "SL-286"

@@ -12,7 +12,7 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "SL-286 inq-3. With a user-level entry codex starts doctrine in every directory; outside any project root `serve --mcp` exits at startup and codex shows a handshake warning (probe, research Thread 3)."
-choice = "When no project root resolves, `serve --mcp` still completes the MCP handshake, lists no tools, and states in its initialize instructions that no doctrine project root was found."
+choice = "When no doctrine project resolves — no project root, or a root with no `.doctrine/` directory — `serve --mcp` still completes the MCP handshake, lists no tools, and states in its initialize instructions that no doctrine project was found."
 alternatives = ["Advertise the usual tools and refuse each call — lists tools that cannot work", "Keep exiting and document the warning"]
 rationale = "Codex stays quiet outside projects and no unusable tool is advertised; the absence is disclosed (STD-003)."
 consequences = ["`McpConfig`/serve resolve the root as optional; dispatch gains a rootless mode"]

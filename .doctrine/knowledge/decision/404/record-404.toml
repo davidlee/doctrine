@@ -12,7 +12,7 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "SL-286 inq-2. The baked path is `resolve_exec()` (current_exe). Running `./target/debug/doctrine install` would point every repo's codex at a transient dev build (POL-002 facet 2)."
-choice = "Bake `resolve_exec()` unless it lies inside the project root being installed; then leave any existing user-level entry untouched, disclose the refusal and print the snippet."
+choice = "Bake `resolve_exec()` unless it lies inside the project root being installed; then leave any existing user-level entry untouched, disclose the refusal and print the snippet. Both paths are compared after symlink resolution (canonicalised root; current_exe is already resolved), by whole path components (`Path::starts_with`), so `/repo/app` never contains `/repo/application/...`."
 alternatives = ["Also refuse any path with a `target/` component — catches dev builds from other checkouts, more heuristic", "No guard"]
 rationale = "One prefix check covers the real hazard (dev builds, jail worktrees) without guessing at layouts."
 consequences = ["A dev build of another checkout can still be baked; disclosed path makes it visible", "A /nix/store path can be baked and break on GC — shared with codex hooks; backlog item"]

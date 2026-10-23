@@ -49,7 +49,8 @@ such a file. Restarting the daemon from `install` was considered and rejected
    PATH-dependent one is warned and holds install incomplete (DEC-406; partially
    resolves ISS-528).
 3. **Rootless MCP server.** `serve --mcp` completes the handshake with no tools
-   and a disclosed reason when no project root resolves (DEC-405).
+   and a disclosed reason when no doctrine project resolves — no root, or a root
+   without `.doctrine/` (DEC-405; disclosure visibility is ASM-014).
 4. **Governance.** DEC-406 supersedes DEC-323 and DEC-332; DEC-407 supersedes
    DEC-325. Revise REQ-484 (SPEC-011) through a Revision (ADR-013). Drop the
    README declaration of the `sh` dependency for codex (DEC-409).
@@ -112,9 +113,14 @@ Resolved in design by DEC-403..DEC-410; kept as the scoping record.
 
 - Unit: plan/classify matrix for user-level entries (absent, current, changed
   command, extra keys preserved, malformed) and for project-level entries
-  (owned wrapper → removed, absolute override, PATH-dependent foreign).
+  (owned wrapper → removed, path-separator override incl. relative, bare
+  PATH-dependent command, empty command, wrongly-typed fields).
+- Unit: user-config resolution (empty / relative `CODEX_HOME`, symlinked
+  `config.toml` written through, read-only target degrades); dry-run writes
+  neither layer.
 - Unit/E2E: bake guard refuses a binary inside the project root; rootless
-  `serve --mcp` handshakes with no tools.
+  `serve --mcp` handshakes with no tools outside a doctrine project.
+- VH: ASM-014 — where codex shows the server's initialize instructions.
 - E2E: install against a temp `CODEX_HOME` writes the absolute-path entry,
   removes an owned project wrapper, and leaves foreign entries alone.
 - VH: interactive codex in this repo connects to doctrine after
