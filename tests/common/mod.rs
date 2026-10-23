@@ -58,6 +58,18 @@ pub(crate) fn write_stamp(root: &std::path::Path, version: &str) {
     .unwrap();
 }
 
+/// Plant AND commit the tracked stamp — the F-6 lever: a worktree added from this
+/// commit inherits it, so regeneration refuses the downgrade (SL-285 PHASE-02).
+///
+/// `-f`: the sync-side fixtures ignore `.doctrine/` wholesale (the provision
+/// fixture does), while the production stamp is tracked — forcing the add is the
+/// faithful shape and keeps the lever independent of a fixture's ignore rules.
+pub(crate) fn commit_stamp(root: &std::path::Path, version: &str) {
+    write_stamp(root, version);
+    git(root, &["add", "-f", DOCTRINE_TOML]);
+    git(root, &["commit", "-q", "-m", "stamp"]);
+}
+
 /// The digest convention the shell uses (`crate::git::sha256`), mirrored so a
 /// test can declare what a content binding must match. Byte-identical to it,
 /// and to `contentset`'s own copy — the shape a leaf owns directly rather than
@@ -273,4 +285,219 @@ pub(crate) fn tree_digest(
     let mut acc = std::collections::BTreeMap::new();
     walk(dir, dir, &mut acc);
     acc
+}
+
+/// [`digest_domain`]'s marker for a domain member that is missing from a tree.
+///
+/// A caller comparing two digests must assert the value is NOT this: two trees
+/// that never ran a projection produce equal maps of `absent` values.
+pub(crate) const ABSENT: &str = "absent";
+
+/// [`tree_digest`] restricted to `domain`, with a missing member recorded as
+/// [`ABSENT`] rather than dropped.
+///
+/// `tree_digest` takes a DIRECTORY root (it `read_dir`-unwraps it), so it cannot
+/// digest one plain-file path on its own (`AGENTS.md`, `.mcp.json`); a domain
+/// member may be either a dir or a file, and this projection covers both.
+///
+/// Recording a missing member rather than omitting it keeps the absence
+/// VISIBLE; it does not by itself make a comparison non-vacuous — two trees that
+/// never ran a projection still produce equal maps — so a caller must assert
+/// every compared value is not [`ABSENT`].
+///
+/// `.git` and everything beneath it is excluded: VCS metadata is not a
+/// projection output, and its shape differs per checkout (a linked worktree's
+/// `.git` is a file naming the parent's gitdir, a primary tree's is a dir).
+pub(crate) fn digest_domain(
+    root: &std::path::Path,
+    domain: &[&str],
+) -> std::collections::BTreeMap<std::path::PathBuf, String> {
+    let whole = tree_digest(root);
+    let mut acc = std::collections::BTreeMap::new();
+    for rel in domain {
+        let prefix = std::path::Path::new(*rel);
+        if std::fs::symlink_metadata(root.join(*rel)).is_err() {
+            acc.insert(prefix.to_path_buf(), ABSENT.to_string());
+            continue;
+        }
+        acc.extend(
+            whole
+                .iter()
+                // `Path::starts_with` is component-wise, so this drops `.git`
+                // itself and everything under it, never `.github`.
+                .filter(|(path, _)| !path.starts_with(".git") && path.starts_with(prefix))
+                .map(|(path, digest)| (path.clone(), digest.clone())),
+        );
+    }
+    acc
+}
+
+// ---------------------------------------------------------------------------
+// installed-source fixtures (SL-285 PHASE-03: projection fidelity)
+//
+// A fork regenerates the derived tier from the SOURCE's tracked inputs, so a
+// fixture standing one up must be a real install: a tracked `installed-version`,
+// both harnesses derivable from COMMITTED bytes, and every install output
+// committed — the fork is a checkout of HEAD, so an uncommitted install would
+// leave the fork un-installed and every assertion vacuously true.
+// ---------------------------------------------------------------------------
+
+/// The tracked files an install writes or rewrites, relative to the project root.
+///
+/// Staged EXPLICITLY, never `git add -A`: a sweep would commit whatever a leg
+/// happened to write, `.codex/` above all — the shipped managed `.gitignore` block
+/// carries no entry for it (SL-285 PHASE-03).
+const INSTALL_TRACKED: &[&str] = &[
+    ".gitignore",
+    ".claude/settings.json",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".mcp.json",
+    DOCTRINE_TOML,
+    ".doctrine/project-orientation.md",
+];
+
+/// The projection domain: every member `install` projects into a tree, and which a
+/// fork's `regenerate` must therefore reproduce (SL-285 PHASE-03 EX-1).
+///
+/// Derived members come first; the base backings — files install REWRITES from
+/// scratch rather than deriving — trail them. The split exists so a caller
+/// asserting about REGENERATION alone can take [`regenerated_domain`] and not pad
+/// the claim with bytes nobody regenerated. The stamp (`.doctrine/doctrine.toml`)
+/// is the one exclusion: install records it and regeneration does not (DEC-401).
+pub(crate) const PROJECTION_DOMAIN: &[&str] = &[
+    ".doctrine/skills",
+    ".doctrine/agents",
+    ".doctrine/memory/shipped",
+    ".agents/skills",
+    ".claude/agents",
+    ".claude/skills",
+    ".codex",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".mcp.json",
+    ".gitignore",
+    ".doctrine/project-orientation.md",
+];
+
+/// [`PROJECTION_DOMAIN`]'s base backings: identical in two trees at the same
+/// commit, so comparing them says nothing about regeneration.
+const BASE_BACKINGS: &[&str] = &[
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".mcp.json",
+    ".gitignore",
+    ".doctrine/project-orientation.md",
+];
+
+/// [`PROJECTION_DOMAIN`] minus [`BASE_BACKINGS`] — the regenerated tier alone.
+///
+/// The workflow roots are deliberately NOT members: doctrine ships no workflows
+/// (no `plugins/doctrine/workflows`; the manifest lists the root but nothing
+/// populates it), so both sides are legitimately empty and comparing them would
+/// only ever compare two absences.
+pub(crate) fn regenerated_domain() -> Vec<&'static str> {
+    PROJECTION_DOMAIN
+        .iter()
+        .copied()
+        .filter(|rel| !BASE_BACKINGS.contains(rel))
+        .collect()
+}
+
+/// `doctrine install --yes -p <root>` with NO `--agent`: an explicit agent is a
+/// directive that skips detection, and the fixtures' point is that the harness set
+/// is derived from the tree's own committed bytes.
+///
+/// Non-asserting, so the caller decides what a failed install means; this is the
+/// one install spawn, and [`install_into`] is the committing wrapper.
+pub(crate) fn install(root: &std::path::Path) -> std::process::Output {
+    doctrine_cmd(root)
+        .args(["install", "--yes", "-p"])
+        .arg(root)
+        .output()
+        .expect("spawn doctrine install")
+}
+
+/// Write `text` at `root/rel`, creating parents. Private: the plants below are
+/// this module's only writers, so the path is always a literal.
+fn plant(root: &std::path::Path, rel: &str, text: &str) {
+    let path = root.join(rel);
+    std::fs::create_dir_all(path.parent().expect("planted path has a parent"))
+        .expect("create planted dir");
+    std::fs::write(&path, text).expect("plant file");
+}
+
+/// Install `root` for real, then commit what the install wrote.
+///
+/// Two harnesses, **detection only** (SL-285 PHASE-03): `.claude/settings.json`
+/// of `{}` makes `detect_harnesses` select claude, and a regular `AGENTS.md` —
+/// never a link onto `CLAUDE.md` — selects codex. No `--agent` is passed: an
+/// explicit agent is a directive that skips detection, and the point of the
+/// fixture is that `regenerate` re-derives the same set from these same committed
+/// bytes.
+///
+/// `.gitignore` gains `/.codex` (appended, never clobbered) before the install: the
+/// managed block the install splices in has no such entry, and the codex config is
+/// regenerated, so it must never be tracked.
+pub(crate) fn install_into(root: &std::path::Path) {
+    plant(root, ".claude/settings.json", "{}\n");
+    plant(root, "AGENTS.md", "# Agents\n");
+    let ignore = root.join(".gitignore");
+    let prior = std::fs::read_to_string(&ignore).unwrap_or_default();
+    std::fs::write(&ignore, format!("{prior}/.codex\n")).expect("append /.codex ignore");
+
+    let out = install(root);
+    assert!(
+        out.status.success(),
+        "install in {} failed: {}",
+        root.display(),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let mut add = vec!["add", "--"];
+    add.extend(
+        INSTALL_TRACKED
+            .iter()
+            .copied()
+            .filter(|rel| root.join(*rel).exists()),
+    );
+    git(root, &add);
+    git(root, &["commit", "-q", "-m", "installed"]);
+}
+
+/// A repo carrying a committed install — the SOURCE a fork is provisioned from.
+///
+/// Returns the canonical root, as `root::find` and `regenerate` will see it.
+/// Proves the fork inherits a tracked `installed-version`, so regeneration runs
+/// its legs instead of taking the uninstalled-source skip.
+pub(crate) fn installed_source(dir: &std::path::Path) -> std::path::PathBuf {
+    init_repo(dir);
+    install_into(dir);
+    std::fs::canonicalize(dir).expect("canonicalize installed source")
+}
+
+/// A detached worktree of `src`'s HEAD: the fork's **tracked** inputs and nothing
+/// else — no derived tier, no copied allowlisted file.
+///
+/// This is the projection-fidelity baseline (PHASE-03 EX-1): an `install` here
+/// starts from the same inputs `regenerate` saw inside the fork, so the two
+/// projections must agree. A real `.git` is required — install reads tracked
+/// paths — and a detached worktree is how git produces that tree exactly. The
+/// caller removes the worktree; the returned `TempDir` owns the directory.
+pub(crate) fn fresh_inputs(src: &std::path::Path) -> (tempfile::TempDir, std::path::PathBuf) {
+    let holder = tempfile::tempdir().expect("tempdir for fresh inputs");
+    let dest = holder.path().join("fresh");
+    let head = git(src, &["rev-parse", "HEAD"]);
+    git(
+        src,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            dest.to_str().expect("utf8 fresh path"),
+            &head,
+        ],
+    );
+    (holder, dest)
 }

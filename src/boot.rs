@@ -1009,7 +1009,7 @@ fn ensure_boot_import(
         })
         .collect();
     let mut outcomes = Vec::new();
-    for edit in plan_wire(contents, reference) {
+    for edit in plan_import_edits(contents, reference) {
         if let (Some(body), false) = (&edit.body, dry_run) {
             if let Some(parent) = edit.path.parent() {
                 fs::create_dir_all(parent)
@@ -1026,7 +1026,7 @@ fn ensure_boot_import(
     Ok(outcomes)
 }
 
-/// One `@`-import edit `plan_wire` chose for a resolved target file.
+/// One `@`-import edit `plan_import_edits` chose for a resolved target file.
 struct ImportEdit {
     path: PathBuf,
     action: RefAction,
@@ -1036,7 +1036,7 @@ struct ImportEdit {
 
 /// PURE. The `@`-import edits wiring makes, given each resolved, de-duplicated
 /// target's current content (`None` when absent) — `plan_boot_import` per file.
-fn plan_wire(contents: Vec<(PathBuf, Option<String>)>, reference: &str) -> Vec<ImportEdit> {
+fn plan_import_edits(contents: Vec<(PathBuf, Option<String>)>, reference: &str) -> Vec<ImportEdit> {
     contents
         .into_iter()
         .map(|(path, existing)| {
@@ -3343,7 +3343,9 @@ pub(crate) fn wire(
 }
 
 /// What [`apply_wire`] did: the import files it wrote, and each harness's
-/// refresh result. Under `dry_run` nothing is written, so nothing is touched.
+/// refresh result. A dry run writes nothing and so touches nothing — except
+/// [`plan_wire`]'s planning pass, which reports what a live run would touch
+/// without writing it.
 pub(crate) struct WireReport {
     pub(crate) imports: Vec<Touched>,
     pub(crate) harnesses: Vec<HarnessWire>,
@@ -3415,23 +3417,37 @@ impl WireReport {
     }
 }
 
+/// Which pass [`apply_wire_to`] runs. `Live` writes and records what it
+/// touched; `DryRunPlan` computes the same report *and* the same touched paths
+/// without writing (what a live run would produce); `DryRun` computes the
+/// report only and leaves touched empty — nothing was written, so nothing
+/// changed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum WirePass {
+    Live,
+    DryRunPlan,
+    DryRun,
+}
+
 /// Union + dedup import targets, prepend the `@`-import **once** (the edits
-/// [`plan_wire`] chooses), then refresh each harness, isolating a single
-/// harness's failure: it is printed, the others still run (A9/§5.5), and it is
-/// returned in that harness's [`HarnessWire`].
-pub(crate) fn apply_wire(
+/// [`plan_import_edits`] chooses), then refresh each harness, isolating a
+/// single harness's failure: it is printed, the others still run (A9/§5.5), and
+/// it is returned in that harness's [`HarnessWire`].
+fn apply_wire_to(
     root: &Path,
     exec: &Path,
     harnesses: &[Harness],
-    dry_run: bool,
+    pass: WirePass,
+    out: &mut dyn io::Write,
 ) -> anyhow::Result<WireReport> {
+    let dry_run = pass != WirePass::Live;
     let reference = format!("@{BOOT_REL}");
     let targets: Vec<PathBuf> = harnesses
         .iter()
         .flat_map(|h| import_targets(h, root))
         .collect();
 
-    let mut stdout = io::stdout();
+    let mut stdout = out;
     let tag = if dry_run { "[dry-run] " } else { "" };
     let mut wired = WireReport {
         imports: Vec::new(),
@@ -3445,7 +3461,7 @@ pub(crate) fn apply_wire(
             RefOutcome::Present(p) => ("ref present", p),
         };
         writeln!(stdout, "  {tag}{verb}: {}", target.display())?;
-        if !dry_run {
+        if pass != WirePass::DryRun {
             wired.imports.extend(import_touched(root, outcome));
         }
     }
@@ -3453,7 +3469,7 @@ pub(crate) fn apply_wire(
     for h in harnesses {
         match install_refresh(h, root, exec, dry_run) {
             Ok(report) => {
-                let touched = if dry_run {
+                let touched = if pass == WirePass::DryRun {
                     Vec::new()
                 } else {
                     refresh_touched(h, &report)
@@ -3688,6 +3704,47 @@ pub(crate) fn apply_wire(
         }
     }
     Ok(wired)
+}
+
+/// [`apply_wire_to`] on stdout: the shell `boot install` uses — same signature
+/// and behaviour as ever.
+pub(crate) fn apply_wire(
+    root: &Path,
+    exec: &Path,
+    harnesses: &[Harness],
+    dry_run: bool,
+) -> anyhow::Result<WireReport> {
+    let pass = if dry_run {
+        WirePass::DryRun
+    } else {
+        WirePass::Live
+    };
+    apply_wire_to(root, exec, harnesses, pass, &mut io::stdout())
+}
+
+/// Live boot wiring with its progress written to `out` (SL-285): `install`
+/// passes stdout (byte-identical to [`apply_wire`]) and worktree provisioning
+/// passes stderr, so a fork's wiring progress never leaks onto its
+/// machine-clean stdout.
+pub(crate) fn apply_wire_into(
+    root: &Path,
+    exec: &Path,
+    harnesses: &[Harness],
+    out: &mut dyn io::Write,
+) -> anyhow::Result<WireReport> {
+    apply_wire_to(root, exec, harnesses, WirePass::Live, out)
+}
+
+/// The paths boot wiring would write, computed by the same dry-run arms
+/// [`apply_wire`] uses; nothing is written.
+pub(crate) fn plan_wire(
+    root: &Path,
+    exec: &Path,
+    harnesses: &[Harness],
+) -> anyhow::Result<Vec<Touched>> {
+    apply_wire_to(root, exec, harnesses, WirePass::DryRunPlan, &mut io::sink())?
+        .touched()
+        .map_err(anyhow::Error::msg)
 }
 
 /// The file an import outcome wrote, if any: created, or the ref added.
@@ -8031,9 +8088,9 @@ env_vars = ["DOCTRINE_BIN"]
     }
 
     #[test]
-    fn plan_wire_plans_create_add_and_present() {
+    fn plan_import_edits_plans_create_add_and_present() {
         let current = format!("{}\n", boot_guard_block());
-        let edits = plan_wire(
+        let edits = plan_import_edits(
             vec![
                 (PathBuf::from("/p/new.md"), None),
                 (PathBuf::from("/p/old.md"), Some("hello\n".into())),
@@ -8057,6 +8114,80 @@ env_vars = ["DOCTRINE_BIN"]
         assert!(matches!(edits[1].action, RefAction::Add));
         assert!(matches!(edits[2].action, RefAction::Present));
         assert!(edits[1].body.as_deref().unwrap().ends_with("hello\n"));
+    }
+
+    /// VT-1: the dry-run plan names exactly the files a live wire writes — for
+    /// every harness set — and a second plan after that live run is empty.
+    #[test]
+    fn plan_wire_reports_what_a_live_apply_wire_writes() {
+        let sets: [&[Harness]; 4] = [
+            &[Harness::Claude],
+            &[Harness::Codex],
+            &[Harness::Pi],
+            &[Harness::Claude, Harness::Pi],
+        ];
+        let paths = |touched: &[Touched]| -> BTreeSet<PathBuf> {
+            touched.iter().map(|t| t.path.clone()).collect()
+        };
+        for set in sets {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path();
+            let exec = Path::new(FAKE_EXEC);
+
+            let planned = paths(&plan_wire(root, exec, set).unwrap());
+            let live = paths(
+                &apply_wire(root, exec, set, false)
+                    .unwrap()
+                    .touched()
+                    .unwrap(),
+            );
+            assert!(
+                !live.is_empty(),
+                "a first live wire writes files for {set:?}"
+            );
+            assert_eq!(planned, live, "plan disagrees with live wire for {set:?}");
+            assert!(
+                plan_wire(root, exec, set).unwrap().is_empty(),
+                "second plan after the live wire is empty for {set:?}"
+            );
+        }
+    }
+
+    /// VT-1 (SL-285 F6): the same planned==live agreement over files that already
+    /// exist — the import `Added` arm and an empty `mcpServers` merge, not just
+    /// the create arms.
+    #[test]
+    fn plan_wire_matches_live_over_existing_files() {
+        let sets: [&[Harness]; 2] = [&[Harness::Claude], &[Harness::Codex]];
+        let paths = |touched: &[Touched]| -> BTreeSet<PathBuf> {
+            touched.iter().map(|t| t.path.clone()).collect()
+        };
+        for set in sets {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path();
+            let exec = Path::new(FAKE_EXEC);
+            let import = if set.contains(&Harness::Claude) {
+                "CLAUDE.md"
+            } else {
+                "AGENTS.md"
+            };
+            fs::write(root.join(import), "# unrelated\n\nkeep me\n").unwrap();
+            fs::write(root.join(MCP_REL), r#"{"mcpServers":{}}"#).unwrap();
+
+            let planned = paths(&plan_wire(root, exec, set).unwrap());
+            let live = paths(
+                &apply_wire(root, exec, set, false)
+                    .unwrap()
+                    .touched()
+                    .unwrap(),
+            );
+            assert!(!live.is_empty(), "a live wire still writes for {set:?}");
+            assert_eq!(planned, live, "plan disagrees with live wire for {set:?}");
+            assert!(
+                plan_wire(root, exec, set).unwrap().is_empty(),
+                "second plan after the live wire is empty for {set:?}"
+            );
+        }
     }
 
     // --- SL-087: produce(Memory) with active signpost memories ---

@@ -299,3 +299,34 @@ fn passthrough_compensates_on_provision_failure() {
         "no surviving worktree registration; list: {live}"
     );
 }
+
+// SL-285 PHASE-02 EX-3 / RV-425 F-6: the passthrough's regeneration refuses a
+// stamp newer than the binary, and the G3 compensation leaves no tree — no dir,
+// no registration (a detached tree claims no branch either).
+#[test]
+fn passthrough_compensates_on_downgrade_refusal() {
+    let root = tempfile::tempdir().unwrap();
+    init_repo(root.path());
+    let root_canon = std::fs::canonicalize(root.path()).unwrap();
+    // The lever rides the COMMIT: the passthrough checks out HEAD.
+    common::commit_stamp(&root_canon, "999.0.0");
+
+    let out = run(&root_canon, &payload(&root_canon, "agent-dg"), CREATE);
+    assert!(
+        !out.status.success(),
+        "a recorded version newer than the binary must refuse; stdout: {}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("999.0.0"),
+        "the refusal names the recorded version; stderr: {}",
+        stderr(&out)
+    );
+    let dir = root_canon.join(".worktrees/agent-dg");
+    assert!(!dir.exists(), "compensation removed the half-created dir");
+    let live = git(root.path(), &["worktree", "list", "--porcelain"]);
+    assert!(
+        !live.contains("agent-dg"),
+        "no surviving worktree registration; list: {live}"
+    );
+}

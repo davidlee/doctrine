@@ -335,6 +335,119 @@ fn fork_rolls_back_on_provision_failure() {
     assert!(!dir.exists(), "fork dir reaped");
 }
 
+// SL-285 PHASE-02 EX-3 / RV-425 F-6: a base carrying a tracked stamp NEWER than
+// the running binary is refused by the fork's regeneration, and the compensation
+// reverses the claim, the worktree and the dir alike.
+#[test]
+fn fork_rolls_back_on_downgrade_refusal() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    common::commit_stamp(src.path(), "999.0.0");
+    let base = git(src.path(), &["rev-parse", "HEAD"]);
+    let holder = tempfile::tempdir().unwrap();
+    let dir = holder.path().join("dg");
+
+    let out = run(
+        src.path(),
+        None,
+        &[
+            "worktree",
+            "fork",
+            "--base",
+            &base,
+            "--branch",
+            "wkr-dg",
+            "--dir",
+            dir.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "a recorded version newer than the binary must refuse; stdout: {}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("999.0.0"),
+        "the refusal names the recorded version; stderr: {}",
+        stderr(&out)
+    );
+    // GONE — the downgrade refusal is a post-add failure, so it rolls back.
+    assert!(
+        !worktree_registered(src.path(), &dir),
+        "worktree rolled back (gone); worktree list: {}",
+        git(src.path(), &["worktree", "list"])
+    );
+    assert!(
+        !branch_exists(src.path(), "wkr-dg"),
+        "branch rolled back (gone)"
+    );
+    assert!(!dir.exists(), "fork dir reaped");
+}
+
+// SL-285 PHASE-02: the same downgrade refusal on a BOUND worker fork. The record
+// is written between the claim and the worktree, so the compensation must reverse
+// the binding too — otherwise a rolled-back fork leaves a record for a fork that
+// no longer exists.
+#[test]
+fn worker_fork_rolls_back_its_binding_on_downgrade_refusal() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    common::commit_stamp(src.path(), "999.0.0");
+    let coord = std::fs::canonicalize(src.path()).unwrap();
+    let base = git(&coord, &["rev-parse", "HEAD"]);
+    let name = "wkr-bound-dg";
+    let branch = format!("dispatch/{name}");
+    // The binding only takes when the dir is the `<coord>/.worktrees/<name>`
+    // layout the resolver strips — the same fixture the bound-fork path assumes.
+    let dir = coord.join(".worktrees").join(name);
+
+    let out = run(
+        &coord,
+        None,
+        &[
+            "worktree",
+            "fork",
+            "--base",
+            &base,
+            "--branch",
+            &branch,
+            "--dir",
+            dir.to_str().unwrap(),
+            "--worker",
+            "--slice",
+            "285",
+            "--phase",
+            "PHASE-01",
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "a recorded version newer than the binary must refuse; stdout: {}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("999.0.0"),
+        "the refusal names the recorded version; stderr: {}",
+        stderr(&out)
+    );
+    // GONE — every leg, the bounding record included.
+    assert!(
+        !worktree_registered(&coord, &dir),
+        "worktree rolled back (gone); worktree list: {}",
+        git(&coord, &["worktree", "list"])
+    );
+    assert!(!branch_exists(&coord, &branch), "branch rolled back (gone)");
+    assert!(!dir.exists(), "fork dir reaped");
+    let record = coord
+        .join(".doctrine/state/dispatch/record")
+        .join(format!("{name}.toml"));
+    assert!(
+        !record.exists(),
+        "the durable binding is reversed with the fork: {}",
+        record.display()
+    );
+}
+
 // --- VT-4: Orchestrator refusal drives the real CLI ---
 
 #[test]
@@ -416,4 +529,318 @@ fn fork_refused_under_worker_mode() {
         stderr(&out)
     );
     assert!(!target.exists(), "refused fork creates nothing");
+}
+
+// ---------------------------------------------------------------------------
+// SL-285 PHASE-03 — projection fidelity from an INSTALLED source
+//
+// `fork` composes the copy with `install::regenerate`, so the property is not
+// "something was written" but "what was written equals what a fresh install on
+// the same inputs writes". Everything here drives the built binary; the fixtures
+// come from `common::installed_source` (two harnesses, detection-only) and
+// `common::fresh_inputs` (the fork's tracked inputs alone). The compared domains
+// are `common`'s too: `PROJECTION_DOMAIN` for the whole projection (EX-1),
+// `regenerated_domain()` for the regenerated tier alone (EX-4).
+// ---------------------------------------------------------------------------
+
+/// The installed-source fixture: a real install ([`common::installed_source`]) plus
+/// a fork of its HEAD on `branch`, with the tempdir that owns both.
+///
+/// The second install is a PRECONDITION, not a probe: it must converge to the
+/// COMMITTED bytes, so the wiring the fork inherits is what `plan_wire` would
+/// write. A dirty tree here means the fork's regeneration refuses (`stale source
+/// wiring`) — STOP and report the paths; never relax this comparison.
+fn fork_installed_source(branch: &str) -> (tempfile::TempDir, PathBuf) {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = common::installed_source(&tmp.path().join("src"));
+
+    let again = common::install(&source);
+    assert!(
+        again.status.success(),
+        "second install must succeed: {}",
+        stderr(&again)
+    );
+    assert_eq!(
+        git(&source, &["status", "--porcelain"]),
+        "",
+        "STOP: install is not idempotent on the committed tree (SL-285 PHASE-03 \
+         EX-1), so the fork's regeneration would refuse stale tracked wiring"
+    );
+
+    let base = git(&source, &["rev-parse", "HEAD"]);
+    let fork = tmp.path().join("fork");
+    let out = run(
+        &source,
+        None,
+        &[
+            "worktree",
+            "fork",
+            "--base",
+            &base,
+            "--branch",
+            branch,
+            "--dir",
+            fork.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "fork from an installed source must succeed: {}",
+        stderr(&out)
+    );
+    assert!(
+        !stderr(&out).contains("stale source wiring"),
+        "STOP: the fork's regeneration refused tracked wiring (SL-285 PHASE-03 \
+         EX-1): {}",
+        stderr(&out)
+    );
+    (tmp, fork)
+}
+
+/// A tree's projection digest with every symlink re-expressed by its RESOLVED
+/// target, relative to that tree's own root.
+///
+/// `common::tree_digest` records symlinks UNFOLLOWED as `link:<value>`, so a raw
+/// comparison would flag a difference that is only the two trees' roots whenever a
+/// link carries an absolute target. Resolving each link and stripping its own root
+/// makes `link:.doctrine/skills/code-review` mean the same thing in both trees, and
+/// a dangling link fails here by name instead of passing as a byte difference.
+fn resolved_digest(root: &Path, domain: &[&str]) -> std::collections::BTreeMap<PathBuf, String> {
+    let root = std::fs::canonicalize(root).expect("canonicalize digest root");
+    common::digest_domain(&root, domain)
+        .into_iter()
+        .map(|(rel, digest)| {
+            let Some(target) = digest.strip_prefix("link:") else {
+                return (rel, digest);
+            };
+            let link = root.join(&rel);
+            let canonical = std::fs::canonicalize(&link);
+            assert!(
+                canonical.is_ok(),
+                "harness link {} -> {target} must resolve (clippy::panic is denied \
+                 workspace-wide, so a failure is an assertion, not a panic)",
+                link.display()
+            );
+            let resolved = canonical.expect("checked: the link resolves");
+            let stripped = resolved.strip_prefix(&root);
+            assert!(
+                stripped.is_ok(),
+                "harness link {} must resolve inside its own tree, got {}",
+                link.display(),
+                resolved.display()
+            );
+            let own = stripped.expect("checked: inside its own tree");
+            (rel, format!("link:{}", own.display()))
+        })
+        .collect()
+}
+
+/// Every entry of each harness link dir resolves to a REAL payload inside its own
+/// tree. The payload's SHAPE is the member kind's: a `skills` link points at a
+/// canon DIRECTORY and must carry a `SKILL.md` (that is what makes the projected
+/// skill readable rather than a dangling name), while an `agents`/`workflows`
+/// link points at a canon FILE (`.doctrine/agents/<f>`, `.doctrine/workflows/<f>`).
+/// Accepting either shape everywhere would let a skill dir projected as a bare
+/// file — or an agent def projected as a dir — pass.
+fn assert_links_resolve(root: &Path, dirs: &[&str]) {
+    let root = std::fs::canonicalize(root).expect("canonicalize link root");
+    let mut seen = 0usize;
+    for dir in dirs {
+        let d = root.join(dir);
+        if !d.exists() {
+            continue;
+        }
+        let is_skill_dir = Path::new(dir).file_name() == Some(std::ffi::OsStr::new("skills"));
+        for entry in std::fs::read_dir(&d).expect("read link dir") {
+            let path = entry.expect("link dir entry").path();
+            let canonical = std::fs::canonicalize(&path);
+            assert!(
+                canonical.is_ok(),
+                "{} must resolve — a dangling link projects a name, not a payload",
+                path.display()
+            );
+            let resolved = canonical.expect("checked: the link resolves");
+            assert!(
+                resolved.starts_with(&root),
+                "{} must resolve inside its own tree, got {}",
+                path.display(),
+                resolved.display()
+            );
+            if is_skill_dir {
+                assert!(
+                    resolved.join("SKILL.md").is_file(),
+                    "{} must resolve to a skill dir carrying SKILL.md, got {}",
+                    path.display(),
+                    resolved.display()
+                );
+            } else {
+                assert!(
+                    resolved.is_file(),
+                    "{} must resolve to a real def file, got {}",
+                    path.display(),
+                    resolved.display()
+                );
+            }
+            seen += 1;
+        }
+    }
+    assert!(seen > 0, "positive control: {dirs:?} carried link entries");
+}
+
+/// SL-285 PHASE-03 EX-1 / VT-1: a fork of an installed source projects what an
+/// install on the fork's OWN inputs projects — not what the source tree holds.
+#[test]
+fn fork_from_installed_source_projects_like_a_fresh_install() {
+    let (_tmp, fork) = fork_installed_source("proj");
+
+    // The baseline: install on the fork's tracked inputs alone (no derived tier,
+    // no copied allowlisted file — regeneration reads neither).
+    let (_fresh_holder, fresh) = common::fresh_inputs(&fork);
+    let fresh_install = common::install(&fresh);
+    assert!(
+        fresh_install.status.success(),
+        "install on the fresh inputs must succeed: {}",
+        stderr(&fresh_install)
+    );
+
+    assert_links_resolve(&fork, &[".claude/skills", ".agents/skills"]);
+
+    let got = resolved_digest(&fork, common::PROJECTION_DOMAIN);
+    let want = resolved_digest(&fresh, common::PROJECTION_DOMAIN);
+
+    // Positive control, per member and per side: `digest_domain` records a missing
+    // member as `absent`, so a `contains_key` on one member proves nothing and two
+    // absent-in-both trees would compare equal. EVERY compared member must be a
+    // real projection output in the fork AND in the fresh install — no member of
+    // this domain is legitimately absent: each is either a shipped install output
+    // (skills, agents, workflows, the memory corpus, the codex config, the two
+    // harness files, the managed ignore block, the orientation doc) or a tracked
+    // base backing install rewrites, and the source here is a real install.
+    for &rel in common::PROJECTION_DOMAIN {
+        for (side, digest) in [("fork", &got), ("fresh install", &want)] {
+            let value = digest.get(Path::new(rel));
+            assert!(
+                value.is_some_and(|digest| digest != common::ABSENT),
+                "positive control: {rel} is absent in the {side}, so the equality \
+                 below would be vacuous about it"
+            );
+        }
+    }
+
+    // One named artefact per family, so "populated" is a claim about what the legs
+    // actually projected rather than about a directory entry's existence.
+    assert!(
+        fork.join(".codex/hooks.json").is_file(),
+        "control: the codex hook family is projected into the fork"
+    );
+    let skills_dir = fork.join(".doctrine/skills");
+    let mut with_skill_md = 0usize;
+    for entry in std::fs::read_dir(&skills_dir).expect("read the fork's .doctrine/skills") {
+        if entry
+            .expect("skills entry")
+            .path()
+            .join("SKILL.md")
+            .is_file()
+        {
+            with_skill_md += 1;
+        }
+    }
+    assert!(
+        with_skill_md > 0,
+        "control: .doctrine/skills carries at least one skill dir with SKILL.md"
+    );
+    assert!(
+        std::fs::read_dir(fork.join(".doctrine/memory/shipped"))
+            .expect("read the fork's .doctrine/memory/shipped")
+            .next()
+            .is_some(),
+        "control: the shipped memory corpus is materialised (non-empty)"
+    );
+
+    assert_eq!(
+        got, want,
+        "the fork's projection must equal a fresh install on the fork's own inputs"
+    );
+}
+
+/// SL-285 PHASE-03 EX-2 / VT-1: regeneration leaves nothing tracked-dirty, and
+/// creates no `.pi/skills` (pi reads `.agents/skills`; a duplicate dir makes it
+/// warn). The control is non-vacuous: `assert_links_resolve` proves both link
+/// dirs carry resolving entries, not merely that they exist.
+#[test]
+fn fork_from_installed_source_leaves_empty_porcelain_and_no_pi_skills() {
+    let (_tmp, fork) = fork_installed_source("clean");
+
+    // Positive control: regeneration actually projected and linked the derived
+    // tier — every entry resolves to a payload inside the fork.
+    assert_links_resolve(&fork, &[".claude/skills", ".agents/skills"]);
+
+    assert_eq!(
+        git(&fork, &["status", "--porcelain"]),
+        "",
+        "every generated path must be ignored: a dirty porcelain is a real \
+         ignore-contract defect, not a fixture problem"
+    );
+    assert!(
+        !fork.join(".pi/skills").exists(),
+        "no .pi/skills is created — pi reads .agents/skills and warns on a duplicate"
+    );
+}
+
+/// SL-285 PHASE-03 EX-4 / VT-1: a fork of a fork regenerates the same harness set
+/// — the derived tier is derived from the parent's own inputs, so generation 2
+/// must not shed a link, a def or a baked hook.
+#[test]
+fn second_generation_fork_matches_the_first() {
+    let (_tmp, first) = fork_installed_source("gen1");
+
+    // Generation 2 forks FROM a linked worktree, not from the primary tree.
+    let base2 = git(&first, &["rev-parse", "HEAD"]);
+    let holder = tempfile::tempdir().unwrap();
+    let second = holder.path().join("gen2");
+    let out = run(
+        &first,
+        None,
+        &[
+            "worktree",
+            "fork",
+            "--base",
+            &base2,
+            "--branch",
+            "gen2",
+            "--dir",
+            second.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "second generation fork: {}",
+        stderr(&out)
+    );
+
+    // Positive controls: the child really is provisioned, and clean.
+    assert!(
+        std::fs::read_dir(second.join(".agents/skills"))
+            .expect("regenerated .agents/skills")
+            .next()
+            .is_some(),
+        "control: generation 2 carries the codex link dir"
+    );
+    assert_eq!(
+        git(&second, &["status", "--porcelain"]),
+        "",
+        "generation 2 leaves nothing tracked-dirty"
+    );
+
+    assert_links_resolve(&first, &[".claude/skills", ".agents/skills"]);
+    assert_links_resolve(&second, &[".claude/skills", ".agents/skills"]);
+
+    // Bytes, not names: same defs, same links (resolved in their own tree), same
+    // baked hook command.
+    let domain = common::regenerated_domain();
+    assert_eq!(
+        resolved_digest(&first, &domain),
+        resolved_digest(&second, &domain),
+        "generation 2 must regenerate the SAME derived tier as generation 1"
+    );
 }

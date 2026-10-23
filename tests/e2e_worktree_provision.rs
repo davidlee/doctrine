@@ -1,4 +1,4 @@
-//! SL-029 PHASE-01 T8 — end-to-end over the built binary.
+//! SL-029 PHASE-01 — end-to-end over the built binary.
 //!
 //! Drives `doctrine worktree provision` / `check-allowlist` against a real temp
 //! git repo with a linked sibling worktree: an allowlisted gitignored file is
@@ -7,7 +7,8 @@
 //! (VT-7), a non-sibling fork is refused (VT-6), a statically-bad allowlist
 //! exits nonzero (VT-7), a tier-naming `.worktreeinclude` fails closed copying
 //! nothing (VT-8), and an absent `.worktreeinclude` copies nothing at exit 0
-//! (VT-9).
+//! (VT-9). SL-285 PHASE-03 adds the repair case over an installed source: two
+//! `provision` runs converge, and a user file at a link slot is kept (VT-2).
 
 #![allow(
     clippy::expect_used,
@@ -66,14 +67,21 @@ fn add_worktree(source: &Path, fork: &Path) {
     );
 }
 
-fn provision(source: &Path, fork: &Path) -> Output {
+/// `worktree provision <fork> -p <source>` plus any extra `flags` (e.g.
+/// `--allow-downgrade`, SL-285 PHASE-02).
+fn provision_with(source: &Path, fork: &Path, flags: &[&str]) -> Output {
     common::doctrine_cmd(source)
         .args(["worktree", "provision"])
         .arg(fork)
+        .args(flags)
         .arg("-p")
         .arg(source)
         .output()
         .expect("spawn doctrine")
+}
+
+fn provision(source: &Path, fork: &Path) -> Output {
+    provision_with(source, fork, &[])
 }
 
 fn check_allowlist(source: &Path) -> Output {
@@ -122,6 +130,41 @@ fn provision_copies_allowlisted_files_and_withholds_the_tier() {
     assert!(
         stderr.contains("withheld") && stderr.contains("handover.md"),
         "withheld file is warned: {stderr}"
+    );
+}
+
+// SL-285 PHASE-02 EX-4 / RV-425 F-6: a repair whose fork carries a stamp newer
+// than the running binary is refused by its regeneration, and `--allow-downgrade`
+// is the lever that lets the regeneration proceed. The allowlist copy runs FIRST,
+// so the refusal guards regenerate's own writes, not every write in the repair;
+// nothing under test deletes the fork, so `fork.exists()` would be tautological.
+#[test]
+fn provision_refuses_a_downgrade_and_keeps_the_fork() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = init_source(&tmp.path().join("src"));
+    // The lever must ride the COMMIT: the fork below is a checkout of this HEAD,
+    // so its own tracked stamp is what the downgrade check reads.
+    common::commit_stamp(&source, "999.0.0");
+    let fork = tmp.path().join("fork");
+    add_worktree(&source, &fork);
+
+    let out = provision(&source, &fork);
+    assert!(
+        !out.status.success(),
+        "a recorded version newer than the binary must refuse; stdout: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("999.0.0"),
+        "the refusal names the recorded version; stderr: {stderr}"
+    );
+
+    let ok = provision_with(&source, &fork, &["--allow-downgrade"]);
+    assert!(
+        ok.status.success(),
+        "--allow-downgrade proceeds: {}",
+        String::from_utf8_lossy(&ok.stderr)
     );
 }
 
@@ -207,5 +250,137 @@ fn check_allowlist_exit_codes() {
     assert!(
         !check_allowlist(&source).status.success(),
         "negation → nonzero"
+    );
+}
+
+/// The workflow roots: doctrine ships no workflows (the manifest lists the root
+/// but nothing populates it), so they stay empty either side of a repair — kept in
+/// the domain regardless, so the convergence claim spans them.
+const WORKFLOW_ROOTS: &[&str] = &[".doctrine/workflows", ".claude/workflows"];
+
+/// What `provision` REGENERATES from the source after the copy (design §3) — never
+/// what it copies: the shared regenerated tier ([`common::regenerated_domain`])
+/// plus the workflow roots.
+fn derived_tier() -> Vec<&'static str> {
+    common::regenerated_domain()
+        .into_iter()
+        .chain(WORKFLOW_ROOTS.iter().copied())
+        .collect()
+}
+
+/// The stderr row whose verb is `verb` and whose remainder names `name` — the
+/// progress rows pad the verb to a fixed column (`install::row`), so a substring
+/// join like `"kept code-review"` never occurs in the output.
+fn row_naming<'a>(stderr: &'a str, verb: &str, name: &str) -> Option<&'a str> {
+    let needle = format!("  {verb} ");
+    stderr
+        .lines()
+        .find(|line| line.starts_with(&needle) && line.contains(name))
+}
+
+/// SL-285 PHASE-03 EX-3 / VT-2: repairing a provisioned fork is idempotent, and
+/// a user-owned file standing at a doctrine link slot is kept, not clobbered.
+///
+/// The source is a real install ([`common::installed_source`]), so the fork
+/// inherits a tracked `installed-version` and regeneration runs its legs instead
+/// of taking the uninstalled-source skip — a no-op repair would otherwise pass
+/// every assertion by silence. Run 1's `linked code-review` row is the positive
+/// control that the name is in the default desired set (`install.rs:1169`);
+/// `kept` in run 2 is `Notice::Shadows` (a real entry at a doctrine slot is
+/// reported and left alone, `install_ownership.rs:197`), and any red there is a
+/// real defect — `converge_leg` already forwards the writer (`install.rs:998`).
+/// Run 3 re-asserts the same `kept` row, so the convergence digest compares two
+/// runs that both demonstrably executed their legs.
+#[test]
+fn provision_from_installed_source_twice_converges_and_keeps_a_user_file_under_a_link_dir() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = common::installed_source(&tmp.path().join("src"));
+    let fork = tmp.path().join("fork");
+    add_worktree(&source, &fork);
+    let tier = derived_tier();
+
+    // Run 1: the derived tier is materialised and linked in the fork.
+    let first = provision(&source, &fork);
+    assert!(
+        first.status.success(),
+        "first provision failed: {}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let first_stderr = String::from_utf8_lossy(&first.stderr);
+    assert!(
+        row_naming(&first_stderr, "linked", "code-review").is_some(),
+        "run 1 must link a skill from the default desired set; stderr: {first_stderr}"
+    );
+    let before_plant = common::digest_domain(&fork, &tier);
+
+    // A plain user-owned FILE at a slot run 1 filled with a symlink.
+    let slot = fork.join(".agents/skills/code-review");
+    assert!(
+        fs::symlink_metadata(&slot)
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "control: run 1 left a symlink at {}",
+        slot.display()
+    );
+    fs::remove_file(&slot).unwrap();
+    fs::write(&slot, "mine\n").unwrap();
+
+    // Run 2: the repair keeps the user's file and reports it.
+    let second = provision(&source, &fork);
+    assert!(
+        second.status.success(),
+        "second provision failed: {}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    let second_stderr = String::from_utf8_lossy(&second.stderr);
+    assert!(
+        row_naming(&second_stderr, "kept", "code-review").is_some(),
+        "run 2 must keep the user file and say so; stderr: {second_stderr}"
+    );
+    assert_eq!(
+        fs::read_to_string(&slot).unwrap(),
+        "mine\n",
+        "the user's bytes survive the repair"
+    );
+    assert!(
+        !fs::symlink_metadata(&slot)
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "the slot is still the user's plain file, not a reinstated link"
+    );
+
+    // The repair changed that one slot and nothing else in the tier.
+    let after_plant = common::digest_domain(&fork, &tier);
+    let changed: Vec<PathBuf> = after_plant
+        .iter()
+        .filter(|(path, digest)| before_plant.get(*path) != Some(*digest))
+        .map(|(path, _)| path.clone())
+        .collect();
+    assert_eq!(
+        changed,
+        vec![PathBuf::from(".agents/skills/code-review")],
+        "only the withheld slot differs from run 1's projection"
+    );
+
+    // Run 3: convergence — no further change to the derived tier, and the run
+    // proves it ran: the same kept row as run 2 (a converged run is not a silent
+    // none — without this control the digest equality passes on a no-op).
+    let third = provision(&source, &fork);
+    assert!(
+        third.status.success(),
+        "third provision failed: {}",
+        String::from_utf8_lossy(&third.stderr)
+    );
+    let third_stderr = String::from_utf8_lossy(&third.stderr);
+    assert!(
+        row_naming(&third_stderr, "kept", "code-review").is_some(),
+        "run 3 must keep the user file and say so; stderr: {third_stderr}"
+    );
+    assert_eq!(
+        common::digest_domain(&fork, &tier),
+        after_plant,
+        "a third run converges: a kept slot is stable, not oscillating"
     );
 }

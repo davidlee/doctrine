@@ -928,6 +928,109 @@ fn print_ownership_plan(
     )
 }
 
+/// Memory sync leg: the shipped corpus under the ignore contract. Prints the
+/// counts line, or the failure line and `Err`.
+fn sync_memory_leg(root: &Path, out: &mut impl Write) -> anyhow::Result<LegOutcome> {
+    match crate::corpus::sync_corpus(root, &crate::corpus::embedded_assets(), false) {
+        Ok(report) => {
+            writeln!(
+                out,
+                "  corpus sync: {} new, {} changed, {} unchanged, {} prune",
+                report.plan.new.len(),
+                report.plan.changed.len(),
+                report.plan.unchanged.len(),
+                report.plan.prune.len(),
+            )?;
+            Ok(LegOutcome::done())
+        }
+        Err(e) => {
+            report_failure(out, "memory sync", &e)?;
+            Err(e)
+        }
+    }
+}
+
+/// Boot wiring leg: skipped when no harnesses detected. Any harness whose
+/// refresh failed fails the leg (RV-421 F-14).
+fn wire_boot_leg(
+    root: &Path,
+    exec: &Path,
+    harnesses: &[crate::boot::Harness],
+    out: &mut impl Write,
+) -> anyhow::Result<LegOutcome> {
+    if harnesses.is_empty() {
+        return Ok(LegOutcome::done());
+    }
+    match crate::boot::apply_wire_into(root, exec, harnesses, &mut *out) {
+        Ok(report) => match report.touched() {
+            Ok(touched) => Ok(LegOutcome::Done(touched)),
+            Err(failed) => Ok(LegOutcome::Failed(failed)),
+        },
+        Err(e) => {
+            report_failure(out, "boot wire", &e)?;
+            Err(e)
+        }
+    }
+}
+
+/// One convergence covers every harness (SL-281 D3) — none, nothing converges.
+/// Convergence reports per action, not per path: no touched paths.
+fn converge_leg(
+    root: &Path,
+    args: &InstallArgs<'_>,
+    manifest: &Manifest,
+    agents: &[String],
+    catalog: &[Entry],
+    selected: &[&Entry],
+    out: &mut impl Write,
+) -> anyhow::Result<LegOutcome> {
+    if agents.is_empty() {
+        return Ok(LegOutcome::done());
+    }
+    match with_wanted(
+        root,
+        args,
+        manifest,
+        agents,
+        catalog,
+        selected,
+        |cx, wanted| {
+            converge(
+                cx,
+                &manifest.framework.roots,
+                &manifest.harness,
+                wanted,
+                &mut *out,
+            )
+        },
+    ) {
+        Ok(()) => Ok(LegOutcome::done()),
+        Err(e) => {
+            report_failure(out, "framework install", &e)?;
+            Err(e)
+        }
+    }
+}
+
+/// Print a leg's failure line, or return an error that still carries the leg's
+/// own failure: a broken `out` must never mask the error it was meant to report
+/// (SL-285 F8).
+fn report_failure(out: &mut impl Write, what: &str, cause: &anyhow::Error) -> anyhow::Result<()> {
+    if let Err(w) = writeln!(out, "  {what} failed: {cause:#}") {
+        bail!("{cause:#} (and reporting it failed: {w})");
+    }
+    Ok(())
+}
+
+/// A leg's result as the ledger entry it contributes: a failed leg has already
+/// printed its own failure line, so recording the failure is all that is left.
+fn leg_outcome(result: anyhow::Result<LegOutcome>) -> LegOutcome {
+    match result {
+        Ok(outcome) => outcome,
+        Err(e) => LegOutcome::failed(&e),
+    }
+}
+
 /// Run the forward steps: memory sync → boot wire → legacy starters →
 /// convergence. The install's one prompt already covered them all. Partial failure is non-fatal — errors are printed, the next step proceeds, and each leg's
 /// outcome is returned (SL-282: a caught failure must block the stamps).
@@ -940,48 +1043,18 @@ fn run_forward_steps(
     let root = plan.base.project_root.as_path();
     let registry = &manifest.harness;
     let agents = &plan.harnesses;
-    let harnesses = &plan.boot;
     let mut outcomes: Vec<(Leg, LegOutcome)> = Vec::new();
 
     print_forward_summary(plan, args, registry, FORWARD_LIVE)?;
 
     // 1. Memory sync — the shipped corpus lands under the ignore contract, so
     // the leg reports no touched paths.
-    let mut memory = LegOutcome::done();
-    match crate::corpus::sync_corpus(root, &crate::corpus::embedded_assets(), false) {
-        Ok(report) => {
-            let mut out = io::stdout();
-            writeln!(
-                out,
-                "  corpus sync: {} new, {} changed, {} unchanged, {} prune",
-                report.plan.new.len(),
-                report.plan.changed.len(),
-                report.plan.unchanged.len(),
-                report.plan.prune.len(),
-            )?;
-        }
-        Err(e) => {
-            writeln!(io::stdout(), "  memory sync failed: {e:#}")?;
-            memory = LegOutcome::failed(&e);
-        }
-    }
+    let memory = leg_outcome(sync_memory_leg(root, &mut io::stdout()));
     outcomes.push((Leg::MemorySync, memory));
 
     // 2. Boot wire — skipped when no harnesses detected. Any harness whose
     // refresh failed fails the leg (RV-421 F-14).
-    let mut boot = LegOutcome::done();
-    if !harnesses.is_empty() {
-        boot = match crate::boot::apply_wire(root, exec, harnesses, false) {
-            Ok(report) => match report.touched() {
-                Ok(touched) => LegOutcome::Done(touched),
-                Err(failed) => LegOutcome::Failed(failed),
-            },
-            Err(e) => {
-                writeln!(io::stdout(), "  boot wire failed: {e:#}")?;
-                LegOutcome::failed(&e)
-            }
-        };
-    }
+    let boot = leg_outcome(wire_boot_leg(root, exec, &plan.boot, &mut io::stdout()));
     outcomes.push((Leg::BootWiring, boot));
 
     // Legacy starter removal (SL-282): the retired starter leg's unedited copies
@@ -1001,29 +1074,229 @@ fn run_forward_steps(
 
     // 3. One convergence covers every harness (SL-281 D3) — none, nothing converges.
     // Convergence reports per action, not per path: no touched paths.
+    // Discovery is pre-leg, not a leg: its failure aborts the run (unchanged), so
+    // it stays outside `converge_leg` and its `Err` propagates.
     let catalog = discover()?;
     let selected = select_for_install_args(&catalog, args)?;
-
-    let mut convergence = LegOutcome::done();
-    if !agents.is_empty() {
-        let mut out = io::stdout();
-        let result = with_wanted(
-            root,
-            args,
-            manifest,
-            agents,
-            &catalog,
-            &selected,
-            |cx, wanted| converge(cx, &manifest.framework.roots, registry, wanted, &mut out),
-        );
-        if let Err(e) = result {
-            writeln!(out, "  framework install failed: {e:#}")?;
-            convergence = LegOutcome::failed(&e);
-        }
-    }
+    let convergence = leg_outcome(converge_leg(
+        root,
+        args,
+        manifest,
+        agents,
+        &catalog,
+        &selected,
+        &mut io::stdout(),
+    ));
     outcomes.push((Leg::Convergence, convergence));
 
     Ok(outcomes)
+}
+
+/// Regenerate the derived runtime tier in `dest` — a fresh worktree of
+/// `source` — from the running binary: install's forward legs minus
+/// `LegacyStarters`. No stamps and no marker move (SL-285 DEC-402, DEC-393,
+/// DEC-399).
+///
+/// Harness detection reads `source` (`dest` may be a bare fork); every write
+/// lands in `dest` and every line on `out`. The legs are bounded twice: the
+/// preflight refuses when boot wiring would rewrite a tracked path, and the
+/// drift check refuses when a leg dirtied one — newly, or by rewriting a file
+/// that was already dirty (SL-285 F2). A leg that *refuses* is as fatal as one
+/// that fails (F3).
+///
+/// A `source` that was never installed prints the skip line and returns `Ok`.
+///
+/// # Errors
+///
+/// Refuses when `source`'s stamp is unreadable, when `dest`'s stamp outranks the
+/// running binary without `allow_downgrade`, when the preflight hits tracked
+/// wiring, or when a leg fails.
+pub(crate) fn regenerate(
+    source: &Path,
+    dest: &Path,
+    allow_downgrade: bool,
+    out: &mut impl Write,
+) -> anyhow::Result<()> {
+    match &read_tracked_stamp(source) {
+        StampRead::Absent => {
+            writeln!(
+                out,
+                "derived tier not regenerated — doctrine not installed in {}",
+                source.display()
+            )?;
+            return Ok(());
+        }
+        StampRead::Unreadable { path, reason } => {
+            bail!(
+                "cannot read {} ({reason}): refusing to regenerate the derived tier",
+                path.display()
+            );
+        }
+        StampRead::Version(_) => {}
+    }
+
+    let manifest = load_manifest()?;
+    let names = resolve_install_harnesses(&[], source, &manifest.harness)?.names;
+    let boot = boot_harnesses(&names, dest, &manifest.harness);
+    let exec = crate::boot::resolve_exec()?;
+
+    let binary = binary_version()?;
+    let dest_stamp = read_tracked_stamp(dest);
+    if let StampRead::Unreadable { path, reason } = &dest_stamp {
+        bail!(
+            "cannot read {} ({reason}): cannot verify the regeneration is not a downgrade",
+            path.display()
+        );
+    }
+    let findings = classify(&dest_stamp, &StampRead::Absent, &binary);
+    if let Some(from) = downgrade_from(&findings)
+        && !allow_downgrade
+    {
+        bail!(
+            "{}; {}",
+            downgrade_warning(from, &binary),
+            ALLOW_DOWNGRADE_HINT
+        );
+    }
+
+    // Everything fallible that writes nothing is resolved up front (F4): once a
+    // leg has run, only a leg's own error or the drift check may abort.
+    let args = InstallArgs {
+        agents: &[],
+        skills: &[],
+        domains: &[],
+        only_memory: false,
+        global: false,
+        dry_run: false,
+        yes: true,
+        allow_downgrade,
+    };
+    let catalog = discover()?;
+    let selected = select_for_install_args(&catalog, &args)?;
+
+    let planned = crate::boot::plan_wire(dest, &exec, &boot)?;
+    let tracked = git::tracked_paths(dest)
+        .context("listing the tracked files of the regeneration destination")?;
+    let stale = tracked_hits(&planned, &tracked);
+    if !stale.is_empty() {
+        bail!(
+            "stale source wiring: regeneration would change tracked {}; run 'doctrine install' in the source and commit",
+            path_list(&stale)
+        );
+    }
+
+    guard_tracked_drift(dest, || {
+        sync_memory_leg(dest, &mut *out)?;
+        let wired = wire_boot_leg(dest, &exec, &boot, &mut *out)?;
+        if let Some(failed) = leg_failure(&wired) {
+            bail!("{failed}");
+        }
+        let converged = converge_leg(
+            dest, &args, &manifest, &names, &catalog, &selected, &mut *out,
+        )?;
+        if let Some(failed) = leg_failure(&converged) {
+            bail!("{failed}");
+        }
+        Ok(())
+    })
+}
+
+/// PURE. A leg's non-completion message, if any — a `Refused` leg halts a
+/// regeneration exactly like a `Failed` one (SL-285 F3).
+fn leg_failure(outcome: &LegOutcome) -> Option<&str> {
+    match outcome {
+        LegOutcome::Done(_touched) => None,
+        LegOutcome::Refused(msg) | LegOutcome::Failed(msg) => Some(msg),
+    }
+}
+
+/// A drift snapshot: every tracked-dirty path in a destination, with the bytes
+/// it held (`None` when the path was gone from disk — a staged deletion).
+/// Comparing bytes, not just paths, is what catches a leg rewriting a file that
+/// was already dirty (SL-285 F2).
+type DriftSnapshot = BTreeMap<PathBuf, Option<Vec<u8>>>;
+
+/// Snapshot a destination's tracked dirt. Impure shell: reads the disk.
+fn tracked_drift_snapshot(dest: &Path) -> anyhow::Result<DriftSnapshot> {
+    let dirty = git::tracked_dirty_paths(dest)
+        .context("reading the regeneration destination's tracked status")?;
+    dirty
+        .into_iter()
+        .map(|path| {
+            let body = match fs::read(dest.join(&path)) {
+                Ok(bytes) => Some(bytes),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+                Err(e) => {
+                    return Err(anyhow::Error::new(e).context(format!("read {}", path.display())));
+                }
+            };
+            Ok((path, body))
+        })
+        .collect()
+}
+
+/// PURE. The paths whose bytes moved between the two snapshots: newly dirty
+/// paths, pre-dirty paths a leg rewrote while leaving them dirty, and pre-dirty
+/// paths a leg reverted to clean (the uncommitted edit is gone). A pre-dirty
+/// path still carrying its old bytes is not drift (SL-285 F2). Sorted.
+fn tracked_drift(before: &DriftSnapshot, after: &DriftSnapshot) -> Vec<PathBuf> {
+    let moved = after.iter().filter(|(path, body)| match before.get(*path) {
+        None => true,
+        Some(old) => old != *body,
+    });
+    let reverted = before
+        .iter()
+        .filter(|(path, _body)| !after.contains_key(*path));
+    moved
+        .chain(reverted)
+        .map(|(path, _body)| path.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+/// The drift check as one composition (SL-285 F5): snapshot `dest`'s tracked
+/// dirt, run `legs`, snapshot again, and refuse when [`tracked_drift`] names
+/// anything. Nothing but the caller's writes sits between the two snapshots.
+///
+/// # Errors
+///
+/// Returns a leg's own error, or the refusal naming every drifted path.
+fn guard_tracked_drift(
+    dest: &Path,
+    legs: impl FnOnce() -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    let before = tracked_drift_snapshot(dest)?;
+    legs()?;
+    let after = tracked_drift_snapshot(dest)?;
+    let changed = tracked_drift(&before, &after);
+    if !changed.is_empty() {
+        bail!(
+            "regeneration changed tracked files: {}",
+            path_list(&changed)
+        );
+    }
+    Ok(())
+}
+
+/// PURE. The paths a planned wiring would write that are tracked, sorted.
+fn tracked_hits(planned: &[Touched], tracked: &BTreeSet<PathBuf>) -> Vec<PathBuf> {
+    planned
+        .iter()
+        .map(|t| t.path.clone())
+        .filter(|path| tracked.contains(path))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+/// PURE. `paths` comma-joined for a refusal line.
+fn path_list(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// The progress line for one removed legacy starter (`rel`: its root-relative `.md`).
@@ -7732,6 +8005,245 @@ mod tests {
                 harness: Registry::default(),
             }
         }
+    }
+}
+
+// ── Tests: install::regenerate (SL-285 PHASE-01) ─────────────
+
+#[cfg(test)]
+mod tests_regenerate {
+    use super::*;
+    use crate::worktree::test_helpers::{git, init_repo};
+
+    /// A repo with a base commit, returned canonical. `stamp` writes the
+    /// committed tracked install version; `None` leaves the repo uninstalled.
+    fn repo_with_stamp(dir: &Path, stamp: Option<&str>) -> PathBuf {
+        let repo = init_repo(dir);
+        let Some(version) = stamp else {
+            return repo;
+        };
+        let toml = repo.join(crate::config_file::DOCTRINE_TOML);
+        fs::create_dir_all(toml.parent().unwrap()).unwrap();
+        fs::write(
+            &toml,
+            format!("[install]\ninstalled-version = \"{version}\"\n"),
+        )
+        .unwrap();
+        git(&repo, &["add", "."]);
+        git(&repo, &["commit", "-q", "-m", "stamp"]);
+        repo
+    }
+
+    fn text(out: &[u8]) -> String {
+        String::from_utf8(out.to_vec()).unwrap()
+    }
+
+    /// EX-6: an uninstalled source is not regenerated — one exact line, no writes.
+    #[test]
+    fn regenerate_skips_an_uninstalled_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_stamp(&tmp.path().join("repo"), None);
+        let mut out = Vec::new();
+        regenerate(&repo, &repo, false, &mut out).unwrap();
+        assert_eq!(
+            text(&out),
+            format!(
+                "derived tier not regenerated — doctrine not installed in {}\n",
+                repo.display()
+            ),
+            "the skip names the source, byte-exact",
+        );
+        assert!(
+            crate::git::tracked_dirty_paths(&repo).unwrap().is_empty(),
+            "a skipped regeneration writes nothing tracked",
+        );
+        assert!(
+            !repo.join(".doctrine/memory/shipped").exists(),
+            "no leg ran — the corpus was not materialised",
+        );
+    }
+
+    /// EX-3: a dest stamp newer than the binary refuses before any write; the
+    /// lever gets past it.
+    #[test]
+    fn regenerate_refuses_a_downgrade_unless_allowed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_stamp(&tmp.path().join("repo"), Some("999.0.0"));
+
+        let mut out = Vec::new();
+        let refused = regenerate(&repo, &repo, false, &mut out).unwrap_err();
+        assert!(
+            format!("{refused:#}").contains("999.0.0"),
+            "the refusal names the newer stamp: {refused:#}",
+        );
+        assert!(
+            !repo.join(".doctrine/memory/shipped").exists(),
+            "refused before any write",
+        );
+
+        // With the lever the downgrade gate passes; this bare repo detects no
+        // harness, so the harness legs are no-ops and the corpus leg runs.
+        // Nothing it writes is tracked, so the drift guard passes too: the run
+        // is `Ok` and the leg reports on `out` (EX-7), not stdout.
+        let mut allowed = Vec::new();
+        regenerate(&repo, &repo, true, &mut allowed).expect("the lever runs the legs");
+        assert!(
+            repo.join(".doctrine/memory/shipped").is_dir(),
+            "the lever ran the legs",
+        );
+        assert!(
+            text(&allowed).contains("corpus sync:"),
+            "EX-7: the legs write to `out`, not stdout: {}",
+            text(&allowed),
+        );
+    }
+
+    /// EX-4 (RV-425 F-1): the preflight refuses a tracked file boot wiring would
+    /// rewrite — and refuses it before any write.
+    #[test]
+    fn regenerate_refuses_stale_tracked_wiring() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_stamp(&tmp.path().join("repo"), Some(env!("CARGO_PKG_VERSION")));
+        // Claude is detected by its `detect` dir; `.mcp.json` is tracked and
+        // carries no doctrine entry, so the wiring would rewrite it.
+        fs::create_dir_all(repo.join(".claude")).unwrap();
+        let mcp = repo.join(".mcp.json");
+        fs::write(&mcp, "{}\n").unwrap();
+        git(&repo, &["add", ".mcp.json"]);
+        git(&repo, &["commit", "-q", "-m", "mcp"]);
+        let before = fs::read(&mcp).unwrap();
+
+        let mut out = Vec::new();
+        let refused = regenerate(&repo, &repo, false, &mut out).unwrap_err();
+        assert!(
+            format!("{refused:#}").contains(".mcp.json"),
+            "F-1: the refusal names the stale tracked wiring: {refused:#}",
+        );
+        assert_eq!(
+            fs::read(&mcp).unwrap(),
+            before,
+            "refused before any write — the file is byte-identical",
+        );
+    }
+
+    /// SL-285: the live boot-wiring leg reports on the caller's `out`, never
+    /// stdout — provisioning passes stderr, so a fork's stdout stays clean.
+    #[test]
+    fn regenerate_sends_boot_wiring_progress_to_out() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_stamp(&tmp.path().join("repo"), Some(env!("CARGO_PKG_VERSION")));
+        // Claude is detected by its `detect` dir. Nothing here is tracked beyond
+        // the stamp, so the stale-wiring preflight passes and the wiring runs.
+        fs::create_dir_all(repo.join(".claude")).unwrap();
+
+        let mut out = Vec::new();
+        regenerate(&repo, &repo, false, &mut out).expect("the wiring leg runs");
+        let captured = text(&out);
+        assert!(
+            captured.contains("created:"),
+            "boot wiring progress lands on `out`: {captured}",
+        );
+        assert!(
+            captured.contains("claude:"),
+            "the claude harness reports on `out`: {captured}",
+        );
+    }
+
+    /// A repo with one committed file at `name` carrying `body`, canonical.
+    fn repo_with_committed_file(dir: &Path, name: &str, body: &str) -> PathBuf {
+        let repo = init_repo(dir);
+        fs::write(repo.join(name), body).unwrap();
+        git(&repo, &["add", name]);
+        git(&repo, &["commit", "-q", "-m", "tracked"]);
+        repo
+    }
+
+    /// F5(a): the guard refuses a closure that dirties a tracked file, and names
+    /// it.
+    #[test]
+    fn drift_guard_refuses_a_closure_that_dirties_a_tracked_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_committed_file(&tmp.path().join("repo"), "tracked.txt", "one\n");
+        let path = repo.join("tracked.txt");
+
+        let err = guard_tracked_drift(&repo, || {
+            fs::write(&path, "two\n").unwrap();
+            Ok(())
+        })
+        .expect_err("new dirt must refuse");
+        assert!(
+            format!("{err:#}").contains("tracked.txt"),
+            "the refusal names the dirtied path: {err:#}",
+        );
+    }
+
+    /// F5(b)/F2: the guard refuses a leg that rewrites a file that was ALREADY
+    /// dirty — the path set is unchanged, the bytes are not.
+    #[test]
+    fn drift_guard_refuses_a_rewrite_of_an_already_dirty_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_committed_file(&tmp.path().join("repo"), "tracked.txt", "one\n");
+        let path = repo.join("tracked.txt");
+        fs::write(&path, "dirty\n").unwrap();
+
+        let err = guard_tracked_drift(&repo, || {
+            fs::write(&path, "dirtier\n").unwrap();
+            Ok(())
+        })
+        .expect_err("a rewritten pre-dirty file must refuse");
+        assert!(
+            format!("{err:#}").contains("tracked.txt"),
+            "the refusal names the rewritten path: {err:#}",
+        );
+    }
+
+    /// F5(c): untracked scratch is not tracked dirt, so a leg may write it.
+    #[test]
+    fn drift_guard_passes_an_untracked_write() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_committed_file(&tmp.path().join("repo"), "tracked.txt", "one\n");
+
+        guard_tracked_drift(&repo, || {
+            fs::write(repo.join("scratch.txt"), "x\n").unwrap();
+            Ok(())
+        })
+        .expect("an untracked write is not drift");
+    }
+
+    /// F2's compare, isolated: new dirt and a rewritten pre-dirty path are
+    /// drift; a pre-dirty path left untouched is not.
+    #[test]
+    fn tracked_drift_is_new_dirt_plus_rewritten_pre_dirty_paths() {
+        let snap = |entries: &[(&str, &[u8])]| -> DriftSnapshot {
+            entries
+                .iter()
+                .map(|(path, body)| (PathBuf::from(*path), Some(body.to_vec())))
+                .collect()
+        };
+        let before = snap(&[
+            ("kept.txt", b"x"),
+            ("reverted.txt", b"x"),
+            ("rewritten.txt", b"x"),
+        ]);
+        let after = snap(&[
+            ("kept.txt", b"x"),
+            ("rewritten.txt", b"y"),
+            ("new.txt", b"z"),
+        ]);
+        assert_eq!(
+            tracked_drift(&before, &after),
+            vec![
+                PathBuf::from("new.txt"),
+                PathBuf::from("reverted.txt"),
+                PathBuf::from("rewritten.txt"),
+            ],
+            "new dirt, the pre-dirty path a leg reverted to clean (its edit is lost), and the \
+             rewritten one, sorted; `kept.txt` is untouched",
+        );
+        assert!(
+            tracked_drift(&after, &after).is_empty(),
+            "identical snapshots, no drift",
+        );
     }
 }
 

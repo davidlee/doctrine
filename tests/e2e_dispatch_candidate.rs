@@ -2300,6 +2300,151 @@ fn e2e_dispatch_candidate_create_provisions_gitignored_embed_assets() {
     );
 }
 
+/// SL-285 PHASE-03 EX-7 / VT: the `--worktree` create still prints exactly two
+/// machine lines (ref, path) when the source is an installed tree whose derived
+/// tier is regenerated into the candidate worktree.
+///
+/// The two-line assertion alone would pass on silence, so it is bracketed by the
+/// R5 controls: the install is COMMITTED (an untracked stamp leaves `regenerate`
+/// on its uninstalled-source skip) and the codex link dir is populated in the
+/// worktree — the latter being this test's control for regeneration, which is
+/// what the worktree path depends on. (A `provisioned` row is the allowlist copy
+/// leg's, not regeneration's, so it proves nothing here.)
+#[test]
+fn candidate_create_from_installed_source_prints_two_lines() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    common::install_into(dir);
+    prepare_review(dir);
+
+    // Control (source side): HEAD's tree carries the stamp, so the candidate
+    // worktree is a checkout of a real install and regeneration has work to do.
+    let stamp = git(dir, &["show", "HEAD:.doctrine/doctrine.toml"]);
+    assert!(
+        stamp.contains("installed-version"),
+        "control: HEAD must track the install stamp, got: {stamp}"
+    );
+
+    let out = create(
+        dir,
+        None,
+        &[
+            "--role",
+            "review_surface",
+            "--payload",
+            "impl_bundle",
+            "--base",
+            "refs/heads/main",
+            "--label",
+            "installed-001",
+            "--worktree",
+        ],
+    );
+    assert!(out.status.success(), "create failed: {}", stderr(&out));
+
+    // Stdout: line 1 = target ref, line 2 = worktree path.
+    let out_stdout = stdout(&out);
+    let lines: Vec<&str> = out_stdout.lines().collect();
+    assert_eq!(
+        lines.len(),
+        2,
+        "expected two stdout lines, got: {out_stdout}"
+    );
+    let wt_path = std::path::PathBuf::from(lines[1]);
+    assert!(
+        wt_path.exists(),
+        "worktree path should exist: {}",
+        wt_path.display()
+    );
+
+    assert!(
+        std::fs::read_dir(wt_path.join(".agents/skills"))
+            .expect("regenerated .agents/skills in the candidate worktree")
+            .next()
+            .is_some(),
+        "control: the codex link dir is populated in {}",
+        wt_path.display()
+    );
+}
+
+// SL-285 PHASE-02 EX-2/EX-3 / RV-425 F-6: the CLEAN arm's provision refuses a stamp
+// newer than the running binary; nothing durable survives — the ref is rolled back
+// and, per Q4, the half-created candidate worktree is removed too.
+#[test]
+fn e2e_dispatch_candidate_create_compensates_on_downgrade_refusal() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    // A CLEAN-merge fixture: review/064 merges into the advanced main without
+    // conflict, so this exercises the clean arm (`--worktree`), never the
+    // conflicted one — no conflict fixture, no resolution the operator owes.
+    build_fixture(dir);
+    // The lever rides the COMMIT: the candidate worktree checks out `--base`
+    // (`refs/heads/main`) and the source stamp is read from this working tree.
+    common::commit_stamp(dir, "999.0.0");
+    prepare_review(dir);
+
+    let out = create(
+        dir,
+        None,
+        &[
+            "--role",
+            "review_surface",
+            "--payload",
+            "impl_bundle",
+            "--base",
+            "refs/heads/main",
+            "--label",
+            "downgrade-001",
+            "--worktree",
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "a recorded version newer than the binary must refuse; stdout: {}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("999.0.0"),
+        "the refusal names the recorded version; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains("provision candidate worktree"),
+        "the failure happened AFTER creation — the provision context proves it; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        !stderr(&out).contains("resolve the markers"),
+        "the conflicted arm is not involved; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        !ref_exists(dir, "candidate/064/downgrade-001"),
+        "the candidate ref is rolled back"
+    );
+    // `.doctrine/state/dispatch/candidate` — `dispatch::CANDIDATE_WORKTREE_SUBPATH`
+    // + the row id (`cand-{slice:03}-{label}`).
+    let wt_path = dir
+        .join(".doctrine/state/dispatch/candidate")
+        .join("cand-064-downgrade-001");
+    assert!(
+        !wt_path.exists(),
+        "the half-created candidate worktree is removed, not leaked: {}",
+        wt_path.display()
+    );
+    let toml = std::fs::read_to_string(dir.join(".doctrine/dispatch/064/candidates.toml"))
+        .unwrap_or_default();
+    // The ledger row is written only AFTER provisioning, so the downgrade refusal
+    // aborts before it — this is a guard against a row for a candidate that was
+    // rolled back, not the discriminator that proves the failure was post-creation
+    // (the `provision candidate worktree` context above is).
+    assert!(
+        !toml.contains("downgrade-001"),
+        "no ledger row survives the rollback: {toml}"
+    );
+}
+
 // --- SL-212 PHASE-03: conflict + --worktree materialises merge-tree's output ---
 //
 // The conflict arm no longer just parks the branch at base — it materialises

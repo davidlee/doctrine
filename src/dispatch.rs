@@ -38,7 +38,7 @@ use crate::ledger::{
 };
 use crate::listing::render_table;
 use crate::root;
-use crate::worktree::run_provision;
+use crate::worktree::{ProvisionMode, remove_worktree_dir, run_provision};
 
 #[derive(Subcommand)]
 pub(crate) enum DispatchCommand {
@@ -2243,10 +2243,27 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
                 // CHR-030: provision gitignored embed assets (web/map/dist/)
                 // so the candidate compiles out of the box. run_provision
                 // reads .worktreeinclude and copies allowlisted files — the
-                // same machinery used by `worktree fork`.
-                if let Err(e) = run_provision(Some(root.to_path_buf()), &path) {
+                // same machinery used by `worktree fork` — then regenerates
+                // the derived tier, so a candidate is spawnable as-is.
+                if let Err(e) = run_provision(
+                    Some(root.to_path_buf()),
+                    &path,
+                    ProvisionMode::CopyThenRegenerate {
+                        allow_downgrade: false,
+                    },
+                ) {
+                    // COMPENSATE worktree-first (a tree must never be left
+                    // standing on a branch we are about to delete), then the
+                    // ref. Debris is named, never swallowed (STD-003).
+                    let debris = remove_worktree_dir(root, &path);
                     rollback_ref(root, &target_ref, &branch_oid);
-                    return Err(e.context("provision candidate worktree"));
+                    if debris.is_empty() {
+                        return Err(e.context("provision candidate worktree"));
+                    }
+                    return Err(e.context(format!(
+                        "provision candidate worktree; rollback debris: {}",
+                        debris.join(", ")
+                    )));
                 }
                 Some(path)
             }
@@ -2462,8 +2479,11 @@ fn create_conflict_worktree(
     let provision_and_materialise = || -> anyhow::Result<PathBuf> {
         let path = add_candidate_worktree(root, id, target_ref, true)?;
         // CHR-030 parity with the clean arm: provision gitignored embed assets so
-        // the candidate compiles out of the box.
-        run_provision(Some(root.to_path_buf()), &path).context("provision candidate worktree")?;
+        // the candidate compiles out of the box. CopyOnly: the tree carries conflict
+        // markers, so no regeneration leg could run here — the operator runs it
+        // after resolving (disclosed below).
+        run_provision(Some(root.to_path_buf()), &path, ProvisionMode::CopyOnly)
+            .context("provision candidate worktree")?;
         git::materialise_conflict_worktree(&path, tc, stages, source_oid, &merge_msg)?;
         Ok(path)
     };
@@ -2481,6 +2501,11 @@ fn create_conflict_worktree(
         io::stderr(),
         "candidate create: {id} conflicted — resolve the markers and `git commit` in {}, \
          then `dispatch candidate ingest` from the coordination tree",
+        worktree_path.display()
+    )?;
+    writeln!(
+        io::stderr(),
+        "derived tier not regenerated — run 'doctrine worktree provision {}' after resolving",
         worktree_path.display()
     )?;
     Ok(())

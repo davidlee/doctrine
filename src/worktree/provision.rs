@@ -77,13 +77,44 @@ fn enumerate_candidates(root: &Path) -> anyhow::Result<Vec<String>> {
     Ok(out)
 }
 
-/// `doctrine worktree provision <fork>` — the sole copier (design §3).
+/// Which tiers a provisioning run composes (SL-285 DEC-396). The copy is always
+/// performed; regeneration of the derived runtime tier is the mode's business.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ProvisionMode {
+    /// Copy allowlisted files only. For a caller that cannot regenerate yet (a
+    /// conflicted candidate tree carries markers, so no leg could run).
+    CopyOnly,
+    /// Copy, then regenerate the derived runtime tier in the fork from `source`.
+    CopyThenRegenerate { allow_downgrade: bool },
+}
+
+/// `doctrine worktree provision <fork> [--allow-downgrade]` — the sole copier
+/// (design §3), and the sole place the derived runtime tier is regenerated.
 ///
 /// Runs from the SOURCE root and writes `<fork>`: read `.worktreeinclude` (absent
 /// ⇒ empty) → `allowlist_violations` fail-closed → verify `<fork>` is a sibling
 /// worktree → enumerate gitignored candidates → `select_copies` → safe copy,
-/// skip+warn withheld → report copied/withheld (exit 0).
-pub(crate) fn run_provision(path: Option<PathBuf>, fork: &Path) -> anyhow::Result<()> {
+/// skip+warn withheld → report copied/withheld (exit 0). Then, unless `mode` is
+/// [`ProvisionMode::CopyOnly`], regenerate the derived runtime tier in `<fork>`
+/// from the same source (SL-285 DEC-396) — the failure propagating, never a
+/// warning (DEC-401).
+pub(crate) fn run_provision(
+    path: Option<PathBuf>,
+    fork: &Path,
+    mode: ProvisionMode,
+) -> anyhow::Result<()> {
+    let (source, fork) = copy_allowlisted(path, fork)?;
+    if let ProvisionMode::CopyThenRegenerate { allow_downgrade } = mode {
+        crate::install::regenerate(&source, &fork, allow_downgrade, &mut io::stderr())
+            .context("regenerate the derived tier")?;
+    }
+    Ok(())
+}
+
+/// The copy half of [`run_provision`]. Private: the copy body has exactly one
+/// caller, so no other module can re-spell it. Returns the resolved
+/// `(source, fork)` pair the regeneration leg reads.
+fn copy_allowlisted(path: Option<PathBuf>, fork: &Path) -> anyhow::Result<(PathBuf, PathBuf)> {
     let source = root::find(path, &root::default_markers())?;
     let source = fs::canonicalize(&source)
         .with_context(|| format!("canonicalize source root {}", source.display()))?;
@@ -141,7 +172,7 @@ pub(crate) fn run_provision(path: Option<PathBuf>, fork: &Path) -> anyhow::Resul
         fork.display(),
         selection.withheld.len()
     )?;
-    Ok(())
+    Ok((source, fork))
 }
 
 /// `doctrine worktree check-allowlist` — the static smell test. Nonzero exit on a

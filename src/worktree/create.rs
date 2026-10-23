@@ -21,7 +21,7 @@
 //! a panic) on any malformed input or failure.
 
 use super::fork::remove_worktree_dir;
-use super::provision::run_provision;
+use super::provision::{ProvisionMode, run_provision};
 use crate::git;
 use anyhow::{Context, bail};
 use std::fs;
@@ -225,7 +225,13 @@ fn act_on_create(root: &Path, action: CreateAction) -> anyhow::Result<PathBuf> {
             )
             .with_context(|| format!("git worktree add --detach {} HEAD", dir.display()))?;
             // Provision from the coord tree; compensate on any failure (G3).
-            if let Err(cause) = run_provision(Some(root.to_path_buf()), &dir) {
+            if let Err(cause) = run_provision(
+                Some(root.to_path_buf()),
+                &dir,
+                ProvisionMode::CopyThenRegenerate {
+                    allow_downgrade: false,
+                },
+            ) {
                 let debris = remove_worktree_dir(root, &dir);
                 if debris.is_empty() {
                     return Err(cause.context(format!(
