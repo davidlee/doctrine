@@ -1,0 +1,109 @@
+id    = 426
+slug  = "reconciliation-review-of-sl-285"
+title = "reconciliation review of SL-285"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "auditor"
+responder = "author"
+rounds_base = 0
+contests_base = 0
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-285"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "major"
+title = "Expected a test pinning regenerate's fatal-leg rule; observed none"
+detail = """
+DEC-401 (legs are fatal) and Reconcile carry ("A Refused leg outcome halts regeneration like Failed") are implemented by `leg_failure` (src/install.rs:1206), called at :1191 and :1197. No test references `leg_failure` or drives a Refused/Failed leg through `regenerate`; tests_regenerate (install.rs:8014+) covers skip, downgrade, stale wiring, progress and the drift guard only. A regression that let a refused leg degrade would ship green.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "minor"
+title = "Expected tests for the unreadable-stamp refusals; observed none"
+detail = """
+Reconcile carry: "Unreadable stamp refuses (source or destination)". Code: src/install.rs ~1150-1176. No tests_regenerate case plants an unreadable/malformed source or destination stamp.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "minor"
+title = "Expected the conflicted-candidate disclosure line to be asserted; observed untested"
+detail = """
+Design sec-2 / DEC-396: the conflicted dispatch candidate is CopyOnly and discloses "derived tier not regenerated — run 'doctrine worktree provision <path>' after resolving" (src/dispatch.rs:2508). No test asserts the line (grep tests/ empty).
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "minor"
+title = "Expected design-target selectors to cover every touched path; observed 7 undeclared"
+detail = """
+`doctrine slice conformance 285`: undeclared src/boot.rs, src/git.rs, src/worktree/coordinate.rs, src/worktree/create.rs, tests/e2e_dispatch_candidate.rs, tests/e2e_worktree_coordinate.rs, tests/e2e_worktree_create_fork.rs. All are within design scope (sec-4 names plan_wire in boot.rs, crate::git, create/coordinate callers, coordination and candidate tests); selectors missing, not scope creep. design sec-4's test list also omits e2e_worktree_create_fork.rs; slice-285.md § Affected surface omits boot.rs, git.rs, create.rs, coordinate.rs.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "minor"
+title = "Expected design.md to state the in-flight design deltas; observed them only in notes"
+detail = """
+notes § Reconcile carry holds binding deltas absent from design.md rev 31: uninstalled source copy-only + disclose (sec-1/3/5); absent destination stamp is not a downgrade (sec-3); regeneration progress to stderr (sec-3); unreadable stamp refuses (sec-3: design says "two refusals", code has four); drift compares bytes (sec-3 says porcelain new entries); Refused leg halts like Failed (sec-3 fatal legs); layering re-tier of worktree::provision/fork, QUE-229 answered keep, tangle stays 76 (sec-4/sec-6); boot-wiring progress reaches `out` (sec-3); clean-fork fixture ignores /.codex, ISS-531 (sec-5).
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "nit"
+title = "Expected sec-4's plan_wire mechanism to match code; observed a third WirePass variant"
+detail = """
+sec-4 says plan_wire composes the existing dry-run halves; code adds `WirePass::DryRunPlan` (src/boot.rs ~3426) with touch collection gated on it. Constraint (apply_wire and the pinned dry-run test unchanged) holds. Wording is stale.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "minor"
+title = "Expected harness resolution failure to be disclosed; observed silent empty boot wiring"
+detail = """
+`boot_harnesses` (src/install.rs:754) does `crate::boot::resolve_harnesses(&names, root).unwrap_or_default()`: a registry `boot` value that fails to resolve yields no boot wiring, silently. Pre-existing helper, but regenerate now depends on it for every fork (DEC-393), and STD-003 (no silent skip) applies.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
