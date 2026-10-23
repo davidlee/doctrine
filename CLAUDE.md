@@ -46,14 +46,39 @@ Use doctrine memory (the mcp tool). DON'T use claude built-in memory.
   makes that a poor tradeoff.
 - Opus sub-agent is also useful for variety on subsequent passes.
 
-## Research
+## Delegating to pi (`pi_agent`)
+
+The quotient MCP server's `pi_agent` tool runs one pi agent under a confining
+form, on a cheaper model. It is faster and cheaper than a Claude subagent and
+quite capable, but looser: lower instruction adherence. Prefer it over Claude
+subagents for bounded work; keep judgement and acceptance for yourself.
+
+| profile | capability | use for |
+|---|---|---|
+| `read` | read-only, no thinking | recon: code maps, call sites, "where is X" |
+| `research` | read-only, low thinking | judgement over the tree: governance applicability, tradeoffs, first-pass review |
+| `write` | read/write | mechanical edits: renames, fixture updates, boilerplate, doc sweeps |
+
+- **Prompts.** Self-contained: name files, the exact question, and the output
+  shape. Ask for batched reads and a capped answer — the policy ceiling is a
+  handful of requests, and a one-file-per-turn delegate runs out before it answers.
+- **Results.** Trust `result` only when `final` is true; otherwise read `state`,
+  `causes`, `transcript`. A `refused` run did nothing — fix the call, don't retry it.
+  Continue a conversation by passing back `session`.
+- **Verify, don't adopt.** Treat output as tier-5 evidence. Spot-check cited
+  paths and claims; review every `write` diff (`git diff`) before building on
+  it, and run the gate yourself. Never delegate decisions, ledger dispositions,
+  or anything that records a user act.
+- **Independent threads in parallel:** issue several `pi_agent` calls in one turn.
+
+### `/research` round
 
 Claude's mechanism for the `/research` round — see `.doctrine/governance.md`
-§Research agents for the contract it must satisfy.
+§Research agents for the contract it must satisfy. Don't use Claude subagents
+for research here: one `pi_agent` call per thread (`read` for code-map threads,
+`research` for judgement threads). The delegate is read-only, so write its
+`result` to `.doctrine/slice/NNN/research/raw/<thread>.md` yourself, verbatim.
 
-- Don't use Claude subagents for research in this repo; do use
-  `./scripts/pi-scout` (quicker, cheaper) or `./scripts/pi-research` (smarter).
-  Usage: takes a prompt via stdin or arg; returns results on stdout.
-- note: outside the jail (i.e pwd is not in `/workspace/doctrine`) these agents
-  have no API keys in the environment; pass prompts to the user to run for you.
+`./scripts/pi-scout` / `./scripts/pi-research` are the superseded shell route;
+use them only if quotient is unavailable.
 
