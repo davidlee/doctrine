@@ -9,10 +9,13 @@
 | `src/boot.rs` | codex arm of `install_refresh` drops the MCP leg (`mcp: NotApplicable`); remove `install_codex_mcp`, `plan_codex_mcp`, `codex_mcp_entry`, `codex_mcp_fallback_snippet` and their `wire()` lines and `mcp_rel` codex row; `run_install` (boot install) builds the plan, asks consent, runs the leg |
 | `src/install.rs` | `InstallPlan.codex_user_mcp: Option<CodexUserPlan>` (codex harness only); overview bullet; consent question after `confirm_install`; `Leg::CodexUserMcp` in `run_forward_steps` after boot wiring; `print_details` section; *not* in `regenerate` (DEC-411) |
 | `src/commands/cli.rs` | `-y` help on `install` and `boot install` states it grants user-level consent |
-| `src/mcp_server/mod.rs`, `src/mcp_server/tools.rs` | `Option<root>`; rootless initialize / list / call |
+| `src/mcp_server/mod.rs`, `src/mcp_server/tools.rs`, `src/mcp_server/protocol.rs` | `Option<root>`; `InitializeResult.instructions`; `handle_initialize` takes the root option; rootless list / call (RV-427 F-11) |
+| `src/fsutil.rs` | write through a symlink: resolve the link, then `write_atomic` the target (RV-427 F-7) |
+| `tests/common/mod.rs` | `doctrine_cmd` sets `CODEX_HOME` to a non-existent path, so no test can reach a real codex config; codex suites override it (RV-427 F-3) |
 | `src/commands/serve.rs` | unchanged signature; passes through |
 | `tests/e2e_codex_install.rs` | rewritten around a fake `codex` on PATH recording argv, temp `HOME`/`CODEX_HOME`; project retirement; consent / decline / `-y`; degradation; regeneration leaves user config untouched |
-| `tests/e2e_mcp_server.rs` | rootless handshake outside a project and in a git repo without `.doctrine/` |
+| `tests/e2e_mcp_server.rs` | rootless handshake outside a project and in a git repo without `.doctrine/`; existing fixtures create `.doctrine/` where they relied on a bare root |
+| `tests/e2e_install_flow.rs` | the codex `--yes` flow asserts the degraded line under the safe `CODEX_HOME` |
 
 `README.md` changes at reconcile, not in a phase (see Revision).
 
@@ -28,18 +31,32 @@ env) -> CodexUserPlan`. No I/O. The shell supplies the two file texts (absent �
 `None`), the resolved exec, the root and the env facts (`CODEX_HOME` value, `HOME`
 present, `codex` on PATH).
 
-1. **Destination** (DEC-408). An empty `CODEX_HOME` counts as unset.
-   `CODEX_HOME` set → `$CODEX_HOME/config.toml`. A relative or non-existent
-   `CODEX_HOME` → `Degraded(BadCodexHome)`. Unset → `$HOME/.codex/config.toml`.
-   No `HOME` → `Degraded(NoHome)`. The plan always carries the resolved path for
-   the report.
-2. **Bake guard** (DEC-404). If `exec`, canonicalised, `starts_with` the
-   canonicalised project root (whole components) → `Degraded(ExecInProject)`.
+0. **Applicability.** Only a project install (`plan.is_project_install`:
+   not `--global`, not `--only-memory`) with the codex harness builds this plan
+   (RV-427 F-10).
+1. **Destination** (DEC-408). `CODEX_HOME` set and absolute and existing →
+   `$CODEX_HOME/config.toml`. Set but empty, relative or non-existent →
+   `Degraded(BadCodexHome)` (codex's handling of each is unprobed, RV-427 F-9).
+   Unset → `$HOME/.codex/config.toml`. No `HOME` → `Degraded(NoHome)`. The
+   shell reads the file: absent → `None`; unreadable → `Degraded(UserUnreadable)`;
+   present but not valid TOML → `Degraded(UserUnparseable)` (RV-427 F-4). The
+   plan always carries the resolved path for the report.
+2. **Bake guard** (DEC-404, RV-427 F-8). The shell resolves two facts: the git
+   common directory of the project root, and the git common directory of the
+   checkout enclosing `exec`'s directory (`git rev-parse --git-common-dir` run in
+   each, through `worktree::resolve_common_dir`; "none" when `exec` is not in a
+   checkout). Both are canonicalised. Equal → `Degraded(ExecInProjectRepo)`: the
+   binary is a build from this repository's main checkout or one of its worktrees.
+   If `exec` cannot be resolved → `Degraded(ExecUnresolved)`. A binary in an
+   unrelated checkout, such as a dotfiles home, passes.
 3. **User entry** (DEC-406), classified by table name:
    - absent → `Add`;
    - a table with `command` a string and `args` a string array → `Current` when
-     command == exec and args == `["serve","--mcp"]`, else `Replace { old }`;
-   - otherwise (not a table, wrong types) → `Degraded(Malformed)`.
+     command == exec, args == `["serve","--mcp"]` and `enabled` is not `false`;
+     else `Replace { old }` (a disabled entry is replaced and re-enabled, which the
+     prompt states; RV-427 F-5);
+   - otherwise (not a table, a `url` transport, wrong types) →
+     `Degraded(UserMalformed)`.
 
    `Replace` and `Add` carry `dropped`: every key other than `command`/`args`
    (EVD-033: `mcp add` drops them).
@@ -48,8 +65,8 @@ present, `codex` on PATH).
    | project `[mcp_servers.doctrine]` | class | effect |
    |---|---|---|
    | absent | — | nothing |
-   | wrapper in `CODEX_MCP_WRAPPER_FORMS` (existing predicate) | `OwnedWrapper` | removed with the user write |
-   | `command` contains `/` (absolute or relative) | `Override` | untouched; reported; not incomplete |
+   | `command = "sh"`, `args = ["-c", line]`, line in `CODEX_MCP_WRAPPER_FORMS` — whatever other keys it carries | `OwnedWrapper` | removed with the user write; extra keys listed as removed (RV-427 F-2) |
+   | `command` contains `/` (absolute or relative), or a `url` transport | `Override` | untouched; reported; not incomplete |
    | `command` is a bare name | `PathShadow` | untouched; warned; holds incomplete |
    | empty `command`, wrong types, not a table | `Malformed` | untouched; snippet; holds incomplete |
    | unparseable project file | `Unreadable` | untouched; disclosed; holds incomplete |
@@ -63,8 +80,9 @@ entry is `OwnedWrapper`, and nothing is degraded.
 ### Consent (DEC-403)
 
 Asked only when the plan proposes a change, after install's `Proceed?` and before
-any leg runs. `-y` consents. `--dry-run` shows the question's content without
-asking. Default No.
+any leg runs. `-y` consents without asking. `--dry-run` (of `install` and
+`boot install`) shows the question's content without asking and never runs the
+leg. Default No.
 
 ```text
 Codex: register doctrine's MCP server in your user config?
@@ -72,8 +90,10 @@ Codex: register doctrine's MCP server in your user config?
   runs     codex mcp add doctrine -- /home/u/.local/share/doctrine/bin/doctrine serve --mcp
   scope    every codex session on this machine, in every project
   replaces doctrine serve --mcp                         (only when replacing)
-  drops    enabled = false, env.FOO                     (only when keys are dropped)
-  removes  the old doctrine wrapper in .codex/config.toml   (only when present)
+  drops    enabled = false, env.FOO                     (only when keys are dropped;
+                                                         enabled = false means re-enabled)
+  removes  the old doctrine wrapper in .codex/config.toml   (only when present;
+                                                             lists any extra keys it held)
   Codex asks you to trust each new folder before doctrine connects there.
 Write user config? [y/N]
 ```
@@ -88,14 +108,22 @@ prompt, with the same `-y` rule.
   `LegOutcome::Done` with nothing touched.
 - **Consented** → run `codex mcp add …` through an injected `CodexCli` runner.
   On success, remove an `OwnedWrapper` from the project file (existing
-  edit-preserving `toml_edit` path, `write_atomic`). `Done` touches the project
-  file only; the user file is outside the repo and is never a commit-hint path.
-  On failure → `Refused`, with codex's stderr disclosed and the project file left
-  untouched.
-- **Degraded / PathShadow / Malformed / Unreadable** → no writes. Print the cause
-  and the `codex mcp add …` line (or the snippet). `LegOutcome::Refused`:
-  install continues, and the closing summary names the leg (DEC-408: degraded,
-  never failed).
+  edit-preserving `toml_edit` path). The write goes to the symlink-resolved file,
+  so a linked `.codex/config.toml` keeps its link (RV-427 F-7). `Done` touches
+  the project file only; the user file is outside the repo and is never a
+  commit-hint path. `add` fails → `Refused`, codex's stderr disclosed, project
+  file untouched. `add` succeeds but the wrapper removal fails → `Refused`, with
+  "user entry written; the old project wrapper still overrides it here; rerun
+  install" (a rerun sees `Current` + `OwnedWrapper` and asks again;
+  RV-427 F-6).
+- **Degraded** → no writes. Print the cause and the `codex mcp add …` line.
+  `LegOutcome::Done` with nothing touched: degradation is an environment fact
+  (no codex CLI in the jail, no home), not an unfinished install, so the version
+  stamp still records (RV-427 F-1; DEC-408).
+- **PathShadow / Malformed / Unreadable** (project entry) → no writes. Print the
+  cause and the snippet. `LegOutcome::Refused`: install continues, and the
+  closing line is `install incomplete: codex user MCP; version not recorded` (the
+  existing `incomplete_line` format).
 - **Current, no project change** → `Done`, one "current" line.
 - **Override** never blocks the user write. It is reported alongside it.
 
@@ -191,15 +219,14 @@ PATH-dependent shadow:
 ```text
 codex: .codex/config.toml has a doctrine entry with command "doctrine"; it overrides the user entry here
   and needs doctrine on the codex daemon's PATH, which may fail (EVD-032). Use an absolute path, or remove it.
-install incomplete: codex user MCP
+install incomplete: codex user MCP; version not recorded
 ```
 
-Degraded:
+Degraded (the install still completes):
 
 ```text
 codex: user MCP registration skipped — codex is not on PATH
   run: codex mcp add doctrine -- /home/u/.local/share/doctrine/bin/doctrine serve --mcp
-install incomplete: codex user MCP
 ```
 
 Declined:
@@ -215,7 +242,9 @@ The report states what was written, never that codex has loaded it (POL-003).
 **Dry-run** builds the plan (two file reads, no `codex` invocation). It prints the
 consent block's content under the existing dry-run headings, and never writes
 either layer. The overview gains one bullet when the plan proposes a change:
-`codex  register doctrine's MCP server in your user codex config (asks first)`.
+`codex  register doctrine's MCP server in your user codex config`, followed by
+"(asks first)" interactively or "(-y: consenting)" under `-y`. `boot install
+--dry-run` prints the same consent content (RV-427 F-12).
 
 <!-- doctrine:section sec-revision -->
 ## Revision and reconcile
@@ -253,7 +282,8 @@ README, also at reconcile:
 | `codex mcp add` flags or semantics change | read path is independent; runner failure → `Refused` with codex stderr; EVD-033 pins 0.159.1 behaviour |
 | Codex hides the rootless `instructions` | ASM-014; an empty tool list remains the signal |
 | Regeneration writes user config | DEC-411; e2e asserts regeneration leaves a temp user config byte-identical |
-| Jail installs have no codex / a different home | degrade with the pasteable line; expected inside the jail |
+| Jail installs have no codex / a different home | degrade with the pasteable line; install still completes and stamps |
+| Tests reach the developer's real codex config | `doctrine_cmd` points `CODEX_HOME` at a non-existent path (RV-427 F-3) |
 | A `PathShadow` keeps install incomplete | intended, with the cause named (partially resolves ISS-528); an absolute override does not |
 | Codex behaviour beyond tested versions | probes cover CLI 0.159.1 and daemon 0.163.0/0.164.0 |
 
@@ -282,9 +312,14 @@ Unit (pure, `codex_mcp`):
   - user entry: absent / current / replace / replace with dropped keys / malformed;
   - project entry: absent / owned wrapper / absolute override / relative override /
     bare-name shadow / empty command / wrong types / unparseable;
+  - user entry also: disabled (`enabled = false`) / `url` transport;
+  - project entry also: wrapper with extra keys / `url` transport;
   - destination: `CODEX_HOME` unset / empty / relative / missing; no `HOME`;
-  - bake guard: exec inside root, sibling-prefix path (`/repo/app` vs
-    `/repo/application`), symlinked root;
+    user file unreadable / unparseable;
+  - applicability: `--global` / `--only-memory` build no plan;
+  - bake guard (given common-dir facts): same repository (main checkout, fork
+    worktree) refused; unrelated checkout (dotfiles home) passes; exec in no
+    checkout passes; exec unresolved degrades;
   - `codex` absent.
 - Consent text and report lines per outcome (constants, STD-001).
 
@@ -292,8 +327,10 @@ Shell (`execute` with a fake `CodexCli`):
 
 - consented: one `add` with the exact argv, then wrapper removed;
 - `add` fails: `Refused`, project untouched;
+- `add` succeeds, wrapper removal fails: `Refused` with the rerun line;
+- symlinked project config: link survives the removal;
 - declined: zero calls, nothing written;
-- degraded: zero calls.
+- degraded: zero calls, `Done`, the version stamp is recorded.
 
 E2E (binary-driven, fake `codex` on PATH, temp `HOME`/`CODEX_HOME`):
 
@@ -302,7 +339,9 @@ E2E (binary-driven, fake `codex` on PATH, temp `HOME`/`CODEX_HOME`):
 - `--dry-run`: no `codex` invocation and no writes;
 - `install` regeneration of a fork: the user config is byte-identical and there is
   no `codex` call;
-- `boot install -y`: same as install.
+- `boot install -y`: same as install;
+- the default `doctrine_cmd` environment never invokes `codex` (a fake `codex`
+  on PATH records no call).
 
 MCP:
 

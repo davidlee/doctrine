@@ -149,14 +149,22 @@ response = "Project removal writes the symlink-resolved file (fsutil helper: res
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Bake guard: canonicalisation failure undefined; keyed to the wrong root"
 detail = "No variant if canonicalising root or exec fails. The guard compares against the project root, so install -p <coord>/.worktrees/<fork> run with the coord's ./target/debug/doctrine passes and bakes a dev build machine-wide."
+disposition = "fix-now"
+response = "Rejected the any-git-checkout rule: the user home is a git checkout (~/.git) containing the installed binary. Adopted the same-repository rule: refuse when the exec's enclosing checkout shares the project's git common dir (main checkout or any worktree); unrelated checkouts pass; unresolvable exec degrades (ExecUnresolved). sec-leg step 2, verification matrix, DEC-404 amended."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Rejected the any-git-checkout rule: the user home is a git checkout (~/.git) containing the installed binary. Adopted the same-repository rule: refuse when the exec's enclosing checkout shares the project's git common dir (main checkout or any worktree); unrelated checkouts pass; unresolvable exec degrades (ExecUnresolved). sec-leg step 2, verification matrix, DEC-404 amended."
 
 [[finding]]
 id = "F-9"
