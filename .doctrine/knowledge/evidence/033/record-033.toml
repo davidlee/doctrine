@@ -1,0 +1,31 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 33
+slug = "codex-mcp-add-semantics"
+title = "codex mcp add replaces the whole user-level server table"
+record_kind = "evidence"
+status = "captured"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = 'codex-cli 0.159.1, temp CODEX_HOME: (1) `codex mcp add doctrine -- <cmd>...` writes the user layer only and replaces the whole `[mcp_servers.doctrine]` table — `startup_timeout_sec`, the `env` sub-table and `enabled = false` were dropped (a disabled server is re-enabled); other tables and comments survive. (2) A symlinked `config.toml` is written through; the link survives. (3) A non-existent `CODEX_HOME` fails: "failed to load configuration". (4) `codex mcp get doctrine --json` returns the entry structured (command, args, enabled, env, env_vars, timeouts). (5) User observation 2026-10-23: after `codex mcp add`, interactive codex in a new folder showed the generic folder trust prompt; on "Trust and continue" doctrine showed as connected. The untrusted case was not observed.'
+provenance = "experiment"
+confidence = "high"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "codex mcp add as the user-level write"
+target = "SL-286"

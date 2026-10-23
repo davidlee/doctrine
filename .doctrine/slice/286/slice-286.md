@@ -34,17 +34,19 @@ such a file. Restarting the daemon from `install` was considered and rejected
 
 ## Scope & Objectives
 
-1. **Register at user level.** `boot install`'s codex arm writes
-   `[mcp_servers.doctrine]` to the user-level codex config (`$CODEX_HOME/config.toml`,
-   default `~/.codex/config.toml`). The entry is `command = <absolute path to
-   doctrine>`, `args = ["serve", "--mcp"]` (DEC-403). Doctrine owns the user-level
-   table by name and writes only `command` and `args`, preserving other keys and
-   reporting a changed command old → new; a malformed entry gets a snippet
-   (DEC-406). A binary inside the installed project is never baked (DEC-404).
-   Degradation is disclosed, never a failure (DEC-408).
+1. **Register at user level, with consent.** `boot install`'s codex arm runs
+   `codex mcp add doctrine -- <absolute doctrine path> serve --mcp` after a
+   dedicated consent prompt (default No; asked only when the entry would change;
+   `-y` grants consent). It reads the current entry with
+   `codex mcp get doctrine --json` (ASM-015). `mcp add` replaces the whole table,
+   so dropped keys are listed in the prompt (DEC-403, DEC-406, EVD-033). Declining
+   changes neither layer and reports "declined". A binary inside the installed
+   project is never baked (DEC-404). No codex on PATH, a bad `CODEX_HOME`, or a
+   codex failure degrades to printing the `codex mcp add` command (DEC-408).
 2. **Retire the project-level entry; respect overrides.** An owned project-level
    entry (the wrapper forms in `CODEX_MCP_WRAPPER_FORMS`) is removed, since codex
-   prefers the project layer. A foreign absolute-path project entry is a
+   prefers the project layer (only after consent). A foreign project entry
+   whose command contains a path separator is a
    deliberate override: untouched, reported, not held incomplete. A foreign
    PATH-dependent one is warned and holds install incomplete (DEC-406; partially
    resolves ISS-528).
@@ -54,6 +56,10 @@ such a file. Restarting the daemon from `install` was considered and rejected
 4. **Governance.** DEC-406 supersedes DEC-323 and DEC-332; DEC-407 supersedes
    DEC-325. Revise REQ-484 (SPEC-011) through a Revision (ADR-013). Drop the
    README declaration of the `sh` dependency for codex (DEC-409).
+   **At reconcile**, update the README: the user-level entry and its scope, the
+   consent prompt and that `-y` grants it, the project-level override slot,
+   codex's per-folder trust prompt, and the codex CLI as a declared dependency.
+   The `-y` help text says it grants user-level consent.
 5. **Disclosure.** The install report names the user-level file it wrote and the
    path it baked, plus one line for project-level retirement, override or shadow
    (DEC-407). It also carries the daemon-restart hint (EVD-032): an already-
@@ -103,7 +109,8 @@ Resolved in design by DEC-403..DEC-410; kept as the scoping record.
 - `src/boot.rs`: codex MCP arm (`CODEX_CONFIG_REL`, `CODEX_MCP_WRAPPER*`,
   `codex_mcp_entry`, `classify_codex_entry`, `plan_codex_mcp`,
   `install_codex_mcp`), the report path (`wire()`, `mcp_rel`,
-  `RefreshOutcome::PrintedFallback`) and their tests.
+  `RefreshOutcome::PrintedFallback`) and their tests; a `codex` CLI runner seam
+  (injectable for tests); the install consent prompt (DEC-381 flow).
 - `src/mcp_server/`, `src/commands/serve.rs`: rootless `serve --mcp`.
 - `tests/` install end-to-end coverage for the codex arm (hermetic `CODEX_HOME`).
 - `README.md`: codex MCP section and the `sh` dependency declaration.
@@ -115,12 +122,15 @@ Resolved in design by DEC-403..DEC-410; kept as the scoping record.
   command, extra keys preserved, malformed) and for project-level entries
   (owned wrapper → removed, path-separator override incl. relative, bare
   PATH-dependent command, empty command, wrongly-typed fields).
-- Unit: user-config resolution (empty / relative `CODEX_HOME`, symlinked
-  `config.toml` written through, read-only target degrades); dry-run writes
-  neither layer.
+- Unit: consent — prompt shown only on change, default No, `-y` consents,
+  decline changes neither layer; degradation — no codex on PATH, empty /
+  relative / missing `CODEX_HOME`, codex failure; dry-run never calls `add`
+  nor retires the project entry.
+- E2E: a fake `codex` on PATH records the `mcp add` argv.
 - Unit/E2E: bake guard refuses a binary inside the project root; rootless
   `serve --mcp` handshakes with no tools outside a doctrine project.
 - VH: ASM-014 — where codex shows the server's initialize instructions.
+- Probe: ASM-015 — `codex mcp get` in a trusted project with a project entry.
 - E2E: install against a temp `CODEX_HOME` writes the absolute-path entry,
   removes an owned project wrapper, and leaves foreign entries alone.
 - VH: interactive codex in this repo connects to doctrine after

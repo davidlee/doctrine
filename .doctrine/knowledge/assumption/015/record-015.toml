@@ -1,0 +1,36 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 15
+slug = "codex-mcp-get-reads-user-layer"
+title = "codex mcp get reports the user-layer entry"
+record_kind = "assumption"
+status = "held"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+claim = "`codex mcp get doctrine --json`, run by install, reports the user-layer entry rather than a project-layer entry that shadows it. Probed only in an untrusted project (temp CODEX_HOME), where it returned the user entry; behaviour in a trusted project with a project-level entry is unobserved."
+confidence = "medium"
+basis = "observation"
+validation_plan = "Probe during implementation: trusted project with a project-level [mcp_servers.doctrine]; if get returns the project entry, run it from a neutral cwd (e.g. the codex home) or read the user file directly for classification."
+validated_by    = ""
+validated_on    = ""
+invalidated_by  = ""
+invalidated_on  = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "user-layer read via codex mcp get"
+target = "SL-286"

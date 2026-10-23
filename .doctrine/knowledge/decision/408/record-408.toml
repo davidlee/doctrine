@@ -12,7 +12,7 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "SL-286 inq-6. The user-level write depends on a resolvable home and a writable, parseable config; in the bwrap jail `~/.codex` may be absent or read-only."
-choice = "Resolve `$CODEX_HOME` (an empty value counts as unset), else `$HOME/.codex`. A relative `CODEX_HOME` is not guessed at: degrade. A symlinked `config.toml` is resolved and the real file is written atomically, so the link survives; a read-only target degrades. No resolvable home, unreadable, unparseable or unwritable config: write nothing, disclose the cause, print the snippet; install reports degraded, not failed. A missing config file is created. Dry-run writes nothing."
+choice = "The user-level read and write go through the codex CLI, which resolves its own home and config file (symlinks written through, EVD-033). Degrade — write nothing, print the exact `codex mcp add` command, disclose the cause, report degraded not failed — when: `codex` is not on PATH; `CODEX_HOME` is set but empty (treated as unset first), relative, or does not exist; or `codex mcp get`/`add` fails (its stderr is disclosed). The codex CLI on PATH is a declared host dependency of the codex arm (POL-002 facet 3). Dry-run calls `codex mcp get` at most, never `add`, and never retires the project entry."
 alternatives = ["Fail the install", "Silently skip"]
 rationale = "STD-003 (no silent skip) and the existing PrintedFallback posture."
 consequences = ["Jail installs normally degrade to a printed snippet"]
