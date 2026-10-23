@@ -36,3 +36,17 @@ Calibration update, SL-285 PHASE-03 (2026-10-23), first use of the new profiles:
 - Delegates write green-first verification tests; the orchestrator must still
   run negative controls (neutralise the behaviour, watch red) — delegates
   predicted green and could not tell vacuous green from real green.
+
+Calibration update, SL-286 PHASE-01 (2026-10-24):
+
+- Alternative to a worktree: a writable `cwd` on a subdirectory (`src/`,
+  `tests/`) is accepted. The child sees only that subtree, so a change spanning
+  `src/` and `tests/` takes one session per subtree. Cheaper than a fork for a
+  small phase in the primary tree.
+- `judgement` (high) can end its first turn after reading with `result: null`.
+  Continue the session with "answer now, ≤3 more tool calls".
+- Set `transcript_budget_bytes` low (~1.5–3 KB): the transcript repeats the
+  final result, so a large budget doubles the tokens returned.
+- `implement` again hit the 30-request ceiling on a 5-task prompt, leaving a
+  complete green tree. Compile and check before re-delegating.
+- Retrieve this memory before the first delegation, not at harvest.
