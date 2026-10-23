@@ -45,7 +45,7 @@ reconciliation"):
   provision — the same upward-edge shape `worktree::coordinate` is already
   command-tier for. All their importers are command tier. Measured: the gate
   passes at `command = 76`, so no tangle bump (sec-4's predicted +1 did not
-  materialise). Pending user confirmation; integrate into sec-4 and sec-6.
+  materialise). User confirmed 2026-10-23 (QUE-229 answered: keep); integrate into sec-4 and sec-6.
 - **Provisioning progress reaches `out` for the boot-wiring leg too**
   (`boot::apply_wire_into`); PHASE-01 left it on stdout (PHASE-02 review F1).
 
@@ -67,7 +67,7 @@ fresh-as-of: 2026-10-23 · PHASE-02 · fork sl-285 5727bb85b
 - mem_01a1680244397e23b4c63de9a0223fad — linked worktrees read main's install marker; ignored hook files bake the absolute exec
 
 ### Open
-- QUE-229 — keep the layering re-tier of worktree::provision / worktree::fork (user call)
+- QUE-229 — answered: keep the re-tier (2026-10-23)
 - DEC-402 — regeneration legs + tracked-file guard
 - DEC-396 — ProvisionMode single entry
 - DEC-397 — creation compensates, repair preserves

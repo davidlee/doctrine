@@ -5,7 +5,7 @@ id = 229
 slug = "keep-the-sl-285-layering-re-tier-of-worktreeprovision-and-worktreefork"
 title = "Keep the SL-285 layering re-tier of worktree::provision and worktree::fork?"
 record_kind = "question"
-status = "open"
+status = "answered"
 created = "2026-10-23"
 updated = "2026-10-23"
 tags = []
@@ -13,9 +13,9 @@ tags = []
 [facet]                         # every field typed; seeded empty (captured later)
 question    = ""
 why_matters = ""
-answer      = ""
-answered_by = ""
-answered_on = ""
+answer = "Keep. worktree::provision and worktree::fork stay command tier in ADR-001 layering.toml — they compose install::regenerate, the same upward-edge shape as worktree::coordinate; tangle baseline unchanged (command = 76). Integrate into SL-285 design sec-4/sec-6 at reconcile."
+answered_by = "David Lee (user, session 2026-10-23: 'keep the re-tier')"
+answered_on = "2026-10-23"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
