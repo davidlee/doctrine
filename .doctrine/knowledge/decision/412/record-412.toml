@@ -11,13 +11,13 @@ updated = "2026-10-23"
 tags = ["codex", "mcp", "reconcile"]
 
 [facet]                         # every field typed; seeded empty (captured later)
-context      = "Implementing SL-286 PHASE-02 (codex_mcp pure plan) surfaced gaps and contradictions in design.md sec-leg / sec-report and plan.toml PHASE-02 EX-4."
-choice       = "Adopt the implementation deltas listed in the body (D1-D9 of the PHASE-02 sheet); reconcile amends design.md and EX-4 to match."
+context = "Implementing SL-286 PHASE-02 (codex_mcp pure plan) surfaced gaps and contradictions in design.md sec-leg / sec-report and plan.toml PHASE-02 EX-4."
+choice = "Adopt the implementation deltas listed in the body (D1-D9 of the PHASE-02 sheet); reconcile amends design.md and EX-4 to match."
 alternatives = []
-rationale    = "Each delta resolves a case the design cannot express (FileRead, destination split) or contradicts itself on (proposes_change vs Execute), or fills unspecified text (degraded causes, removal-only consent)."
-consequences = ["reconcile: amend design.md sec-leg/sec-report and PHASE-02 EX-4", "PHASE-03 execute consumes FileRead, project_blocks and the report functions"]
-decided_by   = "orchestrator (D1-D8); user ruling \"agreed\" 2026-10-24 (D9)"
-decided_on   = "2026-10-24"
+rationale = "Each delta resolves a case the design cannot express (FileRead, destination split) or contradicts itself on (proposes_change vs Execute), or fills unspecified text (degraded causes, removal-only consent)."
+consequences = ["reconcile: amend design.md sec-leg/sec-report and PHASE-02 EX-4", "PHASE-03 execute consumes FileRead", " project_blocks and the report functions"]
+decided_by = 'orchestrator (D1-D8); user ruling "agreed" 2026-10-24 (D9); user approved item 8 wording 2026-10-24'
+decided_on = "2026-10-24"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

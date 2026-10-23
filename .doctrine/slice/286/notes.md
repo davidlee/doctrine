@@ -46,10 +46,10 @@ fresh-as-of: 2026-10-24 · PHASE-03 · 49e58e65e
 
 - DEC-412 — PHASE-02 design deltas (FileRead, destination split, blocking
   project entries, degraded/removal-only text); reconcile folds into design.md
-  and amends PHASE-02 EX-4. Item 8 wording awaits user review.
+  and amends PHASE-02 EX-4. Item 8 wording user-approved.
 - DEC-413 — PHASE-03 execute deltas (project path param, write-time re-check,
   opt-in symlink write-through, new report lines); reconcile folds into
-  design.md. Item 7 wording awaits user review.
+  design.md. Items 7, 8 user-approved.
 - ASM-014 — where codex shows the rootless instructions (VH in PHASE-05).
 - RSK-234 · IDE-069 · ISS-528 (partially resolved by DEC-406) · ISS-533.
 - Reconcile: REV for REQ-484 (SPEC-011) + rootless-serve requirement;

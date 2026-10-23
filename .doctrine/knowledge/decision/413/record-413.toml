@@ -15,8 +15,8 @@ context = "Implementing SL-286 PHASE-03 (codex_mcp execute shell) surfaced gaps 
 choice = "Adopt the execute deltas listed in the body; reconcile folds them into design.md."
 alternatives = []
 rationale = "Each delta resolves a case the design cannot express (project path, re-check at write time, removal-only failure) or narrows a risk the generic wording would open (symlink write-through on a shared seam)."
-consequences = ["reconcile: amend design.md sec-leg § Execute and sec-report", "PHASE-04 wires execute and maps CodexUserOutcome to LegOutcome", "new report wording awaits user review"]
-decided_by = "orchestrator (PHASE-03 rulings; review F1 adjudication)"
+consequences = ["reconcile: amend design.md sec-leg § Execute and sec-report", "PHASE-04 wires execute and maps CodexUserOutcome to LegOutcome"]
+decided_by = "orchestrator (PHASE-03 rulings; review F1 adjudication); user approved items 7 and 8 2026-10-24"
 decided_on = "2026-10-24"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
