@@ -12,7 +12,9 @@
 //! doctrine emitted", used by [`crate::boot`]'s project-entry classifier until
 //! the user-entry planner takes it over.
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 /// The project-root codex config file — the codex MCP leg's write target
 /// (SL-271). The project layer is loaded by codex for TRUSTED projects only, so
@@ -600,18 +602,117 @@ pub(crate) fn plan(
     plan
 }
 
+/// The argv that registers doctrine's user-level MCP server: the `mcp add`
+/// subcommand, the server key, the argv separator, then the baked command. One
+/// source for both what the consent prompt shows and what the runner executes.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+fn add_args(bake: &Path) -> Vec<String> {
+    let mut args: Vec<String> = CODEX_MCP_ADD.iter().copied().map(str::to_string).collect();
+    args.push(CODEX_MCP_SERVER_KEY.to_string());
+    args.push(CODEX_ARGV_SEPARATOR.to_string());
+    args.push(bake.display().to_string());
+    args.extend(CODEX_MCP_SERVE_ARGS.split_whitespace().map(String::from));
+    args
+}
+
 /// The command the user is asked to approve: the exact `codex mcp add`
 /// invocation that registers doctrine's user-level MCP server. Composed from the
 /// same tokens the shell runs ([`CODEX_CLI`], [`CODEX_MCP_ADD`] …), so the prompt
 /// cannot drift from the command.
 #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn add_command(bake: &Path) -> String {
-    let mut args: Vec<String> = CODEX_MCP_ADD.iter().copied().map(str::to_string).collect();
-    args.push(CODEX_MCP_SERVER_KEY.to_string());
-    args.push(CODEX_ARGV_SEPARATOR.to_string());
-    args.push(bake.display().to_string());
-    args.extend(CODEX_MCP_SERVE_ARGS.split_whitespace().map(String::from));
-    invocation(CODEX_CLI, &args)
+    invocation(CODEX_CLI, &add_args(bake))
+}
+
+/// The user's answer to the consent question. Consent only matters when the plan
+/// proposes a change; anything but [`Consent::Granted`] there takes the declined
+/// path — no CLI run, no write.
+#[expect(dead_code, reason = "wired in SL-286 PHASE-04")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Consent {
+    /// The user said yes.
+    Granted,
+    /// The user said no, or gave no usable answer.
+    Declined,
+    /// No question was asked, so nothing was approved.
+    NotAsked,
+}
+
+/// What the user leg did: the paths it wrote. The project file only — the user's
+/// own config is written by codex, not here. The install leg maps this to its
+/// outcome in PHASE-04.
+#[expect(dead_code, reason = "wired in SL-286 PHASE-04")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CodexUserOutcome {
+    /// Finished; the paths it touched (empty when it touched none).
+    Done(Vec<PathBuf>),
+    /// Could not finish; the reason to show the user.
+    Refused(String),
+}
+
+/// Why `codex mcp add` did not land: codex's own diagnostic, trimmed, or the
+/// spawn error text when the process could not be started at all.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CodexFailure {
+    pub(crate) stderr: String,
+}
+
+/// The one effect the user leg has on codex — registering the server. A trait so
+/// the leg is testable without a codex install.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) trait CodexCli {
+    /// Register the baked command, or report why codex refused.
+    fn mcp_add(&self, bake: &Path) -> Result<(), CodexFailure>;
+}
+
+/// The real codex CLI, run as a child process on [`CODEX_CLI`].
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) struct ProcessCodex {
+    program: OsString,
+}
+
+impl ProcessCodex {
+    #[expect(dead_code, reason = "wired in SL-286 PHASE-04")]
+    pub(crate) fn new() -> Self {
+        Self {
+            program: OsString::from(CODEX_CLI),
+        }
+    }
+
+    /// Point the runner at another program — a test seam, not a user option.
+    #[cfg(test)]
+    pub(crate) fn with_program(program: impl Into<OsString>) -> Self {
+        Self {
+            program: program.into(),
+        }
+    }
+}
+
+impl CodexCli for ProcessCodex {
+    fn mcp_add(&self, bake: &Path) -> Result<(), CodexFailure> {
+        // stdout is discarded: registration says nothing a user needs.
+        let output = Command::new(&self.program)
+            .args(add_args(bake))
+            .output()
+            .map_err(|e| CodexFailure {
+                stderr: format!("failed to run {}: {e}", self.program.to_string_lossy()),
+            })?;
+        if output.status.success() {
+            return Ok(());
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr)
+            .trim_end()
+            .to_string();
+        Err(CodexFailure {
+            // An empty diagnostic still has to say *how* it failed.
+            stderr: if stderr.is_empty() {
+                output.status.to_string()
+            } else {
+                stderr
+            },
+        })
+    }
 }
 
 /// The consent block for a proposed change (design sec-leg § Consent), or `None`
@@ -908,6 +1009,8 @@ which may fail (EVD-032). Use an absolute path, or remove it.";
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::cell::RefCell;
 
     /// Parse an entry body as the `[server]` table and ask whether it is a
     /// wrapper form. Single-quoted TOML literals keep the `$`/`"` of a wrapper
@@ -1762,6 +1865,100 @@ mod tests {
         assert_eq!(
             add_command(Path::new(DESIGN_BAKE)),
             "codex mcp add doctrine -- /home/u/.local/share/doctrine/bin/doctrine serve --mcp"
+        );
+    }
+
+    // --- execute vocabulary: the CLI runner (design sec-leg § Execute) ---
+
+    /// The runner seam's test double: records each argv it is handed and returns
+    /// its scripted result, so a test pins the *command*, not a side effect.
+    struct FakeCodex {
+        calls: RefCell<Vec<Vec<String>>>,
+        result: Result<(), CodexFailure>,
+    }
+
+    impl FakeCodex {
+        fn ok() -> Self {
+            Self {
+                calls: RefCell::default(),
+                result: Ok(()),
+            }
+        }
+
+        fn failing(stderr: &str) -> Self {
+            Self {
+                calls: RefCell::default(),
+                result: Err(CodexFailure {
+                    stderr: stderr.to_string(),
+                }),
+            }
+        }
+    }
+
+    impl CodexCli for FakeCodex {
+        fn mcp_add(&self, bake: &Path) -> Result<(), CodexFailure> {
+            self.calls.borrow_mut().push(add_args(bake));
+            self.result.clone()
+        }
+    }
+
+    #[test]
+    fn add_command_renders_the_args_the_runner_executes() {
+        let bake = Path::new(DESIGN_BAKE);
+
+        assert_eq!(
+            add_args(bake),
+            [
+                "mcp",
+                "add",
+                "doctrine",
+                "--",
+                DESIGN_BAKE,
+                "serve",
+                "--mcp"
+            ]
+        );
+        assert_eq!(
+            add_command(bake),
+            format!("{CODEX_CLI} {}", add_args(bake).join(" "))
+        );
+        // The prompt and the runner share one argv.
+        let fake = FakeCodex::ok();
+        fake.mcp_add(bake).unwrap();
+        assert_eq!(fake.calls.borrow().as_slice(), [add_args(bake)]);
+        // A scripted failure comes back with its stderr — the runner's only
+        // failure channel.
+        let failing = FakeCodex::failing("permission denied");
+        let err = failing.mcp_add(bake).unwrap_err();
+        assert_eq!(err.stderr, "permission denied");
+        assert_eq!(failing.calls.borrow().as_slice(), [add_args(bake)]);
+    }
+
+    #[test]
+    fn process_codex_failure_carries_stderr() {
+        // `sh mcp …` cannot open a script file named `mcp`, so the child runs and
+        // fails with its own diagnostic — the failure path without a codex install.
+        let err = ProcessCodex::with_program("sh")
+            .mcp_add(Path::new(DESIGN_BAKE))
+            .unwrap_err();
+
+        assert!(
+            err.stderr.contains("mcp"),
+            "the child's own diagnostic is carried, got {:?}",
+            err.stderr
+        );
+    }
+
+    #[test]
+    fn process_codex_spawn_failure_names_the_program() {
+        let err = ProcessCodex::with_program("/nonexistent/codex-xyz")
+            .mcp_add(Path::new(DESIGN_BAKE))
+            .unwrap_err();
+
+        assert!(
+            err.stderr.contains("/nonexistent/codex-xyz"),
+            "the spawn error names the program, got {:?}",
+            err.stderr
         );
     }
 
