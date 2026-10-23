@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-24 · PHASE-01 · d3ed42648
+fresh-as-of: 2026-10-24 · PHASE-02 · 3112de99c
 
 ### Produced
 
@@ -17,18 +17,29 @@ fresh-as-of: 2026-10-24 · PHASE-01 · d3ed42648
   `root::DOCTRINE_DIR`, `root::is_doctrine_project`, and the `ProjectRoot`
   resolution in mcp_server. Behaviour change: an explicit `--path` without
   `.doctrine/` is now rootless. Gate green; negative control observed red.
+- PHASE-02 done — `src/codex_mcp.rs` pure plan + consent/report text,
+  `fsutil::find_on_path`; codex vocabulary + `is_wrapper_form` moved out of
+  boot, boot suites unchanged (23a963447..3112de99c). Gate green at 3112de99c;
+  VT-1..3 PASS; negative controls red. Per-phase pi `review` (max): 10
+  findings — 8 fixed (a742bc319), F5 rejected (design example binds text),
+  F2 → DEC-412 item 9 by user ruling. Boundary carries foreign 4aea4ff19
+  (IMP-407) mid-range — audit disposes it.
 - Minted: ISS-533 — MCP server replies to JSON-RPC notifications (pre-existing).
 - Design-time decisions DEC-403..DEC-411; EVD-033; RV-427 (concluded).
 
 ### Learned
 
 - mem.pattern.delegation.pi-writable-in-worktree — calibration appended
-  (subtree write roots, judgement no-answer turns, transcript budget).
+  (subtree write roots, judgement no-answer turns, transcript budget);
+  IMP-522 update (0e99dbcbf): repo-root writes, cargo + git in the write form.
 - EVD-033 — `codex mcp add` replaces the whole table; `mcp get` shows the
   effective entry (ASM-015 invalidated).
 
 ### Open
 
+- DEC-412 — PHASE-02 design deltas (FileRead, destination split, blocking
+  project entries, degraded/removal-only text); reconcile folds into design.md
+  and amends PHASE-02 EX-4. Item 8 wording awaits user review.
 - ASM-014 — where codex shows the rootless instructions (VH in PHASE-05).
 - RSK-234 · IDE-069 · ISS-528 (partially resolved by DEC-406) · ISS-533.
 - Reconcile: REV for REQ-484 (SPEC-011) + rootless-serve requirement;

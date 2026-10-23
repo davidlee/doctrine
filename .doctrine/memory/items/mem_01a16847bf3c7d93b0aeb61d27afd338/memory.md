@@ -67,3 +67,18 @@ above** (write-root refusal; no cargo/git):
 - Every call must pass `cwd`: the launch dir is no longer an allowed root.
 - Still true: 30-request ceiling, ≤ ~4 exact rulings per `implement` run,
   orchestrator runs negative controls and the gate.
+
+Calibration update, SL-286 PHASE-02 (2026-10-24), first repo-root phase:
+
+- `implement` at repo root ran ~12 runs, each ≤ ~4 rulings, red→green with its
+  own focused tests; continuing one session across tasks stayed cheap until
+  ~90k context peak — start a fresh session there (the sheet carries intent).
+- Delegates execute rulings **literally**, including wrong ones: an over-strict
+  `Current` rule and an ambiguous "render leaves" wording both shipped as
+  written, and the delegate edited a design-verbatim test to match. Check each
+  ruling against the design before sending; diff any test whose expected
+  text encodes a design example.
+- `review` (max) found real defects (a spec contradiction, undisclosed key
+  loss, vacuous tests); one finding rejected on the design text. A max-thinking
+  request can die on an llm-gateway timeout (`termination: error`, cause only
+  in `events.jsonl`); continuing the same `session` resumes with reads intact.
