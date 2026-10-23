@@ -49,8 +49,12 @@ pub(crate) fn dispatch(cmd: CatalogCommand, _color: bool) -> anyhow::Result<()> 
 pub(crate) fn run_catalog_scan(root_arg: Option<PathBuf>) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(root_arg, &crate::root::default_markers())?;
-    if !root.join(".doctrine").is_dir() {
-        anyhow::bail!("no .doctrine directory found at '{}'", root.display());
+    if !crate::root::is_doctrine_project(&root) {
+        anyhow::bail!(
+            "no {} directory found at '{}'",
+            crate::root::DOCTRINE_DIR,
+            root.display()
+        );
     }
     let catalog = crate::catalog::hydrate::scan_catalog(&root, ScanMode::default())?;
     let json = serde_json::to_string_pretty(&catalog)
@@ -64,8 +68,12 @@ pub(crate) fn run_catalog_scan(root_arg: Option<PathBuf>) -> anyhow::Result<()> 
 pub(crate) fn run_catalog_graph(root_arg: Option<PathBuf>) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(root_arg, &crate::root::default_markers())?;
-    if !root.join(".doctrine").is_dir() {
-        anyhow::bail!("no .doctrine directory found at '{}'", root.display());
+    if !crate::root::is_doctrine_project(&root) {
+        anyhow::bail!(
+            "no {} directory found at '{}'",
+            crate::root::DOCTRINE_DIR,
+            root.display()
+        );
     }
     let catalog = crate::catalog::hydrate::scan_catalog(&root, ScanMode::default())?;
     let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);

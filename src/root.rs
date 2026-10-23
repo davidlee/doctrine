@@ -15,24 +15,57 @@ pub(crate) fn default_markers() -> Vec<String> {
     ]
 }
 
+/// Directory name that makes a directory a doctrine project root.
+pub(crate) const DOCTRINE_DIR: &str = ".doctrine";
+
+/// Whether `root` is a doctrine project root — it carries a `.doctrine/` dir.
+pub(crate) fn is_doctrine_project(root: &Path) -> bool {
+    root.join(DOCTRINE_DIR).is_dir()
+}
+
+/// Resolve the project root, or `None` when the walk finds no marker.
+///
+/// An `explicit` path wins outright and is returned as-is — the cwd is never
+/// read, so an explicit path still resolves from a deleted cwd. Otherwise walk
+/// up from CWD until a directory contains any of `markers`.
+pub(crate) fn find_opt(
+    explicit: Option<PathBuf>,
+    markers: &[String],
+) -> anyhow::Result<Option<PathBuf>> {
+    if let Some(path) = explicit {
+        return Ok(Some(path));
+    }
+
+    let cwd = current_dir()?;
+
+    Ok(find_from(&cwd, markers))
+}
+
 /// Resolve the project root.
 ///
 /// An `explicit` path is used as-is. Otherwise walk up from CWD until a
-/// directory contains any of `markers`.
+/// directory contains any of `markers`; no marker at all is an error.
 pub(crate) fn find(explicit: Option<PathBuf>, markers: &[String]) -> anyhow::Result<PathBuf> {
-    if let Some(path) = explicit {
-        return Ok(path);
+    match find_opt(explicit, markers)? {
+        Some(root) => Ok(root),
+        // A miss means the walk started from the cwd (an explicit path never
+        // misses), so re-reading it only fills in the message.
+        None => Err(no_project_root(&current_dir()?, markers)),
     }
+}
 
-    let cwd = std::env::current_dir().context("Failed to get current working directory")?;
+/// The process cwd, with the context every caller reports it under.
+fn current_dir() -> anyhow::Result<PathBuf> {
+    std::env::current_dir().context("Failed to get current working directory")
+}
 
-    find_from(&cwd, markers).ok_or_else(|| {
-        anyhow::anyhow!(
-            "No project root found. Walked up from '{}' looking for any of: {:?}",
-            cwd.display(),
-            markers,
-        )
-    })
+/// The walk-missed error — names the directory the walk started from.
+fn no_project_root(cwd: &Path, markers: &[String]) -> anyhow::Error {
+    anyhow::anyhow!(
+        "No project root found. Walked up from '{}' looking for any of: {:?}",
+        cwd.display(),
+        markers,
+    )
 }
 
 /// Walk up from `start` (inclusive) to the first ancestor containing any of
@@ -143,5 +176,30 @@ mod tests {
     fn empty_marker_set_yields_none() {
         let (_d, root) = canonical_tempdir();
         assert_eq!(find_from(&root, &[]), None);
+    }
+
+    /// An explicit path is returned as-is — no walk, so the cwd is never
+    /// consulted (the `--path` from a deleted cwd case). A path need not exist,
+    /// and a marker set that can never match still does not re-route it.
+    #[test]
+    fn find_opt_returns_an_explicit_path_as_is() {
+        let explicit = PathBuf::from("/iss281/explicit/root");
+
+        assert_eq!(
+            find_opt(Some(explicit.clone()), &markers()).unwrap(),
+            Some(explicit.clone())
+        );
+        assert_eq!(
+            find_opt(Some(explicit.clone()), &[]).unwrap(),
+            Some(explicit)
+        );
+    }
+
+    /// The miss path folds to `None` rather than erroring — the error belongs to
+    /// [`find`]. An empty marker set can never hit, so this is hermetic: no
+    /// dependence on the process cwd (ISS-281).
+    #[test]
+    fn find_opt_yields_none_when_the_walk_misses() {
+        assert_eq!(find_opt(None, &[]).unwrap(), None);
     }
 }

@@ -51,18 +51,31 @@ fn seed_slice(root: &Path, id: u32, title: &str, slug: &str) {
     .unwrap();
 }
 
-/// Spawn the MCP server subprocess with piped stdin/stdout.
-fn spawn_server(root: &Path) -> Child {
-    common::doctrine_cmd(root)
-        .arg("serve")
-        .arg("--mcp")
-        .arg("--path")
-        .arg(root)
-        .stdin(Stdio::piped())
+/// Spawn the MCP server subprocess with piped stdin/stdout, driving it from `cwd`
+/// and passing an explicit `--path` only when `path` is given. `None` is the
+/// *rootless* shape: the server must resolve its root by walking up from `cwd`.
+fn spawn_server_in(cwd: &Path, path: Option<&Path>) -> Child {
+    let mut cmd = common::doctrine_cmd(cwd);
+    cmd.arg("serve").arg("--mcp");
+    if let Some(path) = path {
+        cmd.arg("--path").arg(path);
+    }
+    cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn doctrine serve --mcp")
+}
+
+/// Spawn the server rooted at `root` (both cwd and `--path`).
+fn spawn_server(root: &Path) -> Child {
+    spawn_server_in(root, Some(root))
+}
+
+/// A fresh directory whose ancestry to `/` carries no project marker, so the
+/// server cannot resolve a root by walking up from it.
+fn marker_free_tmp() -> tempfile::TempDir {
+    tempfile::tempdir_in(common::marker_free_base()).expect("marker-free tempdir")
 }
 
 /// Write a JSON-RPC request line to the server's stdin.
@@ -234,6 +247,122 @@ fn vt2_tools_list() {
             "missing tool: {expected}\ngot: {names:?}"
         );
     }
+
+    kill(child);
+}
+
+// ── Rootless surface (no root, or a root with no `.doctrine/`) ───────────
+
+/// Drive the whole rootless surface: `initialize` must succeed and instruct with
+/// `needle` in `instructions`; `tools/list` must advertise nothing; and a
+/// `tools/call` must be refused with the shared -32001 refusal rather than
+/// falling through to a tool result.
+fn assert_rootless_surface(cwd: &Path, path: Option<&Path>, needle: &str) {
+    let mut child = spawn_server_in(cwd, path);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let params = serde_json::json!({
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": { "name": "test", "version": "1.0" }
+    });
+    let resp = call(&mut stdin, &mut reader, "initialize", Some(&params));
+    let result = resp
+        .get("result")
+        .unwrap_or_else(|| panic!("rootless initialize must succeed: {resp:?}"));
+    let instructions = result["instructions"]
+        .as_str()
+        .unwrap_or_else(|| panic!("rootless initialize must instruct: {resp:?}"));
+    assert!(
+        instructions.contains(needle),
+        "instructions {instructions:?} must mention {needle:?}"
+    );
+
+    let resp = call(&mut stdin, &mut reader, "tools/list", None);
+    assert_eq!(
+        resp["result"]["tools"],
+        serde_json::json!([]),
+        "a rootless server advertises no tools: {resp:?}"
+    );
+
+    let params = tools_call_params("review_list", serde_json::json!({}));
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let err = resp
+        .get("error")
+        .unwrap_or_else(|| panic!("rootless tools/call must refuse: {resp:?}"));
+    assert_eq!(err["code"], -32001, "rootless refusal: {resp:?}");
+    assert!(
+        err["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("no doctrine project here"),
+        "the refusal must name the missing project: {resp:?}"
+    );
+
+    kill(child);
+}
+
+/// No marker anywhere above cwd: root resolution finds nothing, so the server
+/// degrades to a rootless surface instead of failing the handshake.
+#[test]
+fn rootless_without_a_project_root_degrades_cleanly() {
+    let dir = marker_free_tmp();
+    assert_rootless_surface(dir.path(), None, "no project root");
+}
+
+/// A `.git` resolves a root, but that root has no `.doctrine/`: still rootless,
+/// and the instruction names the directory it looked in.
+#[test]
+fn rootless_in_a_git_repo_without_doctrine_dir_degrades_cleanly() {
+    let dir = marker_free_tmp();
+    fs::create_dir_all(dir.path().join(".git")).unwrap();
+    assert_rootless_surface(dir.path(), None, "no .doctrine/ under");
+}
+
+/// An explicit `--path` names the root even when cwd has no marker: the caller
+/// declared a root, but that root carries no `.doctrine/`. cwd and `--path` are
+/// deliberately different directories so the instruction's root path proves the
+/// explicit branch fired rather than the walk from cwd.
+#[test]
+fn rootless_with_explicit_path_without_doctrine_dir_degrades_cleanly() {
+    let cwd = marker_free_tmp();
+    let root = marker_free_tmp();
+    assert_rootless_surface(
+        cwd.path(),
+        Some(root.path()),
+        &format!("no .doctrine/ under {}", root.path().display()),
+    );
+}
+
+/// Control: a root WITH `.doctrine/` is unaffected — `initialize` succeeds and
+/// carries no `instructions` at all (the key is absent, not empty).
+#[test]
+fn rooted_initialize_omits_instructions() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let params = serde_json::json!({
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": { "name": "test", "version": "1.0" }
+    });
+    let resp = call(&mut stdin, &mut reader, "initialize", Some(&params));
+    let result = resp
+        .get("result")
+        .unwrap_or_else(|| panic!("rooted initialize must succeed: {resp:?}"));
+    assert!(
+        result.get("instructions").is_none(),
+        "a rooted server has nothing to warn about: {resp:?}"
+    );
 
     kill(child);
 }

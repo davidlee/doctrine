@@ -29,12 +29,50 @@ pub(crate) struct McpConfig {
     pub(crate) model_keys: ModelKeysFn,
 }
 
+/// The resolved project state for the MCP server.
+///
+/// Rootless means no root was found, or the discovered root carries no
+/// `.doctrine/` directory. Tool handlers keep their `&Path` signature; the
+/// rootless policy is applied in [`tools::dispatch`], whose method arms branch
+/// on this state.
+pub(crate) enum ProjectRoot {
+    /// A doctrine project: `<root>/.doctrine/` exists.
+    Doctrine(PathBuf),
+    /// No doctrine project. `bare_root` records a root discovered without a
+    /// `.doctrine/` dir, so the notice can name it.
+    Rootless { bare_root: Option<PathBuf> },
+}
+
+impl ProjectRoot {
+    /// Resolve the project state: an explicit path wins over a walk up from the
+    /// cwd for the default markers ([`crate::root::find_opt`], which reads the
+    /// cwd only when no path was given, so `--path` survives a deleted cwd).
+    /// Never fails for lack of a root — a root without `.doctrine/` (or no root
+    /// at all) is [`ProjectRoot::Rootless`]; only an unreadable cwd errors.
+    pub(crate) fn resolve(explicit: Option<PathBuf>) -> anyhow::Result<Self> {
+        let bare_root = crate::root::find_opt(explicit, &crate::root::default_markers())?;
+        let is_doctrine = bare_root
+            .as_deref()
+            .is_some_and(crate::root::is_doctrine_project);
+        Ok(classify(bare_root, is_doctrine))
+    }
+}
+
+/// Pure classification: rooted iff a root was found and it has `.doctrine/`.
+fn classify(bare_root: Option<PathBuf>, is_doctrine: bool) -> ProjectRoot {
+    match bare_root {
+        Some(root) if is_doctrine => ProjectRoot::Doctrine(root),
+        bare_root => ProjectRoot::Rootless { bare_root },
+    }
+}
+
 /// Run the MCP stdio server.
 ///
-/// Resolves the project root at startup (design D5), then enters a read →
-/// dispatch → write loop. Exits cleanly on stdin EOF.
+/// Resolves the project state at startup (design D5) without requiring a
+/// project, then enters a read → dispatch → write loop. Exits cleanly on stdin
+/// EOF.
 pub(crate) async fn serve(config: McpConfig) -> anyhow::Result<()> {
-    let root = crate::root::find(config.path, &crate::root::default_markers())?;
+    let project = ProjectRoot::resolve(config.path)?;
     // Bound once before the loop (Copy fn-ptr; reads cleaner than field access
     // per dispatch iteration — SL-203 §10).
     let model_keys = config.model_keys;
@@ -66,9 +104,68 @@ pub(crate) async fn serve(config: McpConfig) -> anyhow::Result<()> {
             }
         };
 
-        let response = tools::dispatch(&request, &root, model_keys);
+        let response = tools::dispatch(&request, &project, model_keys);
         transport::write_message(&mut writer, &response).await?;
     }
 
     Ok(())
+}
+
+// ── Tests ────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classify_root_with_doctrine_dir_is_doctrine() {
+        let root = PathBuf::from("/project");
+        assert!(matches!(
+            classify(Some(root.clone()), true),
+            ProjectRoot::Doctrine(p) if p == root
+        ));
+    }
+
+    #[test]
+    fn classify_root_without_doctrine_dir_is_rootless() {
+        let root = PathBuf::from("/project");
+        assert!(matches!(
+            classify(Some(root.clone()), false),
+            ProjectRoot::Rootless { bare_root: Some(p) } if p == root
+        ));
+    }
+
+    #[test]
+    fn classify_missing_root_is_rootless() {
+        assert!(matches!(
+            classify(None, false),
+            ProjectRoot::Rootless { bare_root: None }
+        ));
+    }
+
+    /// An explicit path carrying `.doctrine/` is a doctrine project (F6).
+    #[test]
+    fn resolve_explicit_doctrine_project_is_doctrine() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        std::fs::create_dir(root.join(crate::root::DOCTRINE_DIR)).unwrap();
+
+        assert!(matches!(
+            ProjectRoot::resolve(Some(root.clone())).unwrap(),
+            ProjectRoot::Doctrine(p) if p == root
+        ));
+    }
+
+    /// An explicit path without `.doctrine/` is rootless, and names that path
+    /// so the notice can point at what fell short (F6).
+    #[test]
+    fn resolve_explicit_non_doctrine_dir_is_rootless_naming_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+
+        assert!(matches!(
+            ProjectRoot::resolve(Some(root.clone())).unwrap(),
+            ProjectRoot::Rootless { bare_root: Some(p) } if p == root
+        ));
+    }
 }

@@ -7,6 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::path::Path;
 
 // ── JSON-RPC 2.0 core types ──────────────────────────────────────────────
 
@@ -75,6 +76,36 @@ pub(crate) struct InitializeResult {
     pub(crate) protocol_version: String,
     #[serde(rename = "serverInfo")]
     pub(crate) server_info: ServerInfo,
+    /// Rootless notice: present only when there is no doctrine project.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) instructions: Option<String>,
+}
+
+/// Heading of the notice a rootless server sends in `initialize`.
+const ROOTLESS_NOTICE: &str = "no doctrine project here";
+
+/// Rootless cause: the walk found no project root at all.
+const ROOTLESS_CAUSE_NO_ROOT: &str = "no project root";
+
+/// Rootless cause: a root was found but it carries no `.doctrine/` directory.
+const ROOTLESS_CAUSE_NO_DOCTRINE_DIR: &str = "no .doctrine/ under";
+
+/// JSON-RPC implementation-defined server error (range `-32099..=-32000`) for a
+/// `tools/call` refused because the server is rootless. Distinct from `-32000`
+/// (review not found) and `-32603` (internal error).
+pub(crate) const ROOTLESS_ERROR_CODE: i32 = -32001;
+
+/// The rootless notice shared by the `initialize` instructions and the rootless
+/// `tools/call` error. A discovered root without `.doctrine/` (`bare_root`) is
+/// named, so the caller learns which directory fell short.
+pub(crate) fn rootless_notice(bare_root: Option<&Path>) -> String {
+    match bare_root {
+        Some(root) => format!(
+            "{ROOTLESS_NOTICE} ({ROOTLESS_CAUSE_NO_DOCTRINE_DIR} {})",
+            root.display()
+        ),
+        None => format!("{ROOTLESS_NOTICE} ({ROOTLESS_CAUSE_NO_ROOT})"),
+    }
 }
 
 /// Server capabilities — tools only (v1 scope, design §5).
@@ -237,6 +268,7 @@ mod tests {
                 name: "doctrine-mcp".to_owned(),
                 version: env!("CARGO_PKG_VERSION").to_owned(),
             },
+            instructions: None,
         };
         let val = serde_json::to_value(&init).unwrap();
         assert_eq!(val["capabilities"]["tools"], json!({}));
@@ -244,6 +276,23 @@ mod tests {
 
         let back: InitializeResult = serde_json::from_value(val).unwrap();
         assert_eq!(back.server_info.name, "doctrine-mcp");
+    }
+
+    #[test]
+    fn rootless_notice_names_missing_doctrine_dir() {
+        let notice = rootless_notice(Some(std::path::Path::new("/project")));
+        assert_eq!(
+            notice,
+            "no doctrine project here (no .doctrine/ under /project)"
+        );
+    }
+
+    #[test]
+    fn rootless_notice_without_root_states_no_root() {
+        assert_eq!(
+            rootless_notice(None),
+            "no doctrine project here (no project root)"
+        );
     }
 
     #[test]

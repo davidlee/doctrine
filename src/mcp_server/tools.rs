@@ -13,6 +13,7 @@
 //! returns JSON text.
 
 use super::ModelKeysFn;
+use super::ProjectRoot;
 use super::protocol::{
     Id, JsonRpcRequest, JsonRpcResponse, McpTool, McpToolResult, ToolsListResult,
 };
@@ -702,31 +703,65 @@ pub(crate) fn tool_list() -> ToolsListResult {
 
 /// Dispatch a JSON-RPC request to the matching handler.
 ///
+/// `initialize` always answers (rootless adds the instructions notice). Every
+/// other method shares ONE method set; only the `tools/list` and `tools/call`
+/// arms branch on the project state, so a rootless server offers no tools and
+/// refuses a call with the same cause text as its instructions.
+///
 /// Returns a proper JSON-RPC error response on unknown methods or validation
 /// failures (never an `anyhow::Error` for recoverable dispatch problems).
 pub(crate) fn dispatch(
     request: &JsonRpcRequest,
-    root: &Path,
+    project: &ProjectRoot,
     model_keys: ModelKeysFn,
 ) -> JsonRpcResponse {
     let id = request.id.clone();
-    match request.method.as_str() {
-        "initialize" => handle_initialize(id),
-        "tools/list" => handle_tools_list(id),
-        "tools/call" => handle_tools_call(id, request.params.as_ref(), root, model_keys),
-        "notifications/initialized" => JsonRpcResponse::success(id, json!({})),
-        _ => JsonRpcResponse::error(
-            id,
-            -32601,
-            format!("Method not found: {}", request.method),
-            Some(json!({ "method": request.method })),
-        ),
+    if request.method == "initialize" {
+        return handle_initialize(id, project);
     }
+    match request.method.as_str() {
+        "tools/list" => handle_tools_list(
+            id,
+            match project {
+                ProjectRoot::Doctrine(_) => tool_list(),
+                // Rootless: no project means no tools.
+                ProjectRoot::Rootless { .. } => ToolsListResult { tools: Vec::new() },
+            },
+        ),
+        "tools/call" => match project {
+            ProjectRoot::Doctrine(root) => {
+                handle_tools_call(id, request.params.as_ref(), root, model_keys)
+            }
+            ProjectRoot::Rootless { bare_root } => JsonRpcResponse::error(
+                id,
+                super::protocol::ROOTLESS_ERROR_CODE,
+                super::protocol::rootless_notice(bare_root.as_deref()),
+                None,
+            ),
+        },
+        "notifications/initialized" => JsonRpcResponse::success(id, json!({})),
+        _ => method_not_found(id, request),
+    }
+}
+
+fn method_not_found(id: Option<Id>, request: &JsonRpcRequest) -> JsonRpcResponse {
+    JsonRpcResponse::error(
+        id,
+        -32601,
+        format!("Method not found: {}", request.method),
+        Some(json!({ "method": request.method })),
+    )
 }
 
 // ── Method handlers ──────────────────────────────────────────────────────
 
-fn handle_initialize(id: Option<Id>) -> JsonRpcResponse {
+fn handle_initialize(id: Option<Id>, project: &ProjectRoot) -> JsonRpcResponse {
+    let instructions = match project {
+        ProjectRoot::Doctrine(_) => None,
+        ProjectRoot::Rootless { bare_root } => {
+            Some(super::protocol::rootless_notice(bare_root.as_deref()))
+        }
+    };
     let result = serde_json::to_value(super::protocol::InitializeResult {
         capabilities: super::protocol::Capabilities {
             tools: super::protocol::ToolsCap {},
@@ -736,6 +771,7 @@ fn handle_initialize(id: Option<Id>) -> JsonRpcResponse {
             name: "doctrine-mcp".to_owned(),
             version: env!("CARGO_PKG_VERSION").to_owned(),
         },
+        instructions,
     });
     match result {
         Ok(val) => JsonRpcResponse::success(id, val),
@@ -748,9 +784,8 @@ fn handle_initialize(id: Option<Id>) -> JsonRpcResponse {
     }
 }
 
-fn handle_tools_list(id: Option<Id>) -> JsonRpcResponse {
-    let result =
-        serde_json::to_value(tool_list()).unwrap_or_else(|e| json!({ "error": e.to_string() }));
+fn handle_tools_list(id: Option<Id>, list: ToolsListResult) -> JsonRpcResponse {
+    let result = serde_json::to_value(list).unwrap_or_else(|e| json!({ "error": e.to_string() }));
     JsonRpcResponse::success(id, result)
 }
 
@@ -2077,6 +2112,7 @@ fn render_model_band_guidance(root: &Path, model_keys: ModelKeysFn) -> anyhow::R
 
 #[cfg(test)]
 mod tests {
+    use super::super::protocol;
     use super::*;
     use crate::review::ReviewError;
 
@@ -2100,6 +2136,16 @@ mod tests {
                 "arguments": args
             })),
         }
+    }
+
+    /// Helper: the resolved doctrine-rooted state for a test root.
+    fn rooted(root: &Path) -> ProjectRoot {
+        ProjectRoot::Doctrine(root.to_path_buf())
+    }
+
+    /// Helper: dispatch against a doctrine root (the common unit-test case).
+    fn dispatch_at(request: &JsonRpcRequest, root: &Path) -> JsonRpcResponse {
+        dispatch(request, &rooted(root), crate::commands::prompt::model_keys)
     }
 
     // VT-3: tool list response contains exactly the registered tools, by name.
@@ -2219,7 +2265,7 @@ mod tests {
     fn review_list_empty_args_succeeds() {
         let (_dir, root) = temp_root();
         let req = tools_call_req("review_list", json!({}));
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         assert!(
             resp.error.is_none(),
             "review_list {{}} errored: {:?}",
@@ -2232,7 +2278,7 @@ mod tests {
     fn review_list_status_filter_succeeds() {
         let (_dir, root) = temp_root();
         let req = tools_call_req("review_list", json!({ "status": ["done"] }));
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         assert!(
             resp.error.is_none(),
             "review_list status filter errored: {:?}",
@@ -2248,7 +2294,7 @@ mod tests {
     fn review_list_target_filter_succeeds() {
         let (_dir, root) = temp_root();
         let req = tools_call_req("review_list", json!({ "target": "SL-001" }));
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         assert!(
             resp.error.is_none(),
             "review_list target filter errored: {:?}",
@@ -2431,7 +2477,7 @@ mod tests {
     fn unknown_tool_returns_32601() {
         let (_dir, root) = temp_root();
         let req = tools_call_req("nonexistent", json!({}));
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32601);
         assert!(err.message.contains("Tool not found"));
@@ -2446,7 +2492,7 @@ mod tests {
             method: "bad/method".to_owned(),
             params: None,
         };
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32601);
         assert!(err.message.contains("Method not found"));
@@ -2573,11 +2619,35 @@ mod tests {
 
     #[test]
     fn initialize_response() {
-        let resp = handle_initialize(Some(Id::Number(1)));
+        let resp = handle_initialize(Some(Id::Number(1)), &rooted(Path::new("/project")));
         let result = resp.result.unwrap();
         assert_eq!(result["protocolVersion"], "2024-11-05");
         assert_eq!(result["capabilities"]["tools"], json!({}));
         assert_eq!(result["serverInfo"]["name"], "doctrine-mcp");
+    }
+
+    #[test]
+    fn initialize_rootless_reports_instructions() {
+        let root = Path::new("/not-a-project");
+        let project = ProjectRoot::Rootless {
+            bare_root: Some(root.to_path_buf()),
+        };
+        let resp = handle_initialize(Some(Id::Number(1)), &project);
+        let result = resp.result.unwrap();
+        assert_eq!(
+            result["instructions"],
+            json!(protocol::rootless_notice(Some(root)))
+        );
+    }
+
+    #[test]
+    fn initialize_rooted_omits_instructions() {
+        let resp = handle_initialize(Some(Id::Number(1)), &rooted(Path::new("/project")));
+        let result = resp.result.unwrap();
+        assert!(
+            result.get("instructions").is_none(),
+            "rooted initialize must not carry a notice: {result}"
+        );
     }
 
     #[test]
@@ -2589,7 +2659,7 @@ mod tests {
             method: "notifications/initialized".to_owned(),
             params: None,
         };
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         assert!(resp.id.is_none());
         assert!(resp.error.is_none());
         assert_eq!(resp.result.unwrap(), json!({}));
@@ -2604,10 +2674,40 @@ mod tests {
             method: "tools/list".to_owned(),
             params: None,
         };
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
         assert_eq!(tools.len(), 32);
+    }
+
+    // Rootless serve: no project, so there are no tools and `tools/call` is
+    // refused with the same cause text `initialize` carries.
+
+    #[test]
+    fn rootless_tools_list_is_empty() {
+        let project = ProjectRoot::Rootless { bare_root: None };
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_owned(),
+            id: Some(Id::Number(1)),
+            method: "tools/list".to_owned(),
+            params: None,
+        };
+        let resp = dispatch(&req, &project, crate::commands::prompt::model_keys);
+        assert!(resp.error.is_none());
+        assert_eq!(resp.result.unwrap()["tools"], json!([]));
+    }
+
+    #[test]
+    fn rootless_tools_call_refuses_with_cause() {
+        let root = Path::new("/not-a-project");
+        let project = ProjectRoot::Rootless {
+            bare_root: Some(root.to_path_buf()),
+        };
+        let req = tools_call_req("review_status", json!({ "reference": "1" }));
+        let resp = dispatch(&req, &project, crate::commands::prompt::model_keys);
+        let err = resp.error.expect("rootless tools/call must error");
+        assert_eq!(err.code, protocol::ROOTLESS_ERROR_CODE);
+        assert_eq!(err.message, protocol::rootless_notice(Some(root)));
     }
 
     #[test]
@@ -2619,7 +2719,7 @@ mod tests {
                 "reference": "1"
             }),
         );
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32602);
     }
@@ -2639,7 +2739,7 @@ mod tests {
             "review_new",
             json!({ "facet": "design", "target": "SL-001" }),
         );
-        let resp = dispatch(&new_req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&new_req, &root);
         assert!(resp.error.is_none(), "review_new: {:?}", resp.error);
 
         for severity in ["minor", "major", "blocker"] {
@@ -2647,7 +2747,7 @@ mod tests {
                 "review_raise",
                 json!({ "reference": "1", "severity": severity, "title": "t", "detail": "d" }),
             );
-            let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+            let resp = dispatch_at(&req, &root);
             assert!(resp.error.is_none(), "review_raise: {:?}", resp.error);
         }
 
@@ -2659,7 +2759,7 @@ mod tests {
                 "reference": "1", "finding": "F-1", "disposition": "fix-now", "response": "done"
             }),
         );
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         assert!(resp.error.is_none(), "review_dispose: {:?}", resp.error);
 
         let cases: [(crate::review_ledger::ProjectionArgs, Value); 4] = [
@@ -2704,7 +2804,7 @@ mod tests {
 
             mcp_args["reference"] = json!("1");
             let req = tools_call_req("review_show", mcp_args);
-            let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+            let resp = dispatch_at(&req, &root);
             assert!(resp.error.is_none(), "review_show: {:?}", resp.error);
             let result = resp.result.unwrap();
             let text = result["content"][0]["text"].as_str().unwrap();
@@ -2734,7 +2834,7 @@ mod tests {
                 "memory_type": "nonexistent"
             }),
         );
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         let err = resp.error.expect("should have error");
         assert_eq!(err.code, -32602);
     }
@@ -2748,7 +2848,7 @@ mod tests {
                 "title": "new title"
             }),
         );
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         let err = resp.error.expect("should have error");
         assert_eq!(err.code, -32602);
     }
@@ -2762,7 +2862,7 @@ mod tests {
                 "reference": "mem_nonexistent"
             }),
         );
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         let err = resp.error.expect("should have error");
         assert_eq!(err.code, -32602);
     }
@@ -2783,7 +2883,7 @@ mod tests {
             ("memory_edit", json!({"reference": MEM_A, "body": "-"})),
         ] {
             let req = tools_call_req(tool, args);
-            let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+            let resp = dispatch_at(&req, &root);
             let err = resp.error.expect("sentinel body must be refused");
             assert_eq!(err.code, -32602, "{tool}");
             // The worded refusal rides `data.parse_error`; `message` is the
@@ -2878,7 +2978,7 @@ mod tests {
     /// Helper: dispatch a memory tool call and return the result JSON.
     fn memory_dispatch(root: &Path, name: &str, args: Value) -> Value {
         let req = tools_call_req(name, args);
-        let resp = dispatch(&req, root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, root);
         resp.result.expect("expected success")
     }
 
@@ -2893,7 +2993,7 @@ mod tests {
                 "min_trust": "banana"
             }),
         );
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32602);
         assert!(err.message.contains("Invalid params"));
@@ -2911,7 +3011,7 @@ mod tests {
                 "query": "test"
             }),
         );
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32602);
         let data = err.data.unwrap();
@@ -2937,7 +3037,7 @@ mod tests {
                 "reference": "nonexistent"
             }),
         );
-        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, &root);
         assert!(resp.error.is_some(), "expected error for invalid uid");
     }
 
@@ -3184,7 +3284,7 @@ mod tests {
         std::fs::create_dir_all(root.join(".git")).unwrap();
         seed_memory_corpus(root);
         let req = tools_call_req("memory_search", json!({ "limit": 0 }));
-        let resp = dispatch(&req, root, crate::commands::prompt::model_keys);
+        let resp = dispatch_at(&req, root);
         let err = resp.error.expect("limit 0 must be an error");
         assert_eq!(err.code, -32602, "{}", err.message);
     }
