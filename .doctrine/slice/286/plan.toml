@@ -1,0 +1,144 @@
+# Implementation plan for SL-286 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-286"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber, so the id
+# sequence goes non-monotonic after a split and that is expected. Criterion ids
+# are local to their phase, bare, and equally immutable
+# (`lib:reference/glossary.md` § reference forms). The prefix is
+# the only mode marker; there is no mode field. Reference a criterion from
+# another phase phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
+[[phase]]
+id        = "PHASE-01"
+name      = "rootless serve --mcp"
+objective = "mcp_server resolves Option<root> (root::find succeeds AND <root>/.doctrine/ exists); with None, initialize succeeds with instructions naming the cause, tools/list is [], tools/call is a JSON-RPC error naming the cause. A doctrine project is unchanged (DEC-405, design sec-serve)."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-286 design locked (run rev 41); RV-427 concluded." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "InitializeResult carries an optional instructions field; handle_initialize takes the root option and sets it only when rootless." },
+  { id = "EX-2", text = "Rootless: no root found, a git repo without .doctrine/, and an explicit --path without .doctrine/ all handshake; tools/list returns []; tools/call returns an error naming the same cause (RV-427 F-11)." },
+  { id = "EX-3", text = "Existing MCP e2e fixtures that relied on a bare root now create .doctrine/; every existing MCP suite passes otherwise unchanged." },
+  { id = "EX-4", text = "The cause text is a named constant (STD-001)." },
+]
+verification = [
+  { id = "VT-1", expects = "unit: handle_initialize with None sets instructions, with Some omits them; rootless tools/list empty; rootless tools/call errors", test_file = "src/mcp_server/tools.rs", keywords = ["handle_initialize(", "instructions"], waived = false },
+  { id = "VT-2", expects = "e2e: rootless handshake outside any project and in a git repo without .doctrine/; tools/list is []", test_file = "tests/e2e_mcp_server.rs", keywords = ["rootless", "tools/list"], waived = false },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "codex_mcp module: pure plan"
+objective = "New command-tier module src/codex_mcp.rs owning the codex user MCP leg's pure half: CodexUserPlan and plan(user_toml, project_toml, bake, env) — destination, bake rule, user-entry and project-entry classification, codex-CLI presence, proposes-change — plus consent and report text. Moves CODEX_MCP_* constants, normalise and the wrapper-form recognition out of boot.rs; boot imports them from codex_mcp until PHASE-04 retires its arm. Adds fsutil::find_on_path (design sec-leg § Plan, § Consent; sec-report)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 exit criteria met (independent; ordering is for review size only)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "codex_mcp imports only leaf/engine modules (fsutil, dtoml, toml_edit, std) — never boot, install or any module in their SCC; exec and PATH facts arrive as inputs. The architecture_layering gate passes with the command tangle baseline unchanged. (Plan constraint: the design's 'codex_mcp → boot for resolve_exec/Harness' note would create a boot↔codex_mcp cycle; callers pass exec instead.)" },
+  { id = "EX-2", text = "codex_mcp is registered in .doctrine/adr/001/layering.toml (command) and src/main.rs." },
+  { id = "EX-3", text = "plan is pure (no I/O, clock, env reads) and covers the design's full matrix: destination (CODEX_HOME unset / empty / relative / missing; no HOME; user file absent / unreadable / unparseable), bake rule (PATH doctrine == exec → PATH path not its symlink target; dev build not on PATH; no doctrine on PATH; relative/empty PATH elements skipped; exec unresolved), user entry (absent / current / replace / replace with dropped keys / disabled / url transport / wrong types), project entry (absent / owned wrapper incl. extra keys / absolute and relative override / url override / bare-name shadow / empty command / wrong types / unparseable), codex absent with a user write pending." },
+  { id = "EX-4", text = "proposes_change is true exactly when the user entry is Add/Replace or the project entry is OwnedWrapper, and nothing is degraded." },
+  { id = "EX-5", text = "Consent block and every report line in design sec-report render from named constants (STD-001); the rendered text matches the design's examples." },
+  { id = "EX-6", text = "fsutil::find_on_path(name, path_value) returns the first executable match among absolute PATH elements (std::env::split_paths); pure over its inputs apart from the filesystem probe." },
+  { id = "EX-7", text = "boot.rs's codex arm still behaves exactly as before (behaviour-preservation gate): existing boot and e2e_codex_install suites pass unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "unit plan matrix (EX-3) and proposes_change (EX-4)", test_file = "src/codex_mcp.rs", keywords = ["fn plan(", "CodexUserPlan", "OwnedWrapper", "PathShadow", "ExecNotOnPath", "BadCodexHome", "UserUnparseable", "proposes_change"], waived = false },
+  { id = "VT-2", expects = "unit: consent and report text per outcome", test_file = "src/codex_mcp.rs", keywords = ["Write user config?", "every codex session on this machine"], waived = false },
+  { id = "VT-3", expects = "unit: find_on_path skips relative and empty PATH elements and non-executables", test_file = "src/fsutil.rs", keywords = ["fn find_on_path", "split_paths"], waived = false },
+  { id = "VA-1", expects = "architecture_layering passes; codex_mcp's imports reviewed against EX-1", waived = false },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "codex_mcp execute shell"
+objective = "The thin imperative half: CodexCli runner trait with a process impl and a test fake; execute(plan, consent, cli, out) runs codex mcp add with the exact argv, removes an OwnedWrapper from the project file through the existing edit-preserving toml_edit path, and maps each outcome (consented / declined / degraded / project refusal / current) to a leg result. fsutil writes through a symlink to its resolved target (design sec-leg § Execute; RV-427 F-1, F-6, F-7)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 exit criteria met." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Consented: exactly one add call with argv [mcp, add, doctrine, --, <bake>, serve, --mcp], then the owned wrapper removed; touched paths name the project file only, never the user file." },
+  { id = "EX-2", text = "add fails: Refused with codex's stderr disclosed, project file untouched. add succeeds but wrapper removal fails: Refused with the 'user entry written; the old project wrapper still overrides it here; rerun install' line (RV-427 F-6)." },
+  { id = "EX-3", text = "Declined: zero CLI calls, nothing written, Done with nothing touched; prints the codex mcp add line and the EVD-032 warning." },
+  { id = "EX-4", text = "Degraded: zero CLI calls, no writes, Done (the version stamp is not withheld — RV-427 F-1, DEC-408); prints cause and the pasteable command." },
+  { id = "EX-5", text = "PathShadow / Malformed / Unreadable project entry: no writes, Refused (holds install incomplete). Override never blocks the user write and is reported." },
+  { id = "EX-6", text = "Every user write is followed by the daemon-restart hint." },
+  { id = "EX-7", text = "A symlinked .codex/config.toml keeps its link after the wrapper removal (RV-427 F-7); the fsutil change is covered at fsutil level." },
+]
+verification = [
+  { id = "VT-1", expects = "unit execute with a fake CodexCli: consented, add fails, removal fails, declined, degraded, project refusal, current", test_file = "src/codex_mcp.rs", keywords = ["trait CodexCli", "fn execute(", "FakeCodex", "rerun install"], waived = false },
+  { id = "VT-2", expects = "unit: writing through a symlink updates the target and preserves the link", test_file = "src/fsutil.rs", keywords = ["symlink", "write_atomic"], waived = false },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "wire the leg into install and boot install; retire the project wrapper arm"
+objective = "Test environment first: doctrine_cmd points CODEX_HOME at a non-existent path (RV-427 F-3). Then install gains InstallPlan.codex_user_mcp (project install + codex harness only), the overview bullet, the consent question after confirm_install, Leg::CodexUserMcp after boot wiring, and dry-run/print_details content; boot install asks the same question after its own prompt and runs the leg. install_refresh's codex arm stops touching MCP (mcp NotApplicable); install_codex_mcp, plan_codex_mcp, codex_mcp_entry, codex_mcp_fallback_snippet, their wire() lines and mcp_rel's codex row go. regenerate never runs the leg (DEC-411). -y help states it grants user-level consent (design sec-model, sec-leg § Consent, sec-report § Dry-run, sec-code-impact)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 exit criteria met." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Before any install wiring lands, tests/common doctrine_cmd sets CODEX_HOME to a non-existent path; no test can reach the developer's real codex config (RV-427 F-3)." },
+  { id = "EX-2", text = "The leg builds a plan only for a project install (not --global, not --only-memory) with the codex harness (RV-427 F-10)." },
+  { id = "EX-3", text = "Consent is asked only when the plan proposes a change, after Proceed? and before any leg runs; default No; -y consents without asking; --dry-run of install and boot install shows the consent content, never asks and never runs the leg (RV-427 F-12)." },
+  { id = "EX-4", text = "Leg::CodexUserMcp is named 'codex user MCP' in incomplete_line; a Refused leg withholds the version stamp, Done (incl. degraded) does not." },
+  { id = "EX-5", text = "boot.rs no longer contains install_codex_mcp, plan_codex_mcp, codex_mcp_entry or codex_mcp_fallback_snippet; RefreshReport.mcp is NotApplicable for codex; codex hooks behaviour unchanged." },
+  { id = "EX-6", text = "install::regenerate and worktree provisioning never build or run the leg (DEC-411)." },
+  { id = "EX-7", text = "Existing suites that asserted the project wrapper write (e2e_codex_install, e2e_install_flow) are updated to the new behaviour; the codex --yes flow in e2e_install_flow asserts the degraded line under the safe CODEX_HOME. Hook assertions are kept." },
+  { id = "EX-8", text = "architecture_layering passes with the command tangle baseline unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "unit: install plan applicability and consent gating (asked / not asked / -y / dry-run)", test_file = "src/install.rs", keywords = ["codex_user_mcp", "CodexUserMcp", "codex user MCP"], waived = false },
+  { id = "VT-2", expects = "doctrine_cmd sets the safe CODEX_HOME", test_file = "tests/common/mod.rs", keywords = ["CODEX_HOME"], waived = false },
+  { id = "VT-3", expects = "e2e install flow: codex --yes prints the degraded line", test_file = "tests/e2e_install_flow.rs", keywords = ["CODEX_HOME", "user MCP registration skipped"], waived = false },
+  { id = "VA-1", expects = "grep confirms the retired boot.rs functions and the codex mcp_rel row are gone; regenerate has no path to the leg", waived = false },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "codex e2e and human verification"
+objective = "Binary-driven end-to-end coverage with a fake codex on PATH recording argv under temp HOME/CODEX_HOME, then the human checks: interactive codex connects after install with a daemon whose PATH lacks doctrine (EVD-032 recurrence), and ASM-014 — where codex shows the rootless instructions (design sec-verification)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 exit criteria met." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install -y: the fake codex records the exact mcp add argv and the project wrapper is removed; foreign project entries are left alone." },
+  { id = "EX-2", text = "Interactive decline: no codex call, nothing changed. --dry-run: no codex call, no writes." },
+  { id = "EX-3", text = "Regenerating a fork leaves a temp user config byte-identical and makes no codex call (DEC-411)." },
+  { id = "EX-4", text = "boot install -y behaves as install -y." },
+  { id = "EX-5", text = "The default doctrine_cmd environment never invokes codex: a fake codex on PATH records no call across a plain install." },
+  { id = "EX-6", text = "The e2e fake codex binary is built once in a test helper, not duplicated per test." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e: -y argv + wrapper removal, decline, dry-run, regeneration byte-identical, boot install -y, default env never calls codex", test_file = "tests/e2e_codex_install.rs", keywords = ["mcp add", "CODEX_HOME", "byte", "dry-run", "boot"], waived = false },
+  { id = "VH-1", expects = "interactive codex in this repo connects to doctrine after doctrine install, with an app-server daemon whose PATH lacks the doctrine directory", waived = false },
+  { id = "VH-2", expects = "ASM-014: record where (if anywhere) codex shows the rootless initialize instructions; settle ASM-014 with the observation", waived = false },
+]
+specs             = []
+requirements      = []
