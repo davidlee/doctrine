@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a16817-c4d5-7eb0-8b99-3255d3f82069"
+recorded_at = "2026-10-23T09:29:10.613235866Z"
+kind = "friction"
+summary = "[plan; SL-285] verify-vt says 'keyword present' for keywords absent from the file"
+detail = "Before any implementation, doctrine slice verify-vt 285 reported '≈ UNATTRIBUTABLE VT-n — keyword present but <file> not modified by this slice' for every VT, including keywords with zero grep matches (e.g. '999.0.0' in tests/e2e_worktree_fork.rs, 'fn installed_source' in tests/common/mod.rs). The message claims a fact that is false; cost a verification round to rule out pre-existing keywords."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -14,6 +14,24 @@ refusal, and whether the post-legs `git status` drift check false-reds on any
 legitimately tracked write. All three are settled faster by the first phase's
 tests than by another design pass, so none is recommended.
 
+## Reconcile carry
+
+Design changes decided during planning, deferred to reconcile by the user
+(2026-10-23: "let's note it for integration in the design during
+reconciliation"):
+
+- **Uninstalled source → copy only, disclose.** Source with no tracked
+  `installed-version`: regenerate writes nothing, prints `derived tier not
+  regenerated — doctrine not installed in <source>`, exits 0 — creation and
+  repair alike. Integrate into sec-1 (not-regenerated list), sec-3 and sec-5;
+  record as a decision (or amend DEC-399). Plan: PHASE-01 EX-6.
+- **Absent destination stamp is not a downgrade** (installed source, older
+  destination base). Integrate into sec-3's downgrade bullet. Plan: PHASE-01
+  EX-3.
+- **Regeneration progress goes to stderr** for provisioning callers; machine-read
+  stdout of fork / coordinate / candidate create is unchanged. Integrate into
+  sec-3 (disclosure channel). Plan: PHASE-01 EX-7, PHASE-02 EX-7.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-10-23 · design reviewing rev 28 · RV-425 integrated

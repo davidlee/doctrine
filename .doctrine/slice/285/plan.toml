@@ -1,0 +1,106 @@
+# Implementation plan for SL-285 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-285"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber, so the id
+# sequence goes non-monotonic after a split and that is expected. Criterion ids
+# are local to their phase, bare, and equally immutable
+# (`lib:reference/glossary.md` § reference forms). The prefix is
+# the only mode marker; there is no mode field. Reference a criterion from
+# another phase phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
+[[phase]]
+id        = "PHASE-01"
+name      = "install::regenerate"
+objective = "Extract install's three forward legs into Result-returning functions (install behaviour unchanged), add boot::plan_wire, and compose them into install::regenerate(source, dest, allow_downgrade) with the uninstalled-source skip, downgrade refusal, tracked-wiring preflight and post-legs drift check (design sec-1, sec-3, sec-4)."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-285 design locked at rev 31; RV-425 F-1 response read (control route)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "run_forward_steps calls the extracted leg functions and maps an error to LegOutcome::failed exactly as before; existing install suites pass unchanged." },
+  { id = "EX-2", text = "boot::plan_wire returns the paths BootWiring would write, from the same dry-run arms apply_wire uses; apply_wire and its pinned dry-run test (boot.rs:8013) are unchanged. Each dry-run arm is confirmed to report the path it would write." },
+  { id = "EX-3", text = "regenerate resolves harnesses in source, then refuses a downgrade against dest's tracked installed-version unless allow_downgrade; an absent dest stamp is not a downgrade." },
+  { id = "EX-4", text = "RV-425 F-1 (control): a source whose committed wiring file (e.g. .mcp.json) differs from what BootWiring would write is refused before any write, naming the path; the refusal is observed to fire." },
+  { id = "EX-5", text = "A new tracked change after the legs (git status --porcelain -uno before vs after) fails regenerate and names the paths." },
+  { id = "EX-6", text = "Source with no tracked installed-version: regenerate writes nothing, returns Ok, and prints 'derived tier not regenerated — doctrine not installed in <source>' (user decision 2026-10-23, option A; design integration deferred to reconcile)." },
+  { id = "EX-7", text = "The extracted legs and regenerate write progress to a caller-supplied writer, not io::stdout(); install passes stdout, so its output is unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "plan_wire reports the paths a live apply_wire then writes, for each harness arm", test_file = "src/boot.rs", keywords = ["fn plan_wire", "plan_wire("], waived = false },
+  { id = "VT-2", expects = "regenerate: uninstalled skip, downgrade refused / allowed, stale tracked wiring refused (F-1 negative control), tracked drift refused", test_file = "src/install.rs", keywords = ["fn regenerate", "allow_downgrade", "plan_wire", "--porcelain"], waived = false },
+  { id = "VA-1", expects = "install suites green with no test edits (behaviour-preservation gate); git diff shows no change to existing install test bodies", waived = false },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "provision seam and callers"
+objective = "run_provision takes a ProvisionMode and composes the private copy with install::regenerate; all six callers pass their mode; creation callers compensate on regeneration failure (clean candidate gains worktree removal); repair keeps the worktree; worktree provision gains --allow-downgrade (design sec-2, sec-3, sec-4)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 exit criteria met." },
+  { id = "EN-2", text = "RV-425 F-6 response read (control route)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "ProvisionMode {CopyOnly, CopyThenRegenerate{allow_downgrade}}; the copy is private to provision.rs; run_provision is the only entry point." },
+  { id = "EX-2", text = "fork_core, WorktreeCreate hook passthrough, coordinate.rs and the clean candidate pass CopyThenRegenerate{allow_downgrade: false}; the conflicted candidate passes CopyOnly and prints \"derived tier not regenerated — run 'doctrine worktree provision <dir>' after resolving\"; worktree provision passes the flag." },
+  { id = "EX-3", text = "RV-425 F-6 (control): with installed-version = \"999.0.0\" committed in the source, fork, hook passthrough, coordination (create and resume) and clean candidate each leave no worktree, ref or ledger row (resume keeps its branch); the clean-candidate test is observed red before its worktree-removal fix." },
+  { id = "EX-4", text = "Repair under the same lever: worktree kept, non-zero exit; --allow-downgrade then succeeds. No earlier currency check refuses on the raised stamp." },
+  { id = "EX-5", text = "Every existing worktree, coordination and dispatch candidate suite passes unchanged (their uninstalled fixtures take the PHASE-01 EX-6 skip)." },
+  { id = "EX-6", text = "Layering: only the worktree comment in layering.toml gains install; command tangle measured at the gate; bump 76→77 only if the delta is +1, with the reason recorded; otherwise examine the cycle first." },
+  { id = "EX-7", text = "Provisioning callers pass stderr as regenerate's writer: the machine-read stdout of worktree fork, worktree coordinate and dispatch candidate create (two lines: ref, path) is unchanged when regeneration runs." },
+]
+verification = [
+  { id = "VT-1", expects = "ProvisionMode threaded through run_provision; copy private", test_file = "src/worktree/provision.rs", keywords = ["enum ProvisionMode", "CopyOnly", "CopyThenRegenerate", "install::regenerate"], waived = false },
+  { id = "VT-2", expects = "clean candidate rolls back worktree + ref on regeneration failure; conflicted arm copies only and prints the repair command", test_file = "tests/e2e_dispatch_candidate.rs", keywords = ["999.0.0", "worktree provision"], waived = false },
+  { id = "VT-3", expects = "fork compensates on downgrade refusal", test_file = "tests/e2e_worktree_fork.rs", keywords = ["999.0.0"], waived = false },
+  { id = "VT-4", expects = "coordination create and resume compensate on downgrade refusal", test_file = "tests/e2e_worktree_coordinate.rs", keywords = ["999.0.0"], waived = false },
+  { id = "VT-5", expects = "hook passthrough compensates on downgrade refusal", test_file = "tests/e2e_worktree_create_fork.rs", keywords = ["999.0.0"], waived = false },
+  { id = "VT-6", expects = "repair keeps the worktree and exits non-zero; --allow-downgrade succeeds", test_file = "tests/e2e_worktree_provision.rs", keywords = ["999.0.0", "--allow-downgrade"], waived = false },
+  { id = "VA-1", expects = "tangle measurement and any baseline bump recorded with its reason in layering.toml and slice notes", waived = false },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "projection fidelity and docs"
+objective = "Prove a provisioned worktree from an installed source is whole and clean, repair is idempotent and preserves user files, and a second-generation fork matches; correct the DERIVED_RUNTIME comment; update the worktree skill; check baked hook paths in one confined fork (design sec-5, sec-6)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 exit criteria met." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Projection: a fork of an installed source has skills, agent defs, harness link dirs resolving to real files, harness config and shipped memory equal to an install run on a fresh copy of the fork's inputs (not compared against the source tree)." },
+  { id = "EX-2", text = "Clean tree: git status --porcelain in a new fork is empty; no .pi/skills directory is created." },
+  { id = "EX-7", text = "dispatch candidate create from an installed source still prints exactly two stdout lines (PHASE-02 EX-7 under real regeneration)." },
+  { id = "EX-3", text = "Idempotent repair: worktree provision twice converges; a user-owned real file under a harness link dir survives and is reported kept." },
+  { id = "EX-4", text = "Second generation: a fork of a fork regenerates the same harness set." },
+  { id = "EX-5", text = "allowlist.rs DERIVED_RUNTIME doc comment and expect(dead_code) reason describe the wired regeneration; plugins/doctrine/skills/worktree/SKILL.md states provision = copy + regenerate, the uninstalled-source skip and the repair command." },
+  { id = "EX-6", text = "RV-425 F-7: one confined dispatch fork's baked hook command resolves inside the worker jail, or a backlog item records that it does not; the observation is written to slice notes." },
+]
+verification = [
+  { id = "VT-1", expects = "projection equals a fresh install; clean porcelain; no .pi/skills; second generation", test_file = "tests/e2e_worktree_fork.rs", keywords = ["installed_source", "porcelain", ".pi/skills"], waived = false },
+  { id = "VT-2", expects = "idempotent repair keeps a user-owned file and reports it", test_file = "tests/e2e_worktree_provision.rs", keywords = ["installed_source", "kept"], waived = false },
+  { id = "VT-3", expects = "installed-source fixture helper shared by the fork and provision suites", test_file = "tests/common/mod.rs", keywords = ["fn installed_source"], waived = false },
+  { id = "VA-1", expects = "doc comment and skill text match the shipped behaviour", waived = false },
+  { id = "VH-1", expects = "user confirms the confined-fork hook observation in slice notes (F-7)", waived = false },
+]
+specs             = []
+requirements      = []
