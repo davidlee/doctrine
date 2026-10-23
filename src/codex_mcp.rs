@@ -590,14 +590,14 @@ pub(crate) fn consent_block(plan: &CodexUserPlan) -> Option<String> {
             CODEX_MCP_TABLE,
             CODEX_MCP_SERVER_KEY
         );
-        lines.push(consent_line("file", &file));
-        lines.push(consent_line("runs", &add_command(bake)));
-        lines.push(consent_line("scope", text::SCOPE));
+        lines.push(labelled(CONSENT_LABEL_COLUMN, "file", &file));
+        lines.push(labelled(CONSENT_LABEL_COLUMN, "runs", &add_command(bake)));
+        lines.push(labelled(CONSENT_LABEL_COLUMN, "scope", text::SCOPE));
     }
     if let Some(UserEntry::Replace { old, dropped }) = &plan.user {
-        lines.push(consent_line("replaces", old));
+        lines.push(labelled(CONSENT_LABEL_COLUMN, "replaces", old));
         if !dropped.is_empty() {
-            lines.push(consent_line("drops", &dropped.join(", ")));
+            lines.push(labelled(CONSENT_LABEL_COLUMN, "drops", &dropped.join(", ")));
         }
     }
     if let ProjectEntry::OwnedWrapper { extra_keys } = &plan.project {
@@ -607,7 +607,7 @@ pub(crate) fn consent_block(plan: &CodexUserPlan) -> Option<String> {
             format!(" (with {})", extra_keys.join(", "))
         };
         let removes = format!("{} {CODEX_CONFIG_REL}{lost}", text::REMOVES_LEAD);
-        lines.push(consent_line("removes", &removes));
+        lines.push(labelled(CONSENT_LABEL_COLUMN, "removes", &removes));
     }
     if writes {
         lines.push(format!("  {}", text::TRUST));
@@ -623,14 +623,178 @@ pub(crate) fn consent_block(plan: &CodexUserPlan) -> Option<String> {
     Some(lines.join("\n"))
 }
 
-/// One labelled line of the consent block: two spaces, the label in a fixed
-/// column, then the value — the alignment the design's example shows.
-fn consent_line(label: &str, value: &str) -> String {
-    format!("  {label:<9}{value}")
+/// One labelled line of a text block: two spaces, the label in a fixed
+/// column, then the value — the alignment the design's examples show. The two
+/// text blocks use different widths ([`CONSENT_LABEL_COLUMN`] fits "replaces",
+/// [`REPORT_LABEL_COLUMN`] fits "dropped"), so the width is the caller's.
+fn labelled(column: usize, label: &str, value: &str) -> String {
+    format!("  {label:<column$}{value}")
 }
 
-/// The consent register: every fixed sentence of the prompt, so a rewording is a
-/// one-line diff here rather than a literal buried in the composer (STD-001).
+/// The consent block's label column — wide enough for "replaces".
+const CONSENT_LABEL_COLUMN: usize = 9;
+/// The report's label column — wide enough for "dropped".
+const REPORT_LABEL_COLUMN: usize = 8;
+
+// ---------------------------------------------------------------------------
+// Report lines (design sec-report)
+// ---------------------------------------------------------------------------
+
+/// What a write of the user entry states: the file, and the command codex now
+/// holds (POL-003 — what was written, never that codex has loaded it).
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn registered(config: &Path, bake: &Path) -> String {
+    [
+        format!("{} {} {}", text::PREFIX, text::REGISTERED, config.display()),
+        labelled(REPORT_LABEL_COLUMN, "command", &serve_command(bake)),
+    ]
+    .join("\n")
+}
+
+/// What a replacement states: the old invocation, the new one, and every key the
+/// write removed — the same list the consent prompt named.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn replaced(config: &Path, bake: &Path, old: &str, dropped: &[String]) -> String {
+    let mut lines = vec![
+        format!("{} {} {}", text::PREFIX, text::REPLACED, config.display()),
+        labelled(REPORT_LABEL_COLUMN, "was", old),
+        labelled(REPORT_LABEL_COLUMN, "now", &serve_command(bake)),
+    ];
+    if !dropped.is_empty() {
+        lines.push(labelled(
+            REPORT_LABEL_COLUMN,
+            "dropped",
+            &dropped.join(", "),
+        ));
+    }
+    lines.join("\n")
+}
+
+/// The command codex records for the server: the bake plus the serve args.
+fn serve_command(bake: &Path) -> String {
+    format!("{} {CODEX_MCP_SERVE_ARGS}", bake.display())
+}
+
+/// doctrine's old project wrapper is gone.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn wrapper_removed() -> String {
+    format!(
+        "{} {} {CODEX_CONFIG_REL}",
+        text::PREFIX,
+        text::WRAPPER_REMOVED
+    )
+}
+
+/// A running codex keeps the config it started with — the reason the user may see
+/// nothing change until they restart it.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn app_server_restart() -> String {
+    format!("{} {}", text::PREFIX, text::APP_SERVER)
+}
+
+/// The user entry was written but the project file still wins here: codex reads
+/// the project layer over the user one, so the fix is another install.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn wrapper_still_overrides() -> String {
+    format!("{} {}", text::PREFIX, text::WRAPPER_STILL_OVERRIDES)
+}
+
+/// An explicit project entry: disclosed, never touched, and the reason the user's
+/// config may not be the one codex uses in this repo.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn override_in_effect(target: &str) -> String {
+    format!(
+        "{} {} {target} ({CODEX_CONFIG_REL}) {}",
+        text::PREFIX,
+        text::OVERRIDE_IN_EFFECT,
+        text::OVERRIDE_TAIL
+    )
+}
+
+/// A bare-name project command: it shadows the user entry here and depends on the
+/// codex daemon's `PATH` (EVD-032), which doctrine can neither see nor fix.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn path_shadow(command: &str) -> String {
+    format!(
+        "{} {CODEX_CONFIG_REL} {} \"{command}\"{}\n  {}",
+        text::PREFIX,
+        text::SHADOW_ENTRY,
+        text::SHADOW_OVERRIDES,
+        text::SHADOW_ADVICE
+    )
+}
+
+/// Why the leg stopped, or `None` when nothing is degraded — the caller prints a
+/// skip line only when there is a cause, so the message is built here where the
+/// cause is known. The `run:` line appears only when a bake resolved: without one
+/// there is no command to offer.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn skipped(plan: &CodexUserPlan) -> Option<String> {
+    let cause = cause(plan.degraded.as_ref()?, plan);
+    let mut lines = vec![format!("{} {} {cause}", text::PREFIX, text::SKIPPED)];
+    if let Some(bake) = &plan.bake {
+        lines.push(format!("  run: {}", add_command(bake)));
+    }
+    Some(lines.join("\n"))
+}
+
+/// The cause clause of a skip line. The file-specific causes only arise after
+/// [`destination`] resolved; [`config_text`] keeps the function total for the
+/// two that never have a file to name.
+fn cause(degraded: &Degraded, plan: &CodexUserPlan) -> String {
+    match degraded {
+        Degraded::BadCodexHome => text::CAUSE_BAD_CODEX_HOME.to_string(),
+        Degraded::NoHome => text::CAUSE_NO_HOME.to_string(),
+        Degraded::UserUnreadable => {
+            format!("{} {}", config_text(plan), text::CAUSE_UNREADABLE)
+        }
+        Degraded::UserUnparseable => {
+            format!("{} {}", config_text(plan), text::CAUSE_UNPARSEABLE)
+        }
+        Degraded::UserMalformed => format!("{} {}", config_text(plan), text::CAUSE_MALFORMED),
+        Degraded::ExecNotOnPath { exec, on_path } => match on_path {
+            Some(on_path) => format!(
+                "{} ({}) {} ({})",
+                text::THIS_DOCTRINE,
+                exec.display(),
+                text::NOT_THE_PATH_DOCTRINE,
+                on_path.display()
+            ),
+            None => format!(
+                "{} ({}) {}",
+                text::THIS_DOCTRINE,
+                exec.display(),
+                text::NOT_ON_PATH
+            ),
+        },
+        Degraded::ExecUnresolved => text::CAUSE_EXEC_UNRESOLVED.to_string(),
+        Degraded::NoCodexCli => text::CAUSE_NO_CODEX_CLI.to_string(),
+    }
+}
+
+/// The user config path as the report names it.
+fn config_text(plan: &CodexUserPlan) -> String {
+    plan.user_config
+        .as_ref()
+        .map(|path| path.display().to_string())
+        .unwrap_or_default()
+}
+
+/// The user said no: nothing changed, the risk is named (EVD-032), and the exact
+/// command stands in for a rerun.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn declined(bake: &Path) -> String {
+    [
+        format!("{} {}", text::PREFIX, text::DECLINED),
+        format!("  {}", text::DECLINED_WARN),
+        format!("  to register later: {}", add_command(bake)),
+    ]
+    .join("\n")
+}
+
+/// The consent register: every fixed sentence of the prompt and the report, so a
+/// rewording is a one-line diff here rather than a literal buried in a composer
+/// (STD-001).
 #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 mod text {
     pub(super) const HEADER_WRITE: &str =
@@ -642,6 +806,37 @@ mod text {
         "Codex asks you to trust each new folder before doctrine connects there.";
     pub(super) const ASK_WRITE: &str = "Write user config? [y/N]";
     pub(super) const ASK_REMOVE: &str = "Remove it? [y/N]";
+
+    // --- report (lower-case register: doctrine describing its own actions) ---
+    pub(super) const PREFIX: &str = "codex:";
+    pub(super) const REGISTERED: &str = "registered doctrine MCP server in";
+    pub(super) const REPLACED: &str = "replaced doctrine MCP command in";
+    pub(super) const WRAPPER_REMOVED: &str = "removed the old doctrine wrapper from";
+    pub(super) const APP_SERVER: &str =
+        "a running codex app-server keeps its old config until restarted";
+    pub(super) const WRAPPER_STILL_OVERRIDES: &str =
+        "user entry written; the old project wrapper still overrides it here; rerun install";
+    pub(super) const OVERRIDE_IN_EFFECT: &str = "project override in effect:";
+    pub(super) const OVERRIDE_TAIL: &str = "— codex uses it here instead of the user entry";
+    pub(super) const SHADOW_ENTRY: &str = "has a doctrine entry with command";
+    pub(super) const SHADOW_OVERRIDES: &str = "; it overrides the user entry here";
+    pub(super) const SHADOW_ADVICE: &str = "and needs doctrine on the codex daemon's PATH, \
+which may fail (EVD-032). Use an absolute path, or remove it.";
+    pub(super) const SKIPPED: &str = "user MCP registration skipped —";
+    pub(super) const DECLINED: &str = "user MCP registration declined; nothing changed";
+    pub(super) const DECLINED_WARN: &str = "interactive codex may fail to start doctrine if its daemon's PATH lacks doctrine (EVD-032)";
+    pub(super) const THIS_DOCTRINE: &str = "this doctrine";
+    pub(super) const NOT_THE_PATH_DOCTRINE: &str = "is not the doctrine on PATH";
+    pub(super) const NOT_ON_PATH: &str = "is not on PATH";
+    pub(super) const CAUSE_BAD_CODEX_HOME: &str =
+        "CODEX_HOME is not an existing absolute directory";
+    pub(super) const CAUSE_NO_HOME: &str = "HOME is not set";
+    pub(super) const CAUSE_UNREADABLE: &str = "could not be read";
+    pub(super) const CAUSE_UNPARSEABLE: &str = "is not valid TOML";
+    pub(super) const CAUSE_MALFORMED: &str = "has a doctrine entry doctrine cannot interpret";
+    pub(super) const CAUSE_EXEC_UNRESOLVED: &str =
+        "the running doctrine's path could not be resolved";
+    pub(super) const CAUSE_NO_CODEX_CLI: &str = "codex is not on PATH";
 }
 
 // ---------------------------------------------------------------------------
@@ -1415,5 +1610,225 @@ Remove it? [y/N]"
     #[test]
     fn consent_block_is_absent_when_the_plan_proposes_no_change() {
         assert_eq!(consent_block(&plan_of(&current_user(), "")), None);
+    }
+
+    // --- report lines (design sec-report) ---
+
+    const DESIGN_CONFIG: &str = "/home/u/.codex/config.toml";
+
+    #[test]
+    fn report_user_write_and_retired_wrapper_match_the_design() {
+        assert_eq!(
+            [
+                registered(Path::new(DESIGN_CONFIG), Path::new(DESIGN_BAKE)),
+                wrapper_removed(),
+                app_server_restart(),
+            ]
+            .join("\n"),
+            "codex: registered doctrine MCP server in /home/u/.codex/config.toml
+  command /home/u/.local/share/doctrine/bin/doctrine serve --mcp
+codex: removed the old doctrine wrapper from .codex/config.toml
+codex: a running codex app-server keeps its old config until restarted"
+        );
+    }
+
+    #[test]
+    fn report_replaced_lists_the_old_command_the_new_one_and_what_was_dropped() {
+        let dropped = vec!["enabled = false".to_string()];
+        assert_eq!(
+            replaced(
+                Path::new(DESIGN_CONFIG),
+                Path::new(DESIGN_BAKE),
+                "doctrine serve --mcp",
+                &dropped,
+            ),
+            "codex: replaced doctrine MCP command in /home/u/.codex/config.toml
+  was     doctrine serve --mcp
+  now     /home/u/.local/share/doctrine/bin/doctrine serve --mcp
+  dropped enabled = false"
+        );
+    }
+
+    #[test]
+    fn report_replaced_omits_the_dropped_line_when_nothing_was_lost() {
+        let reported = replaced(
+            Path::new(DESIGN_CONFIG),
+            Path::new(DESIGN_BAKE),
+            "doctrine serve --mcp",
+            &[],
+        );
+        assert_eq!(reported.lines().count(), 3, "no `dropped` line: {reported}");
+    }
+
+    #[test]
+    fn report_wrapper_still_overrides_explains_the_rerun() {
+        assert_eq!(
+            wrapper_still_overrides(),
+            "codex: user entry written; the old project wrapper still overrides it here; rerun install"
+        );
+    }
+
+    #[test]
+    fn report_override_names_the_target_and_where_it_lives() {
+        assert_eq!(
+            override_in_effect("./bin/doctrine"),
+            "codex: project override in effect: ./bin/doctrine (.codex/config.toml) — codex uses it here instead of the user entry"
+        );
+    }
+
+    #[test]
+    fn report_path_shadow_warns_about_the_daemon_path() {
+        assert_eq!(
+            path_shadow("doctrine"),
+"codex: .codex/config.toml has a doctrine entry with command \"doctrine\"; it overrides the user entry here
+  and needs doctrine on the codex daemon's PATH, which may fail (EVD-032). Use an absolute path, or remove it."
+        );
+    }
+
+    #[test]
+    fn report_skipped_for_no_codex_cli_shows_the_command_to_run() {
+        let mut env = env_ok();
+        env.codex_on_path = false;
+        let planned = plan(
+            FileRead::Absent,
+            FileRead::Absent,
+            &bake_facts(Some(DESIGN_BAKE), Some(DESIGN_BAKE), Some(DESIGN_BAKE)),
+            &env,
+        );
+        assert_eq!(
+            skipped(&planned).as_deref(),
+            Some(
+                "codex: user MCP registration skipped — codex is not on PATH
+  run: codex mcp add doctrine -- /home/u/.local/share/doctrine/bin/doctrine serve --mcp"
+            )
+        );
+    }
+
+    #[test]
+    fn report_declined_matches_the_design() {
+        assert_eq!(
+            declined(Path::new(DESIGN_BAKE)),
+"codex: user MCP registration declined; nothing changed
+  interactive codex may fail to start doctrine if its daemon's PATH lacks doctrine (EVD-032)
+  to register later: codex mcp add doctrine -- /home/u/.local/share/doctrine/bin/doctrine serve --mcp"
+        );
+    }
+
+    #[test]
+    fn report_skipped_is_absent_when_the_plan_is_not_degraded() {
+        assert_eq!(skipped(&plan_of(&current_user(), "")), None);
+    }
+
+    /// The `skipped` header only — the cause is what the per-variant tests pin.
+    fn skipped_cause(planned: &CodexUserPlan) -> String {
+        skipped(planned)
+            .and_then(|report| report.lines().next().map(str::to_string))
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn report_skipped_for_bad_codex_home_names_the_setting() {
+        let planned = plan(
+            FileRead::Absent,
+            FileRead::Absent,
+            &facts_ok(),
+            &codex_env(Some(""), true, Some("/home/u")),
+        );
+        assert_eq!(
+            skipped_cause(&planned),
+            "codex: user MCP registration skipped — CODEX_HOME is not an existing absolute directory"
+        );
+    }
+
+    #[test]
+    fn report_skipped_for_no_home_names_the_setting() {
+        let planned = plan(
+            FileRead::Absent,
+            FileRead::Absent,
+            &facts_ok(),
+            &codex_env(None, false, None),
+        );
+        assert_eq!(
+            skipped_cause(&planned),
+            "codex: user MCP registration skipped — HOME is not set"
+        );
+    }
+
+    #[test]
+    fn report_skipped_for_user_unreadable_names_the_file() {
+        let planned = plan(
+            FileRead::Unreadable,
+            FileRead::Absent,
+            &facts_ok(),
+            &env_ok(),
+        );
+        assert_eq!(
+            skipped_cause(&planned),
+            "codex: user MCP registration skipped — /home/u/.codex/config.toml could not be read"
+        );
+    }
+
+    #[test]
+    fn report_skipped_for_user_unparseable_names_the_file() {
+        let planned = plan_of("not = [toml\n", "");
+        assert_eq!(
+            skipped_cause(&planned),
+            "codex: user MCP registration skipped — /home/u/.codex/config.toml is not valid TOML"
+        );
+    }
+
+    #[test]
+    fn report_skipped_for_user_malformed_names_the_entry() {
+        let planned = plan_of("[mcp_servers.doctrine]\ncommand = 3\n", "");
+        assert_eq!(
+            skipped_cause(&planned),
+            "codex: user MCP registration skipped — /home/u/.codex/config.toml has a doctrine entry doctrine cannot interpret"
+        );
+    }
+
+    #[test]
+    fn report_skipped_for_exec_not_on_path_names_both_binaries() {
+        let planned = plan(
+            FileRead::Absent,
+            FileRead::Absent,
+            &bake_facts(
+                Some(BAKE),
+                Some("/home/u/.nix-profile/bin/doctrine"),
+                Some("/nix/store/x/bin/doctrine"),
+            ),
+            &env_ok(),
+        );
+        assert_eq!(
+            skipped_cause(&planned),
+            "codex: user MCP registration skipped — this doctrine (/usr/local/bin/doctrine) is not the doctrine on PATH (/home/u/.nix-profile/bin/doctrine)"
+        );
+    }
+
+    #[test]
+    fn report_skipped_for_exec_not_on_path_without_a_path_entry() {
+        let planned = plan(
+            FileRead::Absent,
+            FileRead::Absent,
+            &bake_facts(Some(BAKE), None, None),
+            &env_ok(),
+        );
+        assert_eq!(
+            skipped_cause(&planned),
+            "codex: user MCP registration skipped — this doctrine (/usr/local/bin/doctrine) is not on PATH"
+        );
+    }
+
+    #[test]
+    fn report_skipped_for_exec_unresolved_says_so() {
+        let planned = plan(
+            FileRead::Absent,
+            FileRead::Absent,
+            &bake_facts(None, Some(BAKE), Some(BAKE)),
+            &env_ok(),
+        );
+        assert_eq!(
+            skipped_cause(&planned),
+            "codex: user MCP registration skipped — the running doctrine's path could not be resolved"
+        );
     }
 }
