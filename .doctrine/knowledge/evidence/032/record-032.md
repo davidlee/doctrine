@@ -50,3 +50,25 @@ PATH-dependent form is fragile; only an absolute path is daemon-independent.
 
 Probe verified on codex 0.159.1 (exec) / 0.163.0 (daemon). Bears on IMP-497
 (re-verify the codex MCP seam) and ISS-528 (foreign entry holds install incomplete).
+
+
+## Daemon restart as a remedy (2026-10-23)
+
+`codex app-server daemon` (codex 0.159.1; the `app-server` group is marked
+experimental) offers `start | restart | stop | update | version | bootstrap`.
+`daemon version` reports `"backend":"pid"`: a plain background process, not a
+systemd service. Inference (not tested): with the `pid` backend, a restart
+inherits the caller's PATH and fixes things until the next restart.
+
+Rejected as an installer action:
+
+- Restarting interrupts running codex work (help text: `update` "may interrupt
+  running work").
+- The fix doesn't last: any client can start the daemon. A Claude-plugin codex
+  app-server was observed running with a PATH that lacks the doctrine directory.
+- Under `bootstrap` (a managed service), the environment comes from the service
+  definition, not from whoever ran the restart.
+- An experimental command surface means harness-specific behaviour would keep
+  growing (POL-003).
+
+Viable as a printed hint next to the install's codex step.
