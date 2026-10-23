@@ -39,6 +39,15 @@ reconciliation"):
   Integrate into sec-3's tracked-drift bullet.
 - **A `Refused` leg outcome halts regeneration like `Failed`.** Integrate into
   sec-3's fatal-legs paragraph.
+- **Layering re-tier (departs from sec-4's "no tier edit").** PHASE-02 re-tiers
+  `worktree::provision` and `worktree::fork` engine → command in
+  `layering.toml`: provision now composes `install::regenerate` and fork calls
+  provision — the same upward-edge shape `worktree::coordinate` is already
+  command-tier for. All their importers are command tier. Measured: the gate
+  passes at `command = 76`, so no tangle bump (sec-4's predicted +1 did not
+  materialise). Pending user confirmation; integrate into sec-4 and sec-6.
+- **Provisioning progress reaches `out` for the boot-wiring leg too**
+  (`boot::apply_wire_into`); PHASE-01 left it on stdout (PHASE-02 review F1).
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
