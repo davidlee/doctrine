@@ -31,6 +31,14 @@ reconciliation"):
 - **Regeneration progress goes to stderr** for provisioning callers; machine-read
   stdout of fork / coordinate / candidate create is unchanged. Integrate into
   sec-3 (disclosure channel). Plan: PHASE-01 EX-7, PHASE-02 EX-7.
+- **Unreadable stamp refuses** (source or destination): regeneration cannot
+  tell installed from not, or verify no downgrade. Integrate into sec-3.
+- **Drift check compares bytes, not just paths** (PHASE-01 review F2): a leg
+  that rewrites an already-dirty tracked file, or reverts it to clean, is drift
+  too — otherwise repair in a dirty tree silently loses an uncommitted edit.
+  Integrate into sec-3's tracked-drift bullet.
+- **A `Refused` leg outcome halts regeneration like `Failed`.** Integrate into
+  sec-3's fatal-legs paragraph.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
