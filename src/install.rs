@@ -8098,6 +8098,88 @@ mod tests_regenerate {
         );
     }
 
+    /// The stamp body that makes `read_tracked_stamp` report `Unreadable`: a
+    /// well-formed `[install]` table whose version is not a semver.
+    const MALFORMED_STAMP: &str = "not-a-semver";
+
+    /// F3: a refused source stamp refuses before the manifest, harnesses, or any
+    /// leg is reached, so nothing is written.
+    #[test]
+    fn regenerate_refuses_an_unreadable_source_stamp() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_stamp(&tmp.path().join("repo"), Some(MALFORMED_STAMP));
+
+        let mut out = Vec::new();
+        let refused = regenerate(&repo, &repo, false, &mut out).unwrap_err();
+        let message = format!("{refused:#}");
+        assert!(
+            message.contains("refusing to regenerate the derived tier"),
+            "the refusal names the source-stamp condition: {message}",
+        );
+        assert!(
+            message.contains("cannot read") && message.contains("doctrine.toml"),
+            "the refusal names the unreadable stamp: {message}",
+        );
+        assert!(
+            !repo.join(".doctrine/skills").exists() && !repo.join(".agents/skills").exists(),
+            "refused before any leg ran",
+        );
+        assert!(
+            crate::git::tracked_dirty_paths(&repo).unwrap().is_empty(),
+            "a refused regeneration writes nothing tracked",
+        );
+    }
+
+    /// An unreadable destination stamp means the downgrade gate cannot be
+    /// verified: refuse, and write nothing to the destination.
+    #[test]
+    fn regenerate_refuses_an_unreadable_destination_stamp() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = repo_with_stamp(&tmp.path().join("source"), Some(env!("CARGO_PKG_VERSION")));
+        let dest = repo_with_stamp(&tmp.path().join("dest"), Some(MALFORMED_STAMP));
+
+        let mut out = Vec::new();
+        let refused = regenerate(&source, &dest, false, &mut out).unwrap_err();
+        let message = format!("{refused:#}");
+        assert!(
+            message.contains("cannot verify the regeneration is not a downgrade"),
+            "the refusal names the destination-stamp condition: {message}",
+        );
+        assert!(
+            message.contains("cannot read") && message.contains("doctrine.toml"),
+            "the refusal names the unreadable stamp: {message}",
+        );
+        assert!(
+            !dest.join(".doctrine/skills").exists() && !dest.join(".agents/skills").exists(),
+            "refused before any leg ran",
+        );
+        assert!(
+            crate::git::tracked_dirty_paths(&dest).unwrap().is_empty(),
+            "a refused regeneration writes nothing tracked",
+        );
+    }
+
+    /// F3: a `Refused` leg halts a regeneration exactly like a `Failed` one; the
+    /// only other variant, `Done`, halts nothing.
+    #[test]
+    fn leg_failure_halts_on_refused_and_failed_only() {
+        assert_eq!(
+            leg_failure(&LegOutcome::Refused("markers".into())),
+            Some("markers"),
+            "a refusal carries the leg's message",
+        );
+        assert_eq!(
+            leg_failure(&LegOutcome::Failed("io".into())),
+            Some("io"),
+            "a failure carries the leg's message",
+        );
+        assert_eq!(
+            leg_failure(&LegOutcome::Done(Vec::new())),
+            None,
+            "a done leg halts nothing",
+        );
+    }
+
     /// EX-4 (RV-425 F-1): the preflight refuses a tracked file boot wiring would
     /// rewrite — and refuses it before any write.
     #[test]

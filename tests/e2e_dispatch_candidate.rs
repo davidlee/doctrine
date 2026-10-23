@@ -2498,6 +2498,19 @@ fn e2e_dispatch_candidate_conflict_worktree_materialises_ordered_merge() {
     );
     let wt = conflict_worktree(dir);
 
+    // EX-0: the worktree is provisioned CopyOnly (the tree carries markers, so no
+    // regeneration leg can run), and create discloses the stale derived tier — handing
+    // the operator the exact command, naming this candidate's worktree.
+    let disclosure = format!(
+        "derived tier not regenerated — run 'doctrine worktree provision {}' after resolving",
+        wt.display()
+    );
+    assert!(
+        stderr(&out).contains(&disclosure),
+        "conflicted create discloses the CopyOnly derived-tier gap; stderr: {}\nexpected: {disclosure}",
+        stderr(&out)
+    );
+
     // EX-1: read-tree --reset -u T_c + stage rewrite ⇒ unmerged index + markers.
     let unmerged = git(&wt, &["ls-files", "-u"]);
     assert_eq!(
