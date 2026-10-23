@@ -33,3 +33,7 @@ label = "references"
 role = "concerns"
 descriptor = "live-codex evidence for the MCP seam re-verification"
 target = "IMP-497"
+
+[[relation]]
+label = "shapes"
+target = "SL-286"

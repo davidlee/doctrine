@@ -1,0 +1,56 @@
+id = 286
+slug = "codex-mcp-user-level"
+title = "Codex MCP registers at user level with an absolute path"
+status = "design"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/boot.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "README.md"
+intent = "scope-relevant"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "superseded: wrapper form fails under the codex daemon"
+target = "DEC-323"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "REQ to revise: project-level portable entry"
+target = "REQ-484"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "post-write verification stays deferred"
+target = "IMP-497"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "foreign-entry incompleteness also applies at user level"
+target = "ISS-528"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis. Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-NNN
+#   doctrine link SL-NNN governed_by ADR-NNN
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
