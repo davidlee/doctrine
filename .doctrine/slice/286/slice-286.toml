@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/boot.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/**"
@@ -21,6 +21,46 @@ intent = "scope-relevant"
 [[selector]]
 selector = "README.md"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/codex_mcp.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/install.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/serve.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_codex_install.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_mcp_server.rs"
+intent = "design-target"
 
 [[relation]]
 label = "references"

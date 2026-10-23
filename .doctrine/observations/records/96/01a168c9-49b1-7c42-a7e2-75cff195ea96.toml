@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a168c9-49b1-7c42-a7e2-75cff195ea96"
+recorded_at = "2026-10-23T12:43:04.497261305Z"
+kind = "friction"
+summary = "[design; SL-286] batched section declare rendered design.md in id-sorted order (ISS-356 recurrence)"
+detail = "Ten sections declared in one batch with descriptive ids rendered as Code impact, The codex user MCP leg, System model, Design problem... — reading order lost; no reorder verb, so the run keeps it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

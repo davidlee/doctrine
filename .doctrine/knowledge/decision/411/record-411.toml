@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 411
+slug = "codex-user-mcp-explicit-install-only"
+title = "Codex user MCP runs only on explicit install"
+record_kind = "decision"
+status = "proposed"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-286 drafting. Worktree regeneration (`install::regenerate`, SL-285) reuses install legs with a synthetic `yes: true` and calls `wire_boot_leg` → `apply_wire_into` → `install_refresh`. A user-level write inside `install_refresh` would rewrite the machine-wide codex config on every fork regeneration, possibly to a coord dev binary that DEC-404 does not catch (it lies outside the fork root), and with no user present to consent (DEC-403, DEC-410)."
+choice = "Codex MCP handling (the user-level write and the project-level wrapper retirement) moves out of `install_refresh` into its own install leg in a new `codex_mcp` module. Only `doctrine install` (`run_forward_steps`) and `doctrine boot install` (`run_install`) run it. `regenerate` and any provisioning path never do. `install_refresh`'s codex arm keeps the hooks and reports `mcp: NotApplicable`."
+alternatives = ["Keep the leg in install_refresh and gate it on a consent flag threaded through apply_wire — every caller must remember to pass false; regeneration's yes:true invites a mistake"]
+rationale = "Consent needs a present user, and a synthetic yes is not consent. Separating the leg also gives the two-layer report its own lines instead of straining the per-harness RefreshReport, and moves cohesive codex MCP code out of boot.rs."
+consequences = ["A fork regeneration never touches codex MCP in either layer"]
+decided_by = "agent"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-286"

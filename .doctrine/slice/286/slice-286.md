@@ -44,6 +44,8 @@ such a file. Restarting the daemon from `install` was considered and rejected
    changes neither layer and reports "declined". A binary inside the installed
    project is never baked (DEC-404). No codex on PATH, a bad `CODEX_HOME`, or a
    codex failure degrades to printing the `codex mcp add` command (DEC-408).
+   The leg runs only from an explicit `install` / `boot install`, never from
+   worktree regeneration or provisioning (DEC-411).
 2. **Retire the project-level entry; respect overrides.** An owned project-level
    entry (the wrapper forms in `CODEX_MCP_WRAPPER_FORMS`) is removed, since codex
    prefers the project layer (only after consent). A foreign project entry
@@ -107,6 +109,7 @@ Resolved in design by DEC-403..DEC-410; kept as the scoping record.
 
 ## Affected surface
 
+- `src/codex_mcp.rs` (new): the codex user MCP leg (DEC-411).
 - `src/boot.rs`: codex MCP arm (`CODEX_CONFIG_REL`, `CODEX_MCP_WRAPPER*`,
   `codex_mcp_entry`, `classify_codex_entry`, `plan_codex_mcp`,
   `install_codex_mcp`), the report path (`wire()`, `mcp_rel`,

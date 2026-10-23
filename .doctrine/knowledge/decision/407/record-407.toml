@@ -12,7 +12,7 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "SL-286 inq-5. DEC-325 keeps one `mcp: RefreshOutcome` and derives the reported file from the harness via `mcp_rel` (`'static`). The codex user file is computed at runtime and a project retirement also needs reporting."
-choice = "Keep one MCP outcome for the user-level write; the reported file becomes a computed path (no `'static` `mcp_rel` for codex). Project-level removal, override and shadow findings report as one additional line."
+choice = "The codex MCP report belongs to its own install leg (DEC-411), which prints its own lines: the resolved user file, the baked command, old → new and dropped keys on replace, the project wrapper removal, any override or shadow, degradation or decline, and the daemon-restart hint. `RefreshReport.mcp` is `NotApplicable` for codex and `mcp_rel` loses its codex row, so the `'static` path constraint does not arise."
 alternatives = ["A second report field for codex", "Carry paths in every outcome variant, churning the Claude leg"]
 rationale = "Smallest change that reports both layers honestly."
 consequences = ["Amends DEC-325 (supersede)", "`RefreshOutcome::PrintedFallback.hook_file: &'static str` can no longer name the codex file"]
