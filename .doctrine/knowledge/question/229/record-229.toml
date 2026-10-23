@@ -1,0 +1,27 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 229
+slug = "keep-the-sl-285-layering-re-tier-of-worktreeprovision-and-worktreefork"
+title = "Keep the SL-285 layering re-tier of worktree::provision and worktree::fork?"
+record_kind = "question"
+status = "open"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+question    = ""
+why_matters = ""
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)

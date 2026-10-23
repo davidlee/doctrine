@@ -51,23 +51,26 @@ reconciliation"):
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-23 · design reviewing rev 28 · RV-425 integrated
+fresh-as-of: 2026-10-23 · PHASE-02 · fork sl-285 a107c0ff2 + uncommitted PHASE-02
 
 ### Produced
-- design run at reviewing; six sections drafted (commits 5cc8ce64b..c4064b1b5)
-- RV-425 — independent pi design pass, F-1..F-8 disposed fix-now and integrated into sec-1..sec-6 (rev 28); awaiting user section review + disposition
-- minted: CHR-181 — classify harness link dirs in the worktree tier map
-- ISS-352 — client pi-harness fork evidence appended
-- raw research incl. independent pi design + comparison: `research/raw/pi-*.md` (gitignored)
+- design locked rev 31 (6fe624a0a, 3b21595c6); plan + phases (78ac815f9)
+- PHASE-01 done on branch sl-285 (.worktrees/SL-285): d7af02edf, 7a17cbce4, a107c0ff2 — gate green
+- PHASE-02 implemented + review-fixed in the fork, UNCOMMITTED pending gate (provision seam, six callers, compensation, layering re-tier)
+- minted: ISS-529 — fork rollback misses binding on non-dispatch branch; ISS-530 — clean candidate leaks on ledger-write failure
+- RV-425 concluded; F-1/F-6 routed control (transcribed PHASE-01 EX-4, PHASE-02 EX-3)
+- design deltas for reconcile: § Reconcile carry above
 
 ### Learned
-- mem_01a1680243ea78e383f785c81fff6e07 — apply_wire dry-run reports no touched paths
+- mem_01a16847bf3c7d93b0aeb61d27afd338 — pi writable delegates: worktree below root, no toolchain, orchestrator verifies
+- mem_01a1680243ea78e383f785c81fff6e07 — apply_wire dry-run reports no touched paths (now superseded by plan_wire)
 - mem_01a1680244397e23b4c63de9a0223fad — linked worktrees read main's install marker; ignored hook files bake the absolute exec
 
 ### Open
-- DEC-402 — regeneration legs + tracked-file guard; consequence corrected (RV-425 F-7)
+- QUE-229 — keep the layering re-tier of worktree::provision / worktree::fork (user call)
+- DEC-402 — regeneration legs + tracked-file guard
+- DEC-396 — ProvisionMode single entry
+- DEC-397 — creation compensates, repair preserves
 - DEC-393 — harness set from source
-- DEC-396 — provision composes copy and regenerate; amended to the ProvisionMode seam (F-5) and six callers (F-2)
-- DEC-397 — creation compensates, repair preserves; creation list gains coordination + hook passthrough (F-2)
 - DEC-399 — downgrade refusal
-- DEC-401 — success contract, no marker
+- DEC-401 — fatal legs

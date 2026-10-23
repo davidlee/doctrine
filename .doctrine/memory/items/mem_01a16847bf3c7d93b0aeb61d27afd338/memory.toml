@@ -1,0 +1,42 @@
+memory_uid = "mem_01a16847bf3c7d93b0aeb61d27afd338"
+memory_key = "mem.pattern.delegation.pi-writable-in-worktree"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "pi_agent writable delegates: worktree below root, orchestrator verifies"
+summary = "quotient write/implement refuse the repo root; run them in a .worktrees/<x> fork; their sandbox has no cargo or git, so say so in the prompt and verify yourself"
+created = "2026-10-23"
+updated = "2026-10-23"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["delegation", "quotient"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "fceb63b77cf91aaf4d392022ed45ca2a31cf2267"
+ref_name = "refs/heads/edge"
+checkout_state_id = "9bc3bc78e309835f723cdf783602ce846479db9cdcb77463560d90223834b313"
+base_commit = "a5b2a89e736ec7de4b4c2d8814040c73df06258e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
