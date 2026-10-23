@@ -12,6 +12,8 @@
 //! doctrine emitted", used by [`crate::boot`]'s project-entry classifier until
 //! the user-entry planner takes it over.
 
+use std::path::{Path, PathBuf};
+
 /// The project-root codex config file — the codex MCP leg's write target
 /// (SL-271). The project layer is loaded by codex for TRUSTED projects only, so
 /// a written entry is never claimed active. Distinct from
@@ -73,6 +75,112 @@ pub(crate) fn is_wrapper_form(table: &dyn toml_edit::TableLike) -> bool {
             .get(1)
             .and_then(|v| v.as_str())
             .is_some_and(|line| CODEX_MCP_WRAPPER_FORMS.contains(&normalise(line).as_str()))
+}
+
+/// The user-config file name inside a `$CODEX_HOME` directory — the same file
+/// [`CODEX_CONFIG_REL`] reaches through `$HOME`, so one name, two anchors.
+pub(crate) const CODEX_CONFIG_FILE: &str = "config.toml";
+
+/// Why the leg cannot propose a write (design sec-leg § Plan). Each variant is a
+/// distinct user-facing remedy, so the planner never has to re-derive the cause
+/// from a path that happens to be unusable.
+///
+/// `expect` rather than the `cfg_attr(not(test), …)` form: the variants arrive
+/// with the planners that construct them (PHASE-04), so several are unbuilt in
+/// *every* build until then. The expectation is a tripwire — it must go once the
+/// last variant has a constructor.
+#[expect(
+    dead_code,
+    reason = "variants arrive with their constructing planner in SL-286 PHASE-04"
+)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Degraded {
+    /// `$CODEX_HOME` is set but empty, relative, or names nothing on disk.
+    BadCodexHome,
+    /// `$CODEX_HOME` is unset and `$HOME` is too — no anchor for the user file.
+    NoHome,
+    /// The destination exists but could not be read.
+    UserUnreadable,
+    /// The destination is not parseable TOML.
+    UserUnparseable,
+    /// The destination parses but the entry's shape is not interpretable.
+    UserMalformed,
+    /// The running binary is not the `doctrine` on `PATH`, so a baked path would
+    /// not be the binary the user actually runs.
+    ExecNotOnPath,
+    /// The running binary's own path could not be resolved at all.
+    ExecUnresolved,
+    /// A user write is pending and no `codex` CLI is on `PATH` to honour it.
+    NoCodexCli,
+}
+
+/// Env facts the shell gathers (never read here): the leg is pure, so every
+/// environment question arrives as a supplied value.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CodexEnv {
+    /// `$CODEX_HOME` as set — `None` means unset (empty is a distinct, bad value).
+    pub(crate) codex_home: Option<std::ffi::OsString>,
+    /// The shell's probe of that path: codex only honours an existing directory.
+    pub(crate) codex_home_exists: bool,
+    /// `$HOME` — the fallback anchor for the user config file.
+    pub(crate) home: Option<PathBuf>,
+    /// Whether a `codex` CLI is on `PATH` (the shell's `fsutil::find_on_path`).
+    pub(crate) codex_on_path: bool,
+}
+
+/// Bake facts the shell gathers, already canonicalised where the field says so:
+/// deciding whether the running binary *is* the `PATH` entry is a comparison of
+/// canonical paths, and that resolution is IO the pure layer must not do.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BakeFacts {
+    /// Canonical path of the running binary; `None` = unresolved.
+    pub(crate) exec: Option<PathBuf>,
+    /// The first `doctrine` on `PATH`, as found — the path to bake.
+    pub(crate) path_doctrine: Option<PathBuf>,
+    /// That entry's canonical form — the comparison key against `exec`.
+    pub(crate) path_doctrine_canonical: Option<PathBuf>,
+}
+
+/// Where the user config file lives: `$CODEX_HOME/config.toml` when codex's own
+/// variable names an existing absolute directory, else `$HOME/.codex/config.toml`.
+/// A `$CODEX_HOME` that is empty, relative, or absent on disk is refused rather
+/// than silently falling back to `$HOME` — codex would not read the file we wrote
+/// there, and a *wrong* write is worse than none.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn destination(env: &CodexEnv) -> Result<PathBuf, Degraded> {
+    match &env.codex_home {
+        Some(dir) => {
+            let dir = Path::new(dir);
+            // An empty value is not absolute either — both spell a bad CODEX_HOME.
+            if !dir.is_absolute() || !env.codex_home_exists {
+                return Err(Degraded::BadCodexHome);
+            }
+            Ok(dir.join(CODEX_CONFIG_FILE))
+        }
+        None => env
+            .home
+            .as_ref()
+            .map(|home| home.join(CODEX_CONFIG_REL))
+            .ok_or(Degraded::NoHome),
+    }
+}
+
+/// The `doctrine` path to bake into the user entry: the `PATH` entry's own path
+/// when the running binary resolves to the same file, so a self-update through
+/// that entry keeps working (`Ok(path_doctrine)`, never the canonical target).
+/// A different file means the running binary is not what `doctrine` on `PATH`
+/// runs — a dev build, typically — and baking either path would be a lie.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn bake(facts: &BakeFacts) -> Result<PathBuf, Degraded> {
+    let Some(exec) = &facts.exec else {
+        return Err(Degraded::ExecUnresolved);
+    };
+    match (&facts.path_doctrine, &facts.path_doctrine_canonical) {
+        (Some(path_doctrine), Some(canonical)) if canonical == exec => Ok(path_doctrine.clone()),
+        _ => Err(Degraded::ExecNotOnPath),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -149,5 +257,128 @@ mod tests {
     fn is_wrapper_form_rejects_non_string_args() {
         assert!(!is_wrapper("command = \"sh\"\nargs = [1, 2]"));
         assert!(!is_wrapper("command = \"sh\"\nargs = \"-c\""));
+    }
+
+    // --- destination (design sec-leg § Plan) ---
+
+    fn codex_env(
+        codex_home: Option<&str>,
+        codex_home_exists: bool,
+        home: Option<&str>,
+    ) -> CodexEnv {
+        CodexEnv {
+            codex_home: codex_home.map(std::ffi::OsString::from),
+            codex_home_exists,
+            home: home.map(PathBuf::from),
+            codex_on_path: true,
+        }
+    }
+
+    #[test]
+    fn destination_uses_home_dot_codex_when_codex_home_is_unset() {
+        let env = codex_env(None, false, Some("/home/u"));
+        assert_eq!(
+            destination(&env),
+            Ok(PathBuf::from("/home/u/.codex/config.toml"))
+        );
+    }
+
+    #[test]
+    fn destination_no_home_when_neither_codex_home_nor_home_is_set() {
+        assert_eq!(
+            destination(&codex_env(None, false, None)),
+            Err(Degraded::NoHome)
+        );
+    }
+
+    #[test]
+    fn destination_bad_codex_home_when_empty() {
+        assert_eq!(
+            destination(&codex_env(Some(""), true, Some("/home/u"))),
+            Err(Degraded::BadCodexHome),
+            "an empty value names no directory"
+        );
+    }
+
+    #[test]
+    fn destination_bad_codex_home_when_relative() {
+        assert_eq!(
+            destination(&codex_env(Some(".codex"), true, Some("/home/u"))),
+            Err(Degraded::BadCodexHome),
+            "a relative value is CWD-dependent, so it is not a resolved path"
+        );
+    }
+
+    #[test]
+    fn destination_bad_codex_home_when_missing() {
+        assert_eq!(
+            destination(&codex_env(Some("/home/u/.codex"), false, Some("/home/u"))),
+            Err(Degraded::BadCodexHome),
+            "the shell's probe says nothing is there"
+        );
+    }
+
+    #[test]
+    fn destination_uses_an_absolute_existing_codex_home() {
+        let env = codex_env(Some("/opt/codex"), true, Some("/home/u"));
+        assert_eq!(
+            destination(&env),
+            Ok(PathBuf::from("/opt/codex/config.toml")),
+            "CODEX_HOME wins over HOME"
+        );
+    }
+
+    // --- bake (design sec-leg § Plan) ---
+
+    fn bake_facts(
+        exec: Option<&str>,
+        path_doctrine: Option<&str>,
+        path_doctrine_canonical: Option<&str>,
+    ) -> BakeFacts {
+        BakeFacts {
+            exec: exec.map(PathBuf::from),
+            path_doctrine: path_doctrine.map(PathBuf::from),
+            path_doctrine_canonical: path_doctrine_canonical.map(PathBuf::from),
+        }
+    }
+
+    #[test]
+    fn bake_returns_the_path_entry_not_its_canonical_form() {
+        // A nix/home-manager install: the running binary is the store copy, the
+        // PATH entry is the profile symlink that survives a rebuild.
+        const CANON: &str = "/nix/store/x/bin/doctrine";
+        const ON_PATH: &str = "/home/u/.nix-profile/bin/doctrine";
+
+        let facts = bake_facts(Some(CANON), Some(ON_PATH), Some(CANON));
+        assert_eq!(
+            bake(&facts),
+            Ok(PathBuf::from(ON_PATH)),
+            "the PATH entry's own path — the canonical store path would pin a rebuild"
+        );
+    }
+
+    #[test]
+    fn bake_exec_not_on_path_for_a_dev_build() {
+        let facts = bake_facts(
+            Some("/home/u/src/doctrine/target/debug/doctrine"),
+            Some("/home/u/.nix-profile/bin/doctrine"),
+            Some("/nix/store/x/bin/doctrine"),
+        );
+        assert_eq!(bake(&facts), Err(Degraded::ExecNotOnPath));
+    }
+
+    #[test]
+    fn bake_exec_not_on_path_when_doctrine_is_absent_from_path() {
+        let facts = bake_facts(Some("/bin/doctrine"), None, None);
+        assert_eq!(bake(&facts), Err(Degraded::ExecNotOnPath));
+        // a canonical fact with no entry it came from cannot bake either.
+        let orphan = bake_facts(Some("/bin/doctrine"), None, Some("/bin/doctrine"));
+        assert_eq!(bake(&orphan), Err(Degraded::ExecNotOnPath));
+    }
+
+    #[test]
+    fn bake_exec_unresolved_when_the_running_binary_is_unknown() {
+        let facts = bake_facts(None, Some("/bin/doctrine"), Some("/bin/doctrine"));
+        assert_eq!(bake(&facts), Err(Degraded::ExecUnresolved));
     }
 }
