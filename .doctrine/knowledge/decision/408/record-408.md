@@ -27,3 +27,7 @@ Adversarial design review (pi, RV-427). Integrated within the user's rulings; di
 - F-1: "degraded, not failed" means `LegOutcome::Done` with a disclosure line: no codex CLI or no home is an environment fact, so the install still completes and records its version. Only project-entry problems (PathShadow, Malformed, Unreadable) and codex command failures hold the install incomplete.
 - F-4: an unreadable or unparseable user config degrades with its own cause.
 - F-9: an empty `CODEX_HOME` degrades like a relative one (codex's handling is unprobed), instead of counting as unset.
+
+## Note (RV-427 F-16)
+
+The F6 amendment above says an empty `CODEX_HOME` counts as unset. That is superseded by the RV-427 amendment and the current `choice`: an empty `CODEX_HOME` degrades.

@@ -3,7 +3,7 @@ version = 1
 
 id = 404
 slug = "codex-mcp-bake-guard-outside-project"
-title = "Never bake a binary inside the installed project"
+title = "Bake only the doctrine found on PATH"
 record_kind = "decision"
 status = "accepted"
 created = "2026-10-23"
@@ -12,8 +12,8 @@ tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
 context = "SL-286 inq-2. The baked path is `resolve_exec()` (current_exe). Running `./target/debug/doctrine install` would point every repo's codex at a transient dev build (POL-002 facet 2)."
-choice = "Bake `resolve_exec()` unless the checkout enclosing it shares the project's git common directory — the binary is a build from this repository's main checkout or one of its worktrees; then leave any existing user-level entry untouched, disclose the refusal and print the `codex mcp add` command. Both common directories are resolved by `git rev-parse --git-common-dir` and canonicalised. A binary in no checkout, or in an unrelated one, passes. An unresolvable exec degrades."
-alternatives = ["Also refuse any path with a `target/` component — catches dev builds from other checkouts, more heuristic", "No guard"]
+choice = "Bake the user-level MCP command only when `doctrine` looked up among the absolute elements of the install-time PATH resolves (canonicalised) to the running binary; bake that PATH entry's own absolute path, not its symlink target. Otherwise — a dev build, no `doctrine` on PATH, or an unresolvable exec — leave any existing user-level entry untouched, disclose both paths and print the `codex mcp add` command."
+alternatives = ["Refuse only an exec inside the project root — misses forks and fixtures (RV-427 F-8)", "Refuse an exec inside any git checkout — false refusal when the home directory is a git checkout", "Same git common directory", " gated on the root being a checkout top — misses subdirectory projects (F-18)", "Refuse an exec under any .doctrine/ ancestor — false refusal from a stray ~/.doctrine; leaves RSK-234 open"]
 rationale = "One prefix check covers the real hazard (dev builds, jail worktrees) without guessing at layouts."
 consequences = ["A dev build of another checkout can still be baked; disclosed path makes it visible", "A /nix/store path can be baked and break on GC — shared with codex hooks; backlog item"]
 decided_by = "user"

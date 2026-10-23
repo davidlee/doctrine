@@ -10,13 +10,19 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "pi adversarial reviewer (quotient review profile, session f4cb4d01): 20 findings over five rounds, all verified; the last round raised none."
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-286"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Degraded mapped to Refused withholds the version stamp"
 detail = "install.rs stamp_decision records stamps only when every leg is Done; any Refused prints 'install incomplete: <legs>; version not recorded' and skips the commit hint. Mapping Degraded (e.g. codex not on PATH, normal in the jail) to Refused makes every such install permanently incomplete and unstamped, contradicting DEC-408 'degraded, never failed'. The design's sample line also misquotes the real string. Raised by pi adversarial reviewer (quotient review profile)."
@@ -33,9 +39,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Verified install.rs stamp_decision / incomplete_line. Degraded now maps to LegOutcome::Done with a disclosure line, so the version stamp records; only project-entry problems and codex add failures are Refused. Sample corrected to the real 'install incomplete: <legs>; version not recorded' format. sec-leg, sec-report, DEC-408 amended."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Near-miss doctrine wrappers are never retired and keep shadowing"
 detail = 'The existing ownership predicate (boot.rs keys_ok / env_absent_or_exact) requires keys within {command,args,env_vars} and env_vars exactly ["DOCTRINE_BIN"]. A doctrine wrapper with one added key is Foreign; command = "sh" has no path separator, so it lands in PathShadow: left in place, install incomplete, and the project layer keeps winning, so EVD-032 persists in exactly the repos this slice targets.'
@@ -52,9 +63,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Verified boot.rs keys_ok / env_absent_or_exact. OwnedWrapper is now shape-first: command sh, args [-c, line in CODEX_MCP_WRAPPER_FORMS], any other keys; extra keys are listed as removed. sec-leg table, DEC-406 amended."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Existing e2e suites would rewrite the developer's real codex config"
 detail = "tests/e2e_install_flow.rs runs install --agent codex ... --yes; tests/common doctrine_cmd sets no HOME/CODEX_HOME. After this slice -y grants consent and the temp repo is outside the exec's root, so the leg would run codex mcp add against ~/.codex/config.toml with target/debug/doctrine. Code impact lists only the two rewritten suites."
@@ -71,9 +87,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Verified tests/common doctrine_cmd sets no HOME/CODEX_HOME. doctrine_cmd now points CODEX_HOME at a non-existent path, so every default test degrades before any codex call; codex suites override. Added to code impact, risks, verification (a fake codex on PATH must record no call)."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "User-config read failures have no plan variant"
 detail = "DEC-408 degrades on an unreadable or unparseable user config, but the plan enumerates only BadCodexHome, NoHome, ExecInProject, entry-level Malformed, NoCodexCli. No variant for EACCES on the file or a whole-document parse error."
@@ -90,9 +111,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Added Degraded(UserUnreadable) and Degraded(UserUnparseable) to the plan and the matrix. sec-leg step 1, DEC-408 amended."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "enabled = false reads as Current"
 detail = "Item 3 calls the entry Current when command/args match. EVD-033 shows mcp add re-enables a disabled server, so 'enabled' is live; a disabled-but-matching entry reports current while doctrine never starts."
@@ -109,9 +135,14 @@ role = "responder"
 disposition = "fix-now"
 response = "A user entry with enabled = false is no longer Current: it is replaced and re-enabled, and the prompt says so. sec-leg step 3, DEC-406 amended."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "No defined state when add succeeds but wrapper removal fails"
 detail = "The leg defines add-fails (Refused, project untouched) but not add-succeeds-then-project-write-fails: user entry written, shadowing wrapper still present, outcome and report undefined."
@@ -128,9 +159,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Defined: add succeeds, wrapper removal fails -> Refused with 'user entry written; the old project wrapper still overrides it here; rerun install'. A rerun sees Current + OwnedWrapper and asks again. Verification row added."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Project-layer removal still replaces a symlinked .codex/config.toml"
 detail = "fsutil::write_atomic renames a sibling temp over the target. DEC-408's F6 amendment named this hazard for the user file; the design keeps the unsafe write for the project file."
@@ -147,9 +183,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Project removal writes the symlink-resolved file (fsutil helper: resolve the link, then write_atomic the target). Code impact and verification updated."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Bake guard: canonicalisation failure undefined; keyed to the wrong root"
 detail = "No variant if canonicalising root or exec fails. The guard compares against the project root, so install -p <coord>/.worktrees/<fork> run with the coord's ./target/debug/doctrine passes and bakes a dev build machine-wide."
@@ -166,9 +207,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Rejected the any-git-checkout rule: the user home is a git checkout (~/.git) containing the installed binary. Adopted the same-repository rule: refuse when the exec's enclosing checkout shares the project's git common dir (main checkout or any worktree); unrelated checkouts pass; unresolvable exec degrades (ExecUnresolved). sec-leg step 2, verification matrix, DEC-404 amended."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review: verified; residual defects in the new rule raised as F-14/F-15."
+
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Empty CODEX_HOME treated as unset is unprobed"
 detail = "Relative CODEX_HOME degrades because codex's handling is unprobed, yet empty is assumed to mean unset for codex too. If codex treats it differently, doctrine reads one file and codex mcp add writes another."
@@ -185,9 +231,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Empty CODEX_HOME now degrades like a relative one (both unprobed). sec-leg step 1, DEC-408 amended."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "--only-memory and --global are not excluded from the leg"
 detail = "install::run always calls run_forward_steps; is_project_install = !global && !only_memory. install --only-memory -y would perform the machine-wide write."
@@ -204,9 +255,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Verified is_project_install = !global && !only_memory. The plan is built only for a project install with the codex harness (sec-leg step 0)."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Code impact omits mcp_server/protocol.rs and MCP e2e fixtures"
 detail = "InitializeResult (protocol.rs) has no instructions field and handle_initialize takes no root; DEC-405 needs both. Some e2e_mcp_server tests may not create .doctrine/."
@@ -223,9 +279,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Verified InitializeResult has no instructions field. protocol.rs added to code impact (instructions field; handle_initialize takes the root option); MCP e2e fixtures that relied on a bare root get .doctrine/."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Non-command project entries and dry-run/overview gaps"
 detail = "A url-transport project entry falls into Malformed despite being PATH-independent. boot install --dry-run output is unspecified. The overview bullet says '(asks first)' even under -y."
@@ -242,9 +303,14 @@ role = "responder"
 disposition = "fix-now"
 response = "url-transport project entry -> Override; url-transport user entry -> Degraded(UserMalformed). boot install --dry-run prints the same consent content. Overview bullet suffix is '(asks first)' interactively, '(-y: consenting)' under -y."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Stale line citations"
 detail = "Research cites mcp_rel at boot.rs:3717 (now 3774), classify_codex_entry 2487, plan_codex_mcp 2535, install_codex_mcp 2587 — all shifted."
@@ -260,6 +326,190 @@ act = "dispose"
 role = "responder"
 disposition = "tolerated"
 response = "Tolerated: research.md is a dated baseline artefact (baseline.toml) and the design carries no line citations; implementers resolve symbols by name."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "minor"
+title = "Project-side git common-dir failure has no branch"
+detail = 'Bake-guard step 2 defined "none" only for the exec. The project call (resolve_common_dir -> git rev-parse) errors when the root is not in a checkout, yet Cargo.toml/.project markers and install -p on a plain directory are supported. Raised by pi raiser on re-review.'
+disposition = "fix-now"
+response = "The repository check now applies only when the project root is its own checkout/worktree top (show-toplevel equals root); otherwise only the inside-the-project prefix check runs, so a non-git project has a defined path. sec-leg step 2, verification matrix, DEC-404 amended."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "The repository check now applies only when the project root is its own checkout/worktree top (show-toplevel equals root); otherwise only the inside-the-project prefix check runs, so a non-git project has a defined path. sec-leg step 2, verification matrix, DEC-404 amended."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review: verified."
+
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "major"
+title = "Same-repository rule refuses the installed binary in a git-managed home"
+detail = "Exec at ~/.local/share/doctrine/bin/doctrine and a project under ~ that is not its own repo (marker-rooted) both resolve to ~/.git, so ExecInProjectRepo refuses an installed release binary in exactly the user environment (home is a git checkout). Raised by pi raiser on re-review."
+disposition = "fix-now"
+response = "Fixed by the same restriction: a marker-rooted project under a git-managed ~ is not a checkout top, so only the prefix check applies and the installed binary passes. Main checkout and fork worktrees of the same repo are still refused. Matrix row added."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed by the same restriction: a marker-rooted project under a git-managed ~ is not a checkout top, so only the prefix check applies and the installed binary passes. Main checkout and fork worktrees of the same repo are still refused. Matrix row added."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review: verified."
+
+[[finding]]
+id = "F-16"
+status = "verified"
+severity = "nit"
+title = "DEC-408 prose still says empty CODEX_HOME counts as unset"
+detail = 'The F6 amendment text in record-408.md retains "Empty CODEX_HOME = unset" while the binding choice and RV-427 amendment say empty degrades.'
+disposition = "fix-now"
+response = "Appended a note to record-408.md superseding the F6 sentence: empty CODEX_HOME degrades."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Appended a note to record-408.md superseding the F6 sentence: empty CODEX_HOME degrades."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review: verified."
+
+[[finding]]
+id = "F-17"
+status = "verified"
+severity = "minor"
+title = "Toplevel equality compares an uncanonicalised root"
+detail = 'root::find returns an explicit -p path as-is, so install -p . or a symlinked checkout compares "." with git absolute --show-toplevel; the same-repository check silently never runs. Raised by pi raiser.'
+disposition = "fix-now"
+response = "The toplevel comparison now uses the canonicalised project root; a verification row covers relative -p and a symlinked root. sec-leg step 2, DEC-404 amended."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "The toplevel comparison now uses the canonicalised project root; a verification row covers relative -p and a symlinked root. sec-leg step 2, DEC-404 amended."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review: verified."
+
+[[finding]]
+id = "F-18"
+status = "verified"
+severity = "minor"
+title = "Subdirectory project roots escape the repository check"
+detail = "A project root that is a subdirectory of a larger repo gets only the inside-project check, so install -p <repo>/crate from <repo>/target/debug/doctrine bakes the dev build. Raised by pi raiser."
+disposition = "fix-now"
+response = 'Replaced the guard (user ruling "path rule"): bake only when doctrine on the install-time PATH resolves to the running binary, baking the PATH entry path. Dev builds on any checkout, fork or fixture degrade; the subdirectory case is closed. sec-leg step 2, verification, risks, code impact (fsutil::find_on_path); DEC-404 replaced, DEC-410 updated.'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "tolerated"
+response = "Tolerated as a recorded second gap in DEC-404. Keying the repository check on the exec side re-refuses the git-managed-home case (F-15). Only doctrine own repository builds doctrine, and its doctrine project is the checkout top, so the subdirectory case needs a monorepo housing doctrine source. Mitigation: the consent prompt shows the binary path before any write, and -y prints it."
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = "pi raiser contest (session f4cb4d01): the gap is reachable by doctrine own dev workflow (-p a fixture inside the repo, -y), and a prompt is disclosure, not prevention."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Replaced the guard (user ruling "path rule"): bake only when doctrine on the install-time PATH resolves to the running binary, baking the PATH entry path. Dev builds on any checkout, fork or fixture degrade; the subdirectory case is closed. sec-leg step 2, verification, risks, code impact (fsutil::find_on_path); DEC-404 replaced, DEC-410 updated.'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review: verified."
+
+[[finding]]
+id = "F-19"
+status = "verified"
+severity = "minor"
+title = "Relative PATH elements bake a relative command"
+detail = "find_on_path takes the first executable match; a relative or empty PATH element yields a relative baked command, which the codex daemon resolves against its own cwd (EVD-032 restored). Use split_paths; require absolute. Raised by pi raiser."
+disposition = "fix-now"
+response = "Lookup now considers only absolute PATH elements (split_paths); relative and empty elements are skipped, so the bake is always absolute. sec-leg step 2, verification row, DEC-404 choice updated."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Lookup now considers only absolute PATH elements (split_paths); relative and empty elements are skipped, so the bake is always absolute. sec-leg step 2, verification row, DEC-404 choice updated."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review: verified."
+
+[[finding]]
+id = "F-20"
+status = "verified"
+severity = "nit"
+title = "Install-time PATH reliability is asserted, not evidenced"
+detail = "install is often run by agents, jails or dispatch with a constructed PATH; the design calls the install-time PATH reliable. Probe it or restate as disclosed-and-repairable. Raised by pi raiser."
+disposition = "fix-now"
+response = "Restated: the install-time PATH may be constructed by an agent or sandbox; the bake is an absolute path to the running binary, shown in prompt and report, and repaired by rerunning install from the intended binary. sec-leg step 2."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Restated: the install-time PATH may be constructed by an agent or sandbox; the bake is an absolute path to the running binary, shown in prompt and report, and repaired by rerunning install from the intended binary. sec-leg step 2."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "pi raiser re-review: verified."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

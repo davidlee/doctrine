@@ -12,3 +12,8 @@ re-runs: the codex user-level MCP entry (SL-286, DEC-404 notes it) and the codex
 hooks in `.codex/hooks.json`. Possible mitigation: prefer a stable profile path
 (e.g. the PATH-resolved, non-canonicalised `doctrine`) when it resolves to the
 same file as `current_exe`.
+
+**Partial mitigation (SL-286, DEC-404 as replaced):** the codex user-level MCP
+entry bakes the PATH entry's own path (e.g. `~/.nix-profile/bin/doctrine`) when it
+resolves to the running binary, not the store path. Codex hooks still bake
+`current_exe`; the same rule could apply there.

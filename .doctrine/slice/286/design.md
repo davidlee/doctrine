@@ -10,7 +10,7 @@
 | `src/install.rs` | `InstallPlan.codex_user_mcp: Option<CodexUserPlan>` (codex harness only); overview bullet; consent question after `confirm_install`; `Leg::CodexUserMcp` in `run_forward_steps` after boot wiring; `print_details` section; *not* in `regenerate` (DEC-411) |
 | `src/commands/cli.rs` | `-y` help on `install` and `boot install` states it grants user-level consent |
 | `src/mcp_server/mod.rs`, `src/mcp_server/tools.rs`, `src/mcp_server/protocol.rs` | `Option<root>`; `InitializeResult.instructions`; `handle_initialize` takes the root option; rootless list / call (RV-427 F-11) |
-| `src/fsutil.rs` | write through a symlink: resolve the link, then `write_atomic` the target (RV-427 F-7) |
+| `src/fsutil.rs` | write through a symlink: resolve the link, then `write_atomic` the target (RV-427 F-7); `find_on_path(name)`: first executable `PATH` match, used for `codex` and `doctrine` |
 | `tests/common/mod.rs` | `doctrine_cmd` sets `CODEX_HOME` to a non-existent path, so no test can reach a real codex config; codex suites override it (RV-427 F-3) |
 | `src/commands/serve.rs` | unchanged signature; passes through |
 | `tests/e2e_codex_install.rs` | rewritten around a fake `codex` on PATH recording argv, temp `HOME`/`CODEX_HOME`; project retirement; consent / decline / `-y`; degradation; regeneration leaves user config untouched |
@@ -26,10 +26,10 @@ Design-target selectors record exactly these paths.
 
 ### Plan (pure)
 
-`plan(user_toml: Option<&str>, project_toml: Option<&str>, exec, project_root,
-env) -> CodexUserPlan`. No I/O. The shell supplies the two file texts (absent →
-`None`), the resolved exec, the root and the env facts (`CODEX_HOME` value, `HOME`
-present, `codex` on PATH).
+`plan(user_toml: Option<&str>, project_toml: Option<&str>, bake, env) ->
+CodexUserPlan`. No I/O. The shell supplies the two file texts (absent → `None`),
+the bake facts (canonical `exec`, the PATH `doctrine` entry and its canonical
+form) and the env facts (`CODEX_HOME` value, `HOME` present, `codex` on PATH).
 
 0. **Applicability.** Only a project install (`plan.is_project_install`:
    not `--global`, not `--only-memory`) with the codex harness builds this plan
@@ -41,14 +41,26 @@ present, `codex` on PATH).
    shell reads the file: absent → `None`; unreadable → `Degraded(UserUnreadable)`;
    present but not valid TOML → `Degraded(UserUnparseable)` (RV-427 F-4). The
    plan always carries the resolved path for the report.
-2. **Bake guard** (DEC-404, RV-427 F-8). The shell resolves two facts: the git
-   common directory of the project root, and the git common directory of the
-   checkout enclosing `exec`'s directory (`git rev-parse --git-common-dir` run in
-   each, through `worktree::resolve_common_dir`; "none" when `exec` is not in a
-   checkout). Both are canonicalised. Equal → `Degraded(ExecInProjectRepo)`: the
-   binary is a build from this repository's main checkout or one of its worktrees.
-   If `exec` cannot be resolved → `Degraded(ExecUnresolved)`. A binary in an
-   unrelated checkout, such as a dotfiles home, passes.
+2. **Bake rule** (DEC-404, RV-427 F-8/F-18). Bake only the doctrine the user gets
+   by typing `doctrine`. The shell looks `doctrine` up on the install-time
+   `PATH` (first executable match among **absolute** PATH elements, split with
+   `std::env::split_paths`; relative and empty elements are skipped, so the baked
+   command is always absolute — RV-427 F-19) and canonicalises both it and
+   `exec`:
+   - same file → bake the **PATH entry's own path**, not resolved through symlinks
+     (e.g. `~/.nix-profile/bin/doctrine`, not its `/nix/store` target;
+     mitigates RSK-234);
+   - different file, or no `doctrine` on PATH → `Degraded(ExecNotOnPath)`: a dev
+     build (`./target/debug/doctrine` on any checkout, fork or fixture) or an
+     installed binary run by absolute path. The report names both paths;
+   - `exec` cannot be resolved → `Degraded(ExecUnresolved)`.
+
+   The install-time PATH is not guaranteed to be the user's interactive one: an
+   agent or sandbox may run install with a constructed PATH. The outcome is still
+   safe. The bake is an absolute path to the running binary, shown in the prompt and
+   report, and a wrong choice is repaired by rerunning install from the intended
+   binary (RV-427 F-20). EVD-032's failure is the codex daemon's PATH at *launch*,
+   which the absolute bake sidesteps.
 3. **User entry** (DEC-406), classified by table name:
    - absent → `Add`;
    - a table with `command` a string and `args` a string array → `Current` when
@@ -277,8 +289,9 @@ README, also at reconcile:
 | risk | mitigation / residual |
 |---|---|
 | A hand-written user entry is replaced | consent prompt shows old → new and dropped keys; `-y` prints them; overrides belong in the project layer |
-| A dev build of *another* checkout is baked | accepted (DEC-404); the baked path is printed |
-| A `/nix/store` path breaks after garbage collection | RSK-234 (shared with codex hooks) |
+| A dev build is baked machine-wide | DEC-404: only the PATH `doctrine` is baked; dev builds degrade with the command printed |
+| `doctrine` not on the user's PATH | degrade with the reason and the pasteable command (fail safe) |
+| A `/nix/store` path breaks after garbage collection | the MCP entry bakes the PATH (profile) path; codex hooks still bake `current_exe` (RSK-234) |
 | `codex mcp add` flags or semantics change | read path is independent; runner failure → `Refused` with codex stderr; EVD-033 pins 0.159.1 behaviour |
 | Codex hides the rootless `instructions` | ASM-014; an empty tool list remains the signal |
 | Regeneration writes user config | DEC-411; e2e asserts regeneration leaves a temp user config byte-identical |
@@ -317,9 +330,11 @@ Unit (pure, `codex_mcp`):
   - destination: `CODEX_HOME` unset / empty / relative / missing; no `HOME`;
     user file unreadable / unparseable;
   - applicability: `--global` / `--only-memory` build no plan;
-  - bake guard (given common-dir facts): same repository (main checkout, fork
-    worktree) refused; unrelated checkout (dotfiles home) passes; exec in no
-    checkout passes; exec unresolved degrades;
+  - bake rule (given PATH facts): PATH `doctrine` is the running binary → baked
+    as the PATH path; PATH entry is a symlink → the link path, not the target;
+    a dev build not on PATH → refused; no `doctrine` on PATH → refused; a
+    relative or empty PATH element holding `doctrine` is skipped; exec
+    unresolved → degraded;
   - `codex` absent.
 - Consent text and report lines per outcome (constants, STD-001).
 
