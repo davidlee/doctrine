@@ -425,6 +425,37 @@ pub(crate) fn classify_project(read: FileRead<'_>) -> ProjectEntry {
     }
 }
 
+/// Remove doctrine's owned project wrapper from `text`, leaving every other
+/// server, comment and bit of formatting untouched. Recognition is
+/// [`classify_project`]'s — the one rule for "an entry doctrine emitted" — so
+/// anything that is not `OwnedWrapper` (absent, override, path shadow, malformed,
+/// unparseable) yields `None` and is never silently removed. An implicit
+/// `mcp_servers` table goes with its last server (it renders through its child, so
+/// it would otherwise surface as a header the user never wrote); an explicit one
+/// stays. An emptied document is still a valid `Some("")`.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn remove_wrapper(text: &str) -> Option<String> {
+    if !matches!(
+        classify_project(FileRead::Text(text)),
+        ProjectEntry::OwnedWrapper { .. }
+    ) {
+        return None;
+    }
+    // Re-parsed rather than handed over by the classifier: the classifier answers
+    // *what* the entry is, the edit needs the document back.
+    let mut doc: toml_edit::DocumentMut = text.parse().ok()?;
+    let servers = doc.get_mut(CODEX_MCP_TABLE)?.as_table_like_mut()?;
+    servers.remove(CODEX_MCP_SERVER_KEY);
+    let emptied = servers.is_empty();
+    if emptied
+        && let Some(toml_edit::Item::Table(table)) = doc.get(CODEX_MCP_TABLE)
+        && table.is_implicit()
+    {
+        doc.remove(CODEX_MCP_TABLE);
+    }
+    Some(doc.to_string())
+}
+
 /// The entry's `args` as strings, or `None` when `args` is absent or holds a
 /// non-string.
 fn string_args(table: &dyn toml_edit::TableLike) -> Option<Vec<String>> {
@@ -1617,6 +1648,74 @@ mod tests {
             classify_project(FileRead::Unreadable),
             ProjectEntry::Unreadable
         );
+    }
+
+    // --- remove_wrapper (the project layer's removal, design sec-leg § Execute) ---
+
+    #[test]
+    fn remove_wrapper_drops_the_owned_wrapper_and_keeps_other_servers_and_comments() {
+        // Everything before the wrapper block is what must come back unchanged:
+        // another server, its comment, and the comment above the document.
+        let keep = "# codex project config\nmodel = \"gpt-5\"\n\n[mcp_servers.other]\n\
+                    command = \"other\"  # keep me\n";
+        let text = format!("{keep}{}", wrapper_entry(""));
+
+        assert_eq!(remove_wrapper(&text).as_deref(), Some(keep));
+    }
+
+    #[test]
+    fn remove_wrapper_refuses_an_entry_that_is_not_the_owned_wrapper() {
+        let absolute = "[mcp_servers.doctrine]\ncommand = \"/usr/local/bin/doctrine\"\n\
+                        args = [\"serve\", \"--mcp\"]\n";
+        assert_eq!(
+            remove_wrapper(absolute),
+            None,
+            "an override is the user's own choice"
+        );
+        assert_eq!(
+            remove_wrapper("[mcp_servers.doctrine]\ncommand = 1\n"),
+            None,
+            "an entry doctrine cannot interpret is never removed"
+        );
+        assert_eq!(remove_wrapper("model = [\n"), None, "unparseable text");
+        assert_eq!(remove_wrapper("model = \"gpt-5\"\n"), None, "no entry");
+        assert_eq!(remove_wrapper(""), None, "an empty file");
+    }
+
+    #[test]
+    fn remove_wrapper_prunes_an_implicit_empty_servers_table() {
+        let text = format!("model = \"gpt-5\"\n\n{}", wrapper_entry(""));
+
+        let new = remove_wrapper(&text).unwrap();
+
+        // The table was never written by the user, so it must not survive as a
+        // bare header; the rest of the document does.
+        assert!(
+            !new.contains(&format!("[{CODEX_MCP_TABLE}]")),
+            "got {new:?}"
+        );
+        let doc: toml_edit::DocumentMut = new.parse().unwrap();
+        assert!(doc.get(CODEX_MCP_TABLE).is_none());
+        assert_eq!(
+            doc.get("model").and_then(toml_edit::Item::as_str),
+            Some("gpt-5")
+        );
+    }
+
+    #[test]
+    fn remove_wrapper_keeps_an_explicit_empty_servers_table() {
+        let text = format!("[{CODEX_MCP_TABLE}]\n\n{}", wrapper_entry(""));
+
+        let new = remove_wrapper(&text).unwrap();
+
+        // The header is the user's own line — emptying it does not delete it.
+        assert!(
+            new.contains(&format!("[{CODEX_MCP_TABLE}]")),
+            "the user's header stays, got {new:?}"
+        );
+        let doc: toml_edit::DocumentMut = new.parse().unwrap();
+        assert!(doc.get(CODEX_MCP_TABLE).is_some());
+        assert!(!new.contains(CODEX_MCP_SERVER_KEY));
     }
 
     // --- plan (design sec-leg § Plan) ---
