@@ -13,6 +13,8 @@
 //! the user-entry planner takes it over.
 
 use std::ffi::OsString;
+use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -672,7 +674,7 @@ pub(crate) enum Consent {
 /// What the user leg did: the paths it wrote. The project file only — the user's
 /// own config is written by codex, not here. The install leg maps this to its
 /// outcome in PHASE-04.
-#[expect(dead_code, reason = "wired in SL-286 PHASE-04")]
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CodexUserOutcome {
     /// Finished; the paths it touched (empty when it touched none).
@@ -745,6 +747,155 @@ impl CodexCli for ProcessCodex {
         })
     }
 }
+
+/// The thin imperative half of the leg (design sec-leg § Execute): run the one
+/// effect, edit the one file, and say what happened. Every step's order and
+/// every report line is design-pinned, so this function is a transcription of the
+/// outcome map rather than a decision: the [`plan`] settled *what* to do, and
+/// nothing here re-decides it. Nothing reaches stdout — the caller owns the
+/// stream — and a `Refused` carries the text it already printed, so the outcome
+/// and the report cannot disagree about why the leg stopped.
+///
+/// `project_config` is the project's `.codex/config.toml`, re-read here: the file
+/// may have changed since the plan, so the wrapper is recognised again at write
+/// time ([`remove_wrapper`]) rather than trusted from the plan.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn execute(
+    plan: &CodexUserPlan,
+    consent: Consent,
+    project_config: &Path,
+    cli: &dyn CodexCli,
+    out: &mut dyn Write,
+) -> anyhow::Result<CodexUserOutcome> {
+    // 1. Degraded: an environment fact, so the install still completes.
+    if let Some(report) = skipped(plan) {
+        emit(out, &report)?;
+        return Ok(CodexUserOutcome::Done(vec![]));
+    }
+
+    // 2. A project entry doctrine cannot work with: nothing is written, because a
+    //    user write would not be what codex runs here.
+    if let Some(reason) = project_refusal(&plan.project) {
+        emit(out, &reason)?;
+        return Ok(CodexUserOutcome::Refused(reason));
+    }
+
+    // Past step 1 both are resolved: `destination` and `bake` run before the entry
+    // is read, and a plan missing either is degraded.
+    let Some(config) = plan.user_config.as_ref() else {
+        anyhow::bail!("execute: a plan that is not degraded must resolve the user config file");
+    };
+    let Some(bake) = plan.bake.as_ref() else {
+        anyhow::bail!("execute: a plan that is not degraded must resolve the command to bake");
+    };
+
+    // 3. Nothing to do in either layer.
+    if !plan.proposes_change() {
+        emit(out, &current(config))?;
+        return finished(out, &plan.project, vec![]);
+    }
+
+    // 4. Consent is the whole gate: anything but a plain yes changes nothing, and
+    //    the wrapper stays so codex keeps the server it has.
+    if consent != Consent::Granted {
+        emit(out, &declined(bake))?;
+        return finished(out, &plan.project, vec![]);
+    }
+
+    // 5. The user write — the only effect on codex itself.
+    let mut wrote_user = false;
+    if plan.user_write_pending() {
+        if let Err(failure) = cli.mcp_add(bake) {
+            let reason = add_failed(&failure.stderr);
+            emit(out, &reason)?;
+            return Ok(CodexUserOutcome::Refused(reason));
+        }
+        wrote_user = true;
+        let report = match &plan.user {
+            Some(UserEntry::Add) => registered(config, bake),
+            Some(UserEntry::Replace { old, dropped }) => replaced(config, bake, old, dropped),
+            _ => anyhow::bail!("execute: a pending user write must classify as Add or Replace"),
+        };
+        emit(out, &report)?;
+    }
+
+    // 6. Retiring doctrine's own project wrapper. A failure here leaves the
+    //    written user entry shadowed, which is a different report from a failure
+    //    with nothing else written (design RV-427 F-6).
+    let mut touched = Vec::new();
+    if matches!(plan.project, ProjectEntry::OwnedWrapper { .. }) {
+        match remove_project_wrapper(project_config) {
+            Ok(()) => {
+                emit(out, &wrapper_removed())?;
+                touched.push(project_config.to_path_buf());
+            }
+            Err(err) => {
+                let reason = if wrote_user {
+                    wrapper_still_overrides()
+                } else {
+                    wrapper_not_removed(&err)
+                };
+                emit(out, &reason)?;
+                return Ok(CodexUserOutcome::Refused(reason));
+            }
+        }
+    }
+
+    // 7. Anything written means a running daemon is now stale.
+    if wrote_user || !touched.is_empty() {
+        emit(out, &app_server_restart())?;
+    }
+
+    finished(out, &plan.project, touched)
+}
+
+/// Step 8 and the exit every path that did not refuse shares: disclose an explicit
+/// project override — never a block, but the reason the user's config may not be
+/// what codex uses here — then report what was touched.
+fn finished(
+    out: &mut dyn Write,
+    project: &ProjectEntry,
+    touched: Vec<PathBuf>,
+) -> anyhow::Result<CodexUserOutcome> {
+    if let ProjectEntry::Override { target } = project {
+        emit(out, &override_in_effect(target))?;
+    }
+    Ok(CodexUserOutcome::Done(touched))
+}
+
+/// The report a blocking project entry produces, or `None` when it does not block
+/// — the same three variants [`CodexUserPlan::project_blocks`] names.
+fn project_refusal(entry: &ProjectEntry) -> Option<String> {
+    match entry {
+        ProjectEntry::PathShadow { command } => Some(path_shadow(command)),
+        ProjectEntry::Malformed => Some(project_malformed()),
+        ProjectEntry::Unreadable => Some(project_unreadable()),
+        ProjectEntry::Absent
+        | ProjectEntry::OwnedWrapper { .. }
+        | ProjectEntry::Override { .. } => None,
+    }
+}
+
+/// Re-read `project_config` and strip doctrine's owned wrapper. Every way this can
+/// fail is carried as text the report can show: a read or write error, or a file
+/// that no longer holds a wrapper doctrine recognises.
+fn remove_project_wrapper(project_config: &Path) -> Result<(), String> {
+    let text = fs::read_to_string(project_config).map_err(|e| e.to_string())?;
+    let stripped = remove_wrapper(&text).ok_or_else(|| NOT_OUR_WRAPPER.to_string())?;
+    crate::fsutil::write_atomic(project_config, stripped.as_bytes()).map_err(|e| format!("{e:#}"))
+}
+
+/// Print one report block as its own paragraph: the leg prints whole blocks, so
+/// the separating newline is decided here once rather than per call site.
+fn emit(out: &mut dyn Write, block: &str) -> anyhow::Result<()> {
+    writeln!(out, "{block}")?;
+    Ok(())
+}
+
+/// Why a write-time re-classification refused the project edit: the file changed
+/// between [`plan`] and [`execute`], so the entry is not the one that was planned
+/// for. Nothing is ever removed on a guess.
+const NOT_OUR_WRAPPER: &str = "the entry is no longer a doctrine wrapper";
 
 /// The consent block for a proposed change (design sec-leg § Consent), or `None`
 /// when there is nothing to approve. A pending user write shows file, command and
@@ -902,6 +1053,66 @@ pub(crate) fn override_in_effect(target: &str) -> String {
     )
 }
 
+/// The user entry is already exactly the one doctrine would write: one line, and
+/// nothing is touched in either layer.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn current(config: &Path) -> String {
+    format!("{} {} {}", text::PREFIX, text::CURRENT, config.display())
+}
+
+/// `codex` refused the registration: its own diagnostic is the report, indented so
+/// a multi-line stderr reads as one block beneath the line that caused it.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn add_failed(stderr: &str) -> String {
+    format!(
+        "{} {} {}",
+        text::PREFIX,
+        text::ADD_FAILED,
+        indent_after_the_first(stderr)
+    )
+}
+
+/// The wrapper was there when the plan was made, but the write-time removal did
+/// not land: the file could not be read, no longer holds a wrapper doctrine owns,
+/// or could not be written.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn wrapper_not_removed(err: &str) -> String {
+    format!(
+        "{} {} {CODEX_CONFIG_REL}: {err}",
+        text::PREFIX,
+        text::WRAPPER_NOT_REMOVED
+    )
+}
+
+/// The project entry is there but uninterpretable, so it shadows the user entry
+/// here and doctrine will not guess at it.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn project_malformed() -> String {
+    format!(
+        "{} {CODEX_CONFIG_REL} {}; {}",
+        text::PREFIX,
+        text::CAUSE_MALFORMED,
+        text::PROJECT_MALFORMED_TAIL
+    )
+}
+
+/// The project file could not be read or parsed, so nothing here can be verified —
+/// the remedy is a fix and a rerun, never a write over a file doctrine cannot see.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn project_unreadable() -> String {
+    format!(
+        "{} {CODEX_CONFIG_REL} {}",
+        text::PREFIX,
+        text::PROJECT_UNREADABLE
+    )
+}
+
+/// `stderr` with every line after the first indented by two spaces, so an
+/// inherited multi-line diagnostic stays visibly subordinate to the report line.
+fn indent_after_the_first(stderr: &str) -> String {
+    stderr.lines().collect::<Vec<_>>().join("\n  ")
+}
+
 /// A bare-name project command: it shadows the user entry here and depends on the
 /// codex daemon's `PATH` (EVD-032), which doctrine can neither see nor fix.
 #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
@@ -1005,6 +1216,13 @@ mod text {
     pub(super) const PREFIX: &str = "codex:";
     pub(super) const REGISTERED: &str = "registered doctrine MCP server in";
     pub(super) const REPLACED: &str = "replaced doctrine MCP command in";
+    pub(super) const CURRENT: &str = "doctrine MCP server already registered in";
+    pub(super) const ADD_FAILED: &str = "codex mcp add failed:";
+    pub(super) const WRAPPER_NOT_REMOVED: &str = "could not remove the old doctrine wrapper from";
+    pub(super) const PROJECT_MALFORMED_TAIL: &str =
+        "it overrides the user entry here. Fix or remove it.";
+    pub(super) const PROJECT_UNREADABLE: &str =
+        "could not be read or parsed; fix it and rerun install.";
     pub(super) const WRAPPER_REMOVED: &str = "removed the old doctrine wrapper from";
     pub(super) const APP_SERVER: &str =
         "a running codex app-server keeps its old config until restarted";
@@ -1939,6 +2157,212 @@ mod tests {
             "[mcp_servers.doctrine]\ncommand = \"doctrine\"\n",
         );
         assert_eq!(consent_block(&planned), None);
+    }
+
+    // --- execute (design sec-leg § Execute) ---
+
+    /// A temp dir holding the project's `.codex/config.toml` — the file the leg
+    /// re-reads at write time.
+    fn project_dir(text: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".codex")).unwrap();
+        fs::write(dir.path().join(CODEX_CONFIG_REL), text).unwrap();
+        dir
+    }
+
+    /// Run the leg against `dir`'s project file with a scripted codex, returning
+    /// what it decided and exactly what it printed.
+    fn run_with(
+        planned: &CodexUserPlan,
+        consent: Consent,
+        dir: &Path,
+        codex: &FakeCodex,
+    ) -> (CodexUserOutcome, String) {
+        let mut out: Vec<u8> = Vec::new();
+        let outcome = execute(
+            planned,
+            consent,
+            &dir.join(CODEX_CONFIG_REL),
+            codex,
+            &mut out,
+        )
+        .expect("execute reports its refusal in the outcome, not as an error");
+        (outcome, String::from_utf8(out).unwrap())
+    }
+
+    /// [`run_with`] with a codex that succeeds, keeping the fake so the test can
+    /// inspect the argv it was handed.
+    fn run(
+        planned: &CodexUserPlan,
+        consent: Consent,
+        dir: &Path,
+    ) -> (CodexUserOutcome, String, FakeCodex) {
+        let codex = FakeCodex::ok();
+        let (outcome, printed) = run_with(planned, consent, dir, &codex);
+        (outcome, printed, codex)
+    }
+
+    #[test]
+    fn execute_consented_registers_then_removes_the_wrapper() {
+        let wrapper = wrapper_entry("");
+        let dir = project_dir(&wrapper);
+        let planned = plan_of("model = \"gpt-5\"\n", &wrapper);
+        let config = planned.user_config.clone().unwrap();
+        let project_config = dir.path().join(CODEX_CONFIG_REL);
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert_eq!(
+            codex.calls.borrow().as_slice(),
+            [add_args(Path::new(BAKE))],
+            "one registration, with exactly the argv the prompt showed"
+        );
+        assert_eq!(
+            outcome,
+            CodexUserOutcome::Done(vec![project_config.clone()])
+        );
+        assert_eq!(
+            printed,
+            format!(
+                "{}\n{}\n{}\n",
+                registered(&config, Path::new(BAKE)),
+                wrapper_removed(),
+                app_server_restart()
+            ),
+            "register, retire the wrapper, then the daemon hint — in that order"
+        );
+        let after = fs::read_to_string(&project_config).unwrap();
+        assert_eq!(
+            project(&after),
+            ProjectEntry::Absent,
+            "the wrapper is gone, got {after:?}"
+        );
+    }
+
+    #[test]
+    fn execute_consented_replace_reports_the_old_command() {
+        let user = "[mcp_servers.doctrine]\ncommand = \"/old/bin/doctrine\"\nargs = [\"serve\", \"--mcp\"]\n";
+        let dir = project_dir("model = \"gpt-5\"\n");
+        let planned = plan_of(user, "model = \"gpt-5\"\n");
+        let config = planned.user_config.clone().unwrap();
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert_eq!(codex.calls.borrow().as_slice(), [add_args(Path::new(BAKE))]);
+        assert_eq!(
+            outcome,
+            CodexUserOutcome::Done(vec![]),
+            "no project file was touched"
+        );
+        assert_eq!(
+            printed,
+            format!(
+                "{}\n{}\n",
+                replaced(
+                    &config,
+                    Path::new(BAKE),
+                    "/old/bin/doctrine serve --mcp",
+                    &[]
+                ),
+                app_server_restart()
+            )
+        );
+    }
+
+    #[test]
+    fn execute_removal_only_removes_the_wrapper_without_calling_codex() {
+        let wrapper = wrapper_entry("");
+        let dir = project_dir(&wrapper);
+        let planned = plan_of(&current_user(), &wrapper);
+        let project_config = dir.path().join(CODEX_CONFIG_REL);
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert!(
+            codex.calls.borrow().is_empty(),
+            "no user write, so codex is not run at all"
+        );
+        assert_eq!(
+            outcome,
+            CodexUserOutcome::Done(vec![project_config.clone()])
+        );
+        assert_eq!(
+            printed,
+            format!("{}\n{}\n", wrapper_removed(), app_server_restart())
+        );
+        assert_eq!(
+            project(&fs::read_to_string(&project_config).unwrap()),
+            ProjectEntry::Absent
+        );
+    }
+
+    #[test]
+    fn execute_current_prints_one_current_line_and_touches_nothing() {
+        let dir = project_dir("model = \"gpt-5\"\n");
+        let planned = plan_of(&current_user(), "model = \"gpt-5\"\n");
+        let config = planned.user_config.clone().unwrap();
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert!(codex.calls.borrow().is_empty());
+        assert_eq!(outcome, CodexUserOutcome::Done(vec![]));
+        assert_eq!(printed, format!("{}\n", current(&config)));
+        assert!(
+            !printed.contains(text::APP_SERVER),
+            "nothing was written, so no daemon hint: {printed}"
+        );
+    }
+
+    #[test]
+    fn execute_reports_an_override_alongside_the_write() {
+        let override_entry = "[mcp_servers.doctrine]\ncommand = \"/opt/doctrine\"\n";
+        let dir = project_dir(override_entry);
+        let planned = plan_of("model = \"gpt-5\"\n", override_entry);
+        let config = planned.user_config.clone().unwrap();
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert_eq!(codex.calls.borrow().as_slice(), [add_args(Path::new(BAKE))]);
+        assert_eq!(
+            outcome,
+            CodexUserOutcome::Done(vec![]),
+            "an override is disclosed, never touched"
+        );
+        assert_eq!(
+            printed,
+            format!(
+                "{}\n{}\n{}\n",
+                registered(&config, Path::new(BAKE)),
+                app_server_restart(),
+                override_in_effect("/opt/doctrine")
+            )
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join(CODEX_CONFIG_REL)).unwrap(),
+            override_entry,
+            "the user's own entry stands"
+        );
+    }
+
+    #[test]
+    fn execute_reports_an_override_on_the_current_path() {
+        let override_entry = "[mcp_servers.doctrine]\ncommand = \"./bin/doctrine\"\n";
+        let dir = project_dir(override_entry);
+        let planned = plan_of(&current_user(), override_entry);
+        let config = planned.user_config.clone().unwrap();
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert!(codex.calls.borrow().is_empty());
+        assert_eq!(outcome, CodexUserOutcome::Done(vec![]));
+        assert_eq!(
+            printed,
+            format!(
+                "{}\n{}\n",
+                current(&config),
+                override_in_effect("./bin/doctrine")
+            )
+        );
     }
 
     // --- consent text (design sec-leg § Consent) ---
