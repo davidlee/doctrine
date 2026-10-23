@@ -2,11 +2,11 @@
 
 ## Research
 
-Use pi's native subagent facility for the `/research` round — not the
-`./scripts/pi-scout` / `./scripts/pi-research` launcher shims. Those exist for
-harnesses with no native subagent facility; under pi they run the same agent defs
-(`.pi/agents/scout.md`, `researcher.md`) through more machinery and less
-reliably. The contract both must satisfy is in `.doctrine/governance.md`
+Use pi's native subagent facility for the `/research` round — not quotient's
+`pi_agent` MCP tool, nor the superseded `./scripts/pi-scout` /
+`./scripts/pi-research` shims. Those are how other harnesses (Claude) delegate
+to pi; under pi itself they add a confining wrapper and a process hop for
+nothing a native spawn can't do. The contract both must satisfy is in `.doctrine/governance.md`
 §Research agents.
 
 Name the model and thinking level on every spawn; a bare agent name leaves the
