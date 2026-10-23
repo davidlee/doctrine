@@ -452,6 +452,27 @@ pub(crate) fn relative_path(from: &Path, to: &Path) -> PathBuf {
     rel
 }
 
+/// Find `name` in the `PATH`-shaped value `path_value`, returning the first
+/// executable regular file's path. Only absolute elements are consulted, so a
+/// relative or empty element — the CWD-dependent entry a shell would honour —
+/// can never make the result depend on the caller's working directory. The
+/// probe's `metadata` follows symlinks (a link to an executable counts), but
+/// the candidate is returned **un-canonicalised**: the caller gets the path it
+/// would have executed, not the resolved target (SL-286 DEC-404 / RSK-234).
+/// Directories and non-executable files never match.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-03"))]
+pub(crate) fn find_on_path(name: &str, path_value: &std::ffi::OsStr) -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::env::split_paths(path_value)
+        .filter(|dir| dir.is_absolute())
+        .map(|dir| dir.join(name))
+        .find(|candidate| {
+            fs::metadata(candidate)
+                .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+        })
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -565,6 +586,109 @@ mod tests {
         assert!(
             got == "aaaa" || got == "bbbb",
             "content is a complete write, got {got:?}"
+        );
+    }
+
+    // --- find_on_path (PATH lookup, SL-286) ---
+
+    /// A `PATH`-shaped value from absolute elements — never the real env.
+    fn path_value(elements: &[&Path]) -> std::ffi::OsString {
+        std::env::join_paths(elements).unwrap()
+    }
+
+    /// A regular file at `dir/name` with an exec bit set.
+    fn executable(dir: &Path, name: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = dir.join(name);
+        fs::write(&path, "#!/bin/sh\n").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    #[test]
+    fn find_on_path_finds_an_executable_in_an_absolute_element() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = executable(dir.path(), "doctrine");
+
+        assert_eq!(
+            find_on_path("doctrine", &path_value(&[dir.path()])),
+            Some(exe)
+        );
+    }
+
+    #[test]
+    fn find_on_path_skips_relative_and_empty_elements() {
+        let dir = tempfile::tempdir().unwrap();
+        executable(dir.path(), "doctrine");
+        // A `..`-relative element that DOES resolve to the executable, so the
+        // only reason it is not found is that it is not absolute.
+        let cwd = fs::canonicalize(std::env::current_dir().unwrap()).unwrap();
+        let abs = fs::canonicalize(dir.path()).unwrap();
+        let rel = relative_path(&cwd, &abs);
+        let rel: &Path = rel.as_path();
+        let empty: &Path = Path::new("");
+
+        assert_eq!(
+            find_on_path("doctrine", &path_value(&[rel, empty])),
+            None,
+            "relative and empty elements are never consulted"
+        );
+        assert_eq!(
+            find_on_path("doctrine", &path_value(&[rel, empty, abs.as_path()])),
+            Some(abs.join("doctrine")),
+            "the same dir is found once it appears as an absolute element"
+        );
+    }
+
+    #[test]
+    fn find_on_path_skips_a_non_executable_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let plain = tempfile::tempdir().unwrap();
+        let file = plain.path().join("doctrine");
+        fs::write(&file, "not executable").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).unwrap();
+        let later = tempfile::tempdir().unwrap();
+        let exe = executable(later.path(), "doctrine");
+
+        assert_eq!(
+            find_on_path("doctrine", &path_value(&[plain.path()])),
+            None,
+            "a non-executable file is not a match"
+        );
+        assert_eq!(
+            find_on_path("doctrine", &path_value(&[plain.path(), later.path()])),
+            Some(exe),
+            "the later executable wins"
+        );
+    }
+
+    #[test]
+    fn find_on_path_first_match_wins() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let winner = executable(first.path(), "doctrine");
+        executable(second.path(), "doctrine");
+
+        assert_eq!(
+            find_on_path("doctrine", &path_value(&[first.path(), second.path()])),
+            Some(winner)
+        );
+    }
+
+    #[test]
+    fn find_on_path_returns_the_symlink_path_not_its_target() {
+        let target_dir = tempfile::tempdir().unwrap();
+        let target = executable(target_dir.path(), "doctrine-real");
+        let bin = tempfile::tempdir().unwrap();
+        let link = bin.path().join("doctrine");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        assert_eq!(
+            find_on_path("doctrine", &path_value(&[bin.path()])),
+            Some(link),
+            "the link's own path is returned, not the resolved target"
         );
     }
 
