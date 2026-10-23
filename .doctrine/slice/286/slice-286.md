@@ -37,8 +37,9 @@ such a file. Restarting the daemon from `install` was considered and rejected
 1. **Register at user level, with consent.** `boot install`'s codex arm runs
    `codex mcp add doctrine -- <absolute doctrine path> serve --mcp` after a
    dedicated consent prompt (default No; asked only when the entry would change;
-   `-y` grants consent). It reads the current entry with
-   `codex mcp get doctrine --json` (ASM-015). `mcp add` replaces the whole table,
+   `-y` grants consent). It classifies the current entry by reading
+   the user config file directly (`codex mcp get` shows the effective entry,
+   ASM-015 invalidated). `mcp add` replaces the whole table,
    so dropped keys are listed in the prompt (DEC-403, DEC-406, EVD-033). Declining
    changes neither layer and reports "declined". A binary inside the installed
    project is never baked (DEC-404). No codex on PATH, a bad `CODEX_HOME`, or a
@@ -130,7 +131,6 @@ Resolved in design by DEC-403..DEC-410; kept as the scoping record.
 - Unit/E2E: bake guard refuses a binary inside the project root; rootless
   `serve --mcp` handshakes with no tools outside a doctrine project.
 - VH: ASM-014 — where codex shows the server's initialize instructions.
-- Probe: ASM-015 — `codex mcp get` in a trusted project with a project entry.
 - E2E: install against a temp `CODEX_HOME` writes the absolute-path entry,
   removes an owned project wrapper, and leaves foreign entries alone.
 - VH: interactive codex in this repo connects to doctrine after

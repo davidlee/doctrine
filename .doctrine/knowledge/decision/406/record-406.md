@@ -19,3 +19,7 @@ Probe coverage: precedence and `CODEX_HOME` behaviour verified on codex CLI 0.15
 User rulings: "your recommendations are solid. I think -y grants consent, but probably the docs for it need to say so. prompt's good. decline: accept your rec. too". Evidence: EVD-033.
 
 Field-level preservation (the original choice) is impossible through `codex mcp add`; it becomes disclosure plus consent. Accepted for: codex owning its own file format and symlink handling, a one-line pasteable fallback, and a structured read.
+
+## Amended (ASM-015 invalidated, 2026-10-23)
+
+`codex mcp get` reports the effective (merged) entry, not the user layer (user observation; ASM-015). The user-layer read is a direct, read-only parse of the user config file; the write stays `codex mcp add`.

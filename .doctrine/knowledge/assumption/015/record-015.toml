@@ -17,8 +17,8 @@ basis = "observation"
 validation_plan = "Probe during implementation: trusted project with a project-level [mcp_servers.doctrine]; if get returns the project entry, run it from a neutral cwd (e.g. the codex home) or read the user file directly for classification."
 validated_by    = ""
 validated_on    = ""
-invalidated_by  = ""
-invalidated_on  = ""
+invalidated_by = "user"
+invalidated_on = "2026-10-23"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

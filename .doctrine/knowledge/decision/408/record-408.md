@@ -15,3 +15,7 @@ F6: `fsutil::write_atomic` writes a temp file and renames it over the target, wh
 User rulings: "your recommendations are solid. I think -y grants consent, but probably the docs for it need to say so. prompt's good. decline: accept your rec. too". Evidence: EVD-033.
 
 Replaces the direct-file rules: path resolution, symlink write-through and missing-file creation are codex's job now. A missing `CODEX_HOME` fails inside codex (EVD-033 item 3), so doctrine pre-checks and degrades with a clear reason rather than relaying codex's error alone.
+
+## Amended (ASM-015 invalidated, 2026-10-23)
+
+`codex mcp get` reports the effective (merged) entry, not the user layer (user observation; ASM-015). The user-layer read is a direct, read-only parse of the user config file; the write stays `codex mcp add`.
