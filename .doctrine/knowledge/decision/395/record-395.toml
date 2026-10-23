@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 395
+slug = "regeneration-failure-rolls-back"
+title = "Regeneration failure rolls back"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Fork and candidate creation already compensate on provision failure."
+choice = "A regeneration error is a provision error: the caller's existing rollback applies; success reports what was regenerated."
+alternatives = ["Keep the worktree and disclose degradation"]
+rationale = "A degraded fork reproduces the quiet failure ISS-352 names; rollback reuses existing machinery."
+consequences = ["No half-provisioned worktree survives"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-285"

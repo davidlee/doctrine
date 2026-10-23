@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 392
+slug = "fork-regeneration-legs"
+title = "Fork regeneration legs"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "A provisioned worktree lacks the derived tier install projects (ISS-352)."
+choice = "Regenerate = MemorySync + Convergence (skills, agent defs, harness link dirs) + universal boot snapshot + local install marker (.doctrine/state/install.toml). Exclude BootWiring, LegacyStarters and the tracked doctrine.toml stamp."
+alternatives = ["Run full doctrine install in the fork", "Convergence only"]
+rationale = "BootWiring and the tracked stamp dirty tracked files; a full install in a clone modified .doctrine/doctrine.toml. Without the local marker status reports 'not installed'."
+consequences = ["Fork tree stays clean against its born frame", "boot snapshot no longer depends on a harness session hook"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-285"

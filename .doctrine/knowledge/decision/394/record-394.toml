@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 394
+slug = "provision-is-copy-then-regenerate"
+title = "Provision is copy then regenerate"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Four sites provision a worktree: fork_core, create.rs passthrough, dispatch candidate clean and conflicted arms; all call run_provision."
+choice = "run_provision (and the worktree provision verb) becomes copy-then-regenerate; the copy stays its own function. All callers inherit it; the verb doubles as the repair path for hand-made worktrees."
+alternatives = ["Regenerate only in fork_core", "Per-caller opt-in"]
+rationale = "One composed step, no caller edits, and a STD-003 repair path."
+consequences = ["SPEC-012 REQ-189 wording needs the copy/regenerate split stated"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-285"

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 393
+slug = "fork-harness-set-source"
+title = "Fork harness set source"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Install detects harnesses by directory existence; a fresh worktree lacks the gitignored dirs, so detection there diverges. The local marker records only the last --agent selection."
+choice = "Resolve the harness set in the SOURCE tree via resolve_install_harnesses (no explicit agents) and pass it to regeneration in the fork."
+alternatives = ["Detect in the fork", "Read the install marker's harnesses"]
+rationale = "Source detection is what a bare install would do there; chains stay consistent because a regenerated tree carries the harness dirs."
+consequences = ["Regeneration takes an explicit harness list"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-285"

@@ -26,12 +26,19 @@ skills, agent defs, or memory the governance assumes.
 
 ## Scope & Objectives
 
-- After the copy step, `worktree fork` regenerates the derived runtime tier in
-  the fork, so a fork is self-sufficient and harness-independent (POL-003).
+- Every provisioned worktree — `worktree fork`, the coordination passthrough,
+  and dispatch candidate worktrees, all via `run_provision` — regenerates the
+  derived runtime tier after the copy step, so it is self-sufficient and
+  harness-independent (POL-003). `doctrine worktree provision <dir>` doubles as
+  the repair path (DEC-394).
+- Regenerated: shipped memory corpus, skills/agent defs/harness link dirs,
+  universal boot snapshot, local install marker. Not: boot wiring, legacy
+  starters, or the tracked version stamp (DEC-392). Harness set resolved in
+  the source tree (DEC-393); failure rolls back (DEC-395).
 - Every derived root `install` projects is covered, for every harness the source
   tree has installed — not a hand-maintained list.
-- `run_provision` stays the copier; regeneration is a separate step owned by
-  the fork verb (ISS-352 "which verb owns it").
+- The copy stays its own function; `run_provision` composes copy then
+  regenerate (`install::regenerate`).
 - Correct the `DERIVED_RUNTIME` doc claim so it states what actually happens,
   and give the classification a non-test consumer if the design uses it.
 - Defined failure posture: a regeneration failure either rolls the fork back
