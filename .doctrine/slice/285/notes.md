@@ -51,12 +51,12 @@ reconciliation"):
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-23 · PHASE-02 · fork sl-285 a107c0ff2 + uncommitted PHASE-02
+fresh-as-of: 2026-10-23 · PHASE-02 · fork sl-285 5727bb85b
 
 ### Produced
 - design locked rev 31 (6fe624a0a, 3b21595c6); plan + phases (78ac815f9)
 - PHASE-01 done on branch sl-285 (.worktrees/SL-285): d7af02edf, 7a17cbce4, a107c0ff2 — gate green
-- PHASE-02 implemented + review-fixed in the fork, UNCOMMITTED pending gate (provision seam, six callers, compensation, layering re-tier)
+- PHASE-02 done on sl-285: 5727bb85b — provision seam, six callers, compensation, layering re-tier; gate green
 - minted: ISS-529 — fork rollback misses binding on non-dispatch branch; ISS-530 — clean candidate leaks on ledger-write failure
 - RV-425 concluded; F-1/F-6 routed control (transcribed PHASE-01 EX-4, PHASE-02 EX-3)
 - design deltas for reconcile: § Reconcile carry above
