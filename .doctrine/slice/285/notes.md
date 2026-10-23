@@ -72,6 +72,9 @@ jail that stops binding `/` (or the macOS sandbox-exec arm, not probed) would
 need re-checking. VH-1 confirmed by the user 2026-10-23 ("VH-1: confirmed").
 
 ## Harvest
+- audit: RV-426 (7 findings, all verified; brief in review-426.md)
+- follow-ups: ISS-531 (managed gitignore block omits .codex + slice research; next), ISS-532 (boot_harnesses silent skip)
+- residual: tests/common `fresh_inputs` leaves a registered git worktree after its TempDir drops (harmless today)
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-10-23 · PHASE-02 · fork sl-285 5727bb85b
 
