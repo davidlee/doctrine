@@ -38,6 +38,21 @@ pub(crate) const CODEX_MCP_SHELL: &str = "sh";
 pub(crate) const CODEX_MCP_SHELL_FLAG: &str = "-c";
 /// The doctrine serve args shared by both harnesses' entries.
 pub(crate) const CODEX_MCP_SERVE_ARGS: &str = "serve --mcp";
+
+/// The codex CLI binary name — looked up on `PATH` to honour a write, and shown
+/// in the consent text as the command the user will run.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) const CODEX_CLI: &str = "codex";
+
+/// The codex subcommand that registers an MCP server: `codex mcp add <key> --
+/// <command>`. Kept as tokens rather than one string so the shell can build the
+/// argv it actually runs (PHASE-03) from the same pieces the prompt shows.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) const CODEX_MCP_ADD: &[&str] = &["mcp", "add"];
+
+/// Ends the `mcp add` flags: everything after it is the argv codex records.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) const CODEX_ARGV_SEPARATOR: &str = "--";
 /// The wrapper line doctrine emits as the codex `args[1]` — the portable env
 /// literal executed through [`CODEX_MCP_SHELL`]. `const` cannot compose, so this
 /// holds its own literal; the agreement test pins it to `PORTABLE_EXEC`.
@@ -104,7 +119,15 @@ pub(crate) enum Degraded {
     UserMalformed,
     /// The running binary is not the `doctrine` on `PATH`, so a baked path would
     /// not be the binary the user actually runs.
-    ExecNotOnPath,
+    /// A `doctrine` is on `PATH` but it is not the running binary. Both paths
+    /// are carried, because the report's remedy is naming them side by side
+    /// ("bake `on_path`" vs "run install as `exec`").
+    ExecNotOnPath {
+        /// Canonical path of the running binary.
+        exec: PathBuf,
+        /// The first `doctrine` on `PATH`, as found; `None` when there is none.
+        on_path: Option<PathBuf>,
+    },
     /// The running binary's own path could not be resolved at all.
     ExecUnresolved,
     /// A user write is pending and no `codex` CLI is on `PATH` to honour it.
@@ -180,7 +203,10 @@ pub(crate) fn bake(facts: &BakeFacts) -> Result<PathBuf, Degraded> {
     };
     match (&facts.path_doctrine, &facts.path_doctrine_canonical) {
         (Some(path_doctrine), Some(canonical)) if canonical == exec => Ok(path_doctrine.clone()),
-        _ => Err(Degraded::ExecNotOnPath),
+        _ => Err(Degraded::ExecNotOnPath {
+            exec: exec.clone(),
+            on_path: facts.path_doctrine.clone(),
+        }),
     }
 }
 
@@ -449,6 +475,14 @@ pub(crate) struct CodexUserPlan {
 }
 
 impl CodexUserPlan {
+    /// Whether the user config still needs a write (`Add` or `Replace`). The
+    /// question the planner asks twice — once for `proposes_change`, once for
+    /// the codex-CLI requirement — so it is asked one way.
+    #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+    fn user_write_pending(&self) -> bool {
+        matches!(self.user, Some(UserEntry::Add | UserEntry::Replace { .. }))
+    }
+
     /// Whether the leg has anything to do: a user write pending (`Add`/
     /// `Replace`) or doctrine's own wrapper sitting in the project file — and
     /// nothing degraded. A `PathShadow`, an `Override` or a `Current` alone is
@@ -456,9 +490,34 @@ impl CodexUserPlan {
     #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
     pub(crate) fn proposes_change(&self) -> bool {
         self.degraded.is_none()
-            && (matches!(self.user, Some(UserEntry::Add | UserEntry::Replace { .. }))
+            && (self.user_write_pending()
                 || matches!(self.project, ProjectEntry::OwnedWrapper { .. }))
     }
+}
+
+/// Resolve the user leg step by step — destination, bake, entry — stopping at
+/// the first failure but returning what earlier steps already resolved, so the
+/// report can still name the file or the command it got to.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+fn resolve_user(
+    user: FileRead<'_>,
+    facts: &BakeFacts,
+    env: &CodexEnv,
+) -> (
+    Option<PathBuf>,
+    Option<PathBuf>,
+    Result<UserEntry, Degraded>,
+) {
+    let config = match destination(env) {
+        Ok(config) => config,
+        Err(degraded) => return (None, None, Err(degraded)),
+    };
+    let command = match bake(facts) {
+        Ok(command) => command,
+        Err(degraded) => return (Some(config), None, Err(degraded)),
+    };
+    let entry = classify_user(user, &command);
+    (Some(config), Some(command), entry)
 }
 
 /// Decide the whole leg from supplied facts. The user leg is a chain that stops
@@ -473,34 +532,116 @@ pub(crate) fn plan(
     facts: &BakeFacts,
     env: &CodexEnv,
 ) -> CodexUserPlan {
+    let (user_config, baked, resolved) = resolve_user(user, facts, env);
     let mut plan = CodexUserPlan {
-        user_config: None,
-        bake: None,
-        user: None,
-        project: ProjectEntry::Absent,
-        degraded: None,
+        user_config,
+        bake: baked,
+        user: resolved.as_ref().ok().cloned(),
+        project: classify_project(project),
+        degraded: resolved.err(),
     };
-    let resolved = destination(env)
-        .and_then(|config| {
-            plan.user_config = Some(config);
-            bake(facts)
-        })
-        .and_then(|command| {
-            plan.bake = Some(command.clone());
-            classify_user(user, &command)
-        });
-    match resolved {
-        Ok(entry) => plan.user = Some(entry),
-        Err(degraded) => plan.degraded = Some(degraded),
-    }
-    plan.project = classify_project(project);
-    if plan.degraded.is_none()
-        && matches!(plan.user, Some(UserEntry::Add | UserEntry::Replace { .. }))
-        && !env.codex_on_path
-    {
+    if plan.degraded.is_none() && plan.user_write_pending() && !env.codex_on_path {
         plan.degraded = Some(Degraded::NoCodexCli);
     }
     plan
+}
+
+/// The command the user is asked to approve: the exact `codex mcp add`
+/// invocation that registers doctrine's user-level MCP server. Composed from the
+/// same tokens the shell runs ([`CODEX_CLI`], [`CODEX_MCP_ADD`] …), so the prompt
+/// cannot drift from the command.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn add_command(bake: &Path) -> String {
+    let mut args: Vec<String> = CODEX_MCP_ADD.iter().copied().map(str::to_string).collect();
+    args.push(CODEX_MCP_SERVER_KEY.to_string());
+    args.push(CODEX_ARGV_SEPARATOR.to_string());
+    args.push(bake.display().to_string());
+    args.extend(CODEX_MCP_SERVE_ARGS.split_whitespace().map(String::from));
+    invocation(CODEX_CLI, &args)
+}
+
+/// The consent block for a proposed change (design sec-leg § Consent), or `None`
+/// when there is nothing to approve. A pending user write shows file, command and
+/// scope; a removal-only plan shows just the wrapper it takes away, and asks a
+/// different question — the user is not writing their config, so pretending
+/// otherwise would overstate the change.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn consent_block(plan: &CodexUserPlan) -> Option<String> {
+    if !plan.proposes_change() {
+        return None;
+    }
+    let writes = plan.user_write_pending();
+    let mut lines = vec![
+        if writes {
+            text::HEADER_WRITE
+        } else {
+            text::HEADER_REMOVE
+        }
+        .to_string(),
+    ];
+    if writes {
+        // A pending write implies both resolved: `proposes_change` allows no
+        // degradation, and destination/bake run before the entry is read.
+        let config = plan.user_config.as_ref()?;
+        let bake = plan.bake.as_ref()?;
+        let file = format!(
+            "{}  [{}.{}]",
+            config.display(),
+            CODEX_MCP_TABLE,
+            CODEX_MCP_SERVER_KEY
+        );
+        lines.push(consent_line("file", &file));
+        lines.push(consent_line("runs", &add_command(bake)));
+        lines.push(consent_line("scope", text::SCOPE));
+    }
+    if let Some(UserEntry::Replace { old, dropped }) = &plan.user {
+        lines.push(consent_line("replaces", old));
+        if !dropped.is_empty() {
+            lines.push(consent_line("drops", &dropped.join(", ")));
+        }
+    }
+    if let ProjectEntry::OwnedWrapper { extra_keys } = &plan.project {
+        let lost = if extra_keys.is_empty() {
+            String::new()
+        } else {
+            format!(" (with {})", extra_keys.join(", "))
+        };
+        let removes = format!("{} {CODEX_CONFIG_REL}{lost}", text::REMOVES_LEAD);
+        lines.push(consent_line("removes", &removes));
+    }
+    if writes {
+        lines.push(format!("  {}", text::TRUST));
+    }
+    lines.push(
+        if writes {
+            text::ASK_WRITE
+        } else {
+            text::ASK_REMOVE
+        }
+        .to_string(),
+    );
+    Some(lines.join("\n"))
+}
+
+/// One labelled line of the consent block: two spaces, the label in a fixed
+/// column, then the value — the alignment the design's example shows.
+fn consent_line(label: &str, value: &str) -> String {
+    format!("  {label:<9}{value}")
+}
+
+/// The consent register: every fixed sentence of the prompt, so a rewording is a
+/// one-line diff here rather than a literal buried in the composer (STD-001).
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+mod text {
+    pub(super) const HEADER_WRITE: &str =
+        "Codex: register doctrine's MCP server in your user config?";
+    pub(super) const HEADER_REMOVE: &str = "Codex: remove doctrine's old project MCP wrapper?";
+    pub(super) const SCOPE: &str = "every codex session on this machine, in every project";
+    pub(super) const REMOVES_LEAD: &str = "the old doctrine wrapper in";
+    pub(super) const TRUST: &str =
+        "Codex asks you to trust each new folder before doctrine connects there.";
+    pub(super) const ASK_WRITE: &str = "Write user config? [y/N]";
+    pub(super) const ASK_REMOVE: &str = "Remove it? [y/N]";
 }
 
 // ---------------------------------------------------------------------------
@@ -684,16 +825,27 @@ mod tests {
             Some("/home/u/.nix-profile/bin/doctrine"),
             Some("/nix/store/x/bin/doctrine"),
         );
-        assert_eq!(bake(&facts), Err(Degraded::ExecNotOnPath));
+        assert_eq!(
+            bake(&facts),
+            Err(Degraded::ExecNotOnPath {
+                exec: PathBuf::from("/home/u/src/doctrine/target/debug/doctrine"),
+                on_path: Some(PathBuf::from("/home/u/.nix-profile/bin/doctrine")),
+            }),
+            "both paths, so the report can name the mismatch"
+        );
     }
 
     #[test]
     fn bake_exec_not_on_path_when_doctrine_is_absent_from_path() {
+        let absent = Err(Degraded::ExecNotOnPath {
+            exec: PathBuf::from("/bin/doctrine"),
+            on_path: None,
+        });
         let facts = bake_facts(Some("/bin/doctrine"), None, None);
-        assert_eq!(bake(&facts), Err(Degraded::ExecNotOnPath));
+        assert_eq!(bake(&facts), absent);
         // a canonical fact with no entry it came from cannot bake either.
         let orphan = bake_facts(Some("/bin/doctrine"), None, Some("/bin/doctrine"));
-        assert_eq!(bake(&orphan), Err(Degraded::ExecNotOnPath));
+        assert_eq!(bake(&orphan), absent);
     }
 
     #[test]
@@ -1135,7 +1287,13 @@ mod tests {
             &bake_facts(Some("/src/doctrine"), None, None),
             &env_ok(),
         );
-        assert_eq!(planned.degraded, Some(Degraded::ExecNotOnPath));
+        assert_eq!(
+            planned.degraded,
+            Some(Degraded::ExecNotOnPath {
+                exec: PathBuf::from("/src/doctrine"),
+                on_path: None,
+            })
+        );
         assert_eq!(
             planned.user_config,
             Some(PathBuf::from("/home/u/.codex/config.toml")),
@@ -1180,5 +1338,82 @@ mod tests {
         );
         assert_eq!(planned.degraded, None, "a shadow is warned, not degraded");
         assert!(!planned.proposes_change(), "we write nothing, warn only");
+    }
+
+    // --- consent text (design sec-leg § Consent) ---
+
+    const DESIGN_BAKE: &str = "/home/u/.local/share/doctrine/bin/doctrine";
+
+    /// The design's own example plan: a replacement that drops keys, with no
+    /// project wrapper. Paths match design.md so the expected block below is
+    /// recognisably the same text.
+    fn design_plan() -> CodexUserPlan {
+        let user = "[mcp_servers.doctrine]\ncommand = \"doctrine\"\nargs = [\"serve\", \"--mcp\"]\n\
+                    enabled = false\n\n[mcp_servers.doctrine.env]\nFOO = \"x\"\n";
+        plan(
+            FileRead::Text(user),
+            FileRead::Absent,
+            &bake_facts(Some(DESIGN_BAKE), Some(DESIGN_BAKE), Some(DESIGN_BAKE)),
+            &env_ok(),
+        )
+    }
+
+    #[test]
+    fn add_command_builds_the_codex_mcp_add_invocation() {
+        assert_eq!(
+            add_command(Path::new(DESIGN_BAKE)),
+            "codex mcp add doctrine -- /home/u/.local/share/doctrine/bin/doctrine serve --mcp"
+        );
+    }
+
+    #[test]
+    fn consent_block_for_add_names_the_file_the_command_and_the_wrapper_removal() {
+        assert_eq!(
+            consent_block(&plan_of("model = \"gpt-5\"\n", &wrapper_entry(""))).as_deref(),
+            Some(
+                "Codex: register doctrine's MCP server in your user config?
+  file     /home/u/.codex/config.toml  [mcp_servers.doctrine]
+  runs     codex mcp add doctrine -- /usr/local/bin/doctrine serve --mcp
+  scope    every codex session on this machine, in every project
+  removes  the old doctrine wrapper in .codex/config.toml
+  Codex asks you to trust each new folder before doctrine connects there.
+Write user config? [y/N]"
+            )
+        );
+    }
+
+    #[test]
+    fn consent_block_for_replace_lists_the_old_entry_and_the_dropped_keys() {
+        assert_eq!(
+            consent_block(&design_plan()).as_deref(),
+            Some(
+                "Codex: register doctrine's MCP server in your user config?
+  file     /home/u/.codex/config.toml  [mcp_servers.doctrine]
+  runs     codex mcp add doctrine -- /home/u/.local/share/doctrine/bin/doctrine serve --mcp
+  scope    every codex session on this machine, in every project
+  replaces doctrine serve --mcp
+  drops    enabled = false, env.FOO
+  Codex asks you to trust each new folder before doctrine connects there.
+Write user config? [y/N]"
+            )
+        );
+    }
+
+    #[test]
+    fn consent_block_for_removal_only_names_the_wrapper_and_its_extra_keys() {
+        let planned = plan_of(&current_user(), &wrapper_entry("enabled = false\n"));
+        assert_eq!(
+            consent_block(&planned).as_deref(),
+            Some(
+                "Codex: remove doctrine's old project MCP wrapper?
+  removes  the old doctrine wrapper in .codex/config.toml (with enabled = false)
+Remove it? [y/N]"
+            )
+        );
+    }
+
+    #[test]
+    fn consent_block_is_absent_when_the_plan_proposes_no_change() {
+        assert_eq!(consent_block(&plan_of(&current_user(), "")), None);
     }
 }
