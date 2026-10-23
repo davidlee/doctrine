@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a16809-e4bb-71f1-be2d-ddfb760278e9"
+recorded_at = "2026-10-23T09:14:01.275606258Z"
+kind = "friction"
+summary = "[design; SL-285] lock needed three undisclosed prerequisites, one refusal at a time"
+detail = "After the user said 'agreed, lock it', reviewing→locked refused three times in sequence: (1) review-disposed conducted needs 'review conclude' on the RV first; (2) runbook review.passes needs an explicit discharge declaration even though the notes statement existed; (3) severe findings need --route, surfaced only at the lock gate, not when they were disposed fix-now. The resume envelope's forward list named none of (1) or (3). Each cost a round trip."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,9 +1,9 @@
 id = 285
 slug = "fork-regenerates-derived-runtime"
 title = "Fork regenerates derived runtime"
-status = "design"
+status = "plan"
 created = "2026-10-21"
-updated = "2026-10-21"
+updated = "2026-10-23"
 tags = []
 
 [relationships]

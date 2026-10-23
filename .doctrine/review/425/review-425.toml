@@ -10,6 +10,12 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Independent pi design + comparison pass over SL-285 design (quotient research profile, session 32554e48; raw research/raw/pi-design-comparison.md). Pass finished: F-1..F-8 raised, disposed fix-now, integrated at design rev 28 (6fe624a0a)."
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-285"
@@ -21,7 +27,8 @@ severity = "major"
 title = "Tracked-file guard has no mechanism: apply_wire dry-run reports no touched paths"
 detail = "Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-1). design.md §3/§4 rely on 'git ls-files over the dry-run's touched paths', but apply_wire(dry_run=true) collects imports only when !dry_run (boot.rs:3448) and empties per-harness touches under dry run (boot.rs:3683); boot.rs:8013-8016 pins dry.touched() empty. As written the guard always passes, voiding DEC-402's refusal."
 disposition = "fix-now"
-response = "Verified boot.rs:3448, :3683, :8013-8016. Integrate: add boot::plan_wire(root, exec, harnesses) -> Result<Vec<Touched>> composing the existing dry-run halves (ensure_boot_import dry-run, install_refresh dry-run, refresh_touched); apply_wire and its pinned test unchanged. regenerate intersects plan_wire's paths with git ls-files before any write. Implementer must verify that each dry-run arm reports the paths it would write (reviewer cites boot.rs:3067, :3221)."
+response = "Verified boot.rs:3448, :3456, :8013-8016. Integrated (design rev 28 sec-3/sec-4): boot::plan_wire(root, exec, harnesses) -> Result<Vec<Touched>> keeps the dry-run arms' paths (import_touched, refresh_touched); regenerate intersects them with git ls-files before any write; apply_wire and its pinned test unchanged. Negative control: a source whose committed .mcp.json (or another tracked wiring file) differs from what BootWiring would write must be refused before any write, naming the path — observe the refusal fire. Implementer confirms each dry-run arm reports the path it would write."
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -32,6 +39,14 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Verified boot.rs:3448, :3683, :8013-8016. Integrate: add boot::plan_wire(root, exec, harnesses) -> Result<Vec<Touched>> composing the existing dry-run halves (ensure_boot_import dry-run, install_refresh dry-run, refresh_touched); apply_wire and its pinned test unchanged. regenerate intersects plan_wire's paths with git ls-files before any write. Implementer must verify that each dry-run arm reports the paths it would write (reviewer cites boot.rs:3067, :3221)."
+
+[[finding.turn]]
+act = "amend"
+role = "responder"
+note = "route assigned at lock: the finding doubts that the tracked-file guard can detect anything"
+disposition = "fix-now"
+route = "control"
+response = "Verified boot.rs:3448, :3456, :8013-8016. Integrated (design rev 28 sec-3/sec-4): boot::plan_wire(root, exec, harnesses) -> Result<Vec<Touched>> keeps the dry-run arms' paths (import_touched, refresh_touched); regenerate intersects them with git ls-files before any write; apply_wire and its pinned test unchanged. Negative control: a source whose committed .mcp.json (or another tracked wiring file) differs from what BootWiring would write must be refused before any write, naming the path — observe the refusal fire. Implementer confirms each dry-run arm reports the path it would write."
 
 [[finding]]
 id = "F-2"
@@ -40,7 +55,8 @@ severity = "major"
 title = "coordinate.rs:234 caller missing; create.rs:228 mislabelled as coordination passthrough"
 detail = "Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-2). run_provision callers: fork.rs:189, create.rs:228 (WorktreeCreate hook passthrough), coordinate.rs:234 (coordination worktree), dispatch.rs:2247, :2466, mod.rs:388. design.md §2 omits coordinate.rs and calls create.rs the coordination passthrough; §5 per-caller compensation omits it."
 disposition = "fix-now"
-response = "Verified by grep. Integrate: §2 table gains coordinate.rs:234 (creation; existing rollback_fork/remove_worktree_dir at coordinate.rs:242-248); relabel create.rs:228 as the WorktreeCreate hook passthrough; §5 per-caller compensation covers fork, hook passthrough, coordination, clean candidate."
+response = "Verified by grep. Integrated (rev 28 sec-2/sec-3/sec-5): callers table gains coordinate.rs:234 (creation; rollback_fork / remove_worktree_dir at coordinate.rs:240-248); create.rs:228 relabelled WorktreeCreate hook passthrough; per-caller compensation tests cover fork, hook passthrough, coordination (create and resume), clean candidate. Sweep: DEC-396 context/choice and DEC-397 choice carried the same stale caller list; both corrected."
+route = "refresh"
 
 [[finding.turn]]
 act = "raise"
@@ -51,6 +67,14 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Verified by grep. Integrate: §2 table gains coordinate.rs:234 (creation; existing rollback_fork/remove_worktree_dir at coordinate.rs:242-248); relabel create.rs:228 as the WorktreeCreate hook passthrough; §5 per-caller compensation covers fork, hook passthrough, coordination, clean candidate."
+
+[[finding.turn]]
+act = "amend"
+role = "responder"
+note = "route assigned at lock: the design record lagged the code's caller set"
+disposition = "fix-now"
+route = "refresh"
+response = "Verified by grep. Integrated (rev 28 sec-2/sec-3/sec-5): callers table gains coordinate.rs:234 (creation; rollback_fork / remove_worktree_dir at coordinate.rs:240-248); create.rs:228 relabelled WorktreeCreate hook passthrough; per-caller compensation tests cover fork, hook passthrough, coordination (create and resume), clean candidate. Sweep: DEC-396 context/choice and DEC-397 choice carried the same stale caller list; both corrected."
 
 [[finding]]
 id = "F-3"
@@ -116,7 +140,8 @@ severity = "major"
 title = "Per-caller failure-compensation tests have no failure lever"
 detail = """Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-6). §5 requires compensation 'after an injected regeneration failure', but the worktree e2e tests drive the built binary as a subprocess (e.g. tests/e2e_worktree_fork.rs:293) — no in-process injection seam. A committed installed-version = "999.0.0" in the source's doctrine.toml triggers the downgrade refusal deterministically in every creation arm."""
 disposition = "fix-now"
-response = 'Accepted. Integrate into §5: failure lever = committed installed-version = "999.0.0" in the source doctrine.toml (the fork inherits it), which triggers the downgrade refusal before any write; asserts each creation arm leaves no worktree, ref, or ledger row. Repair test: same lever, worktree kept, non-zero exit; --allow-downgrade succeeds.'
+response = """Accepted. Integrated (rev 28 sec-5): failure lever = committed installed-version = "999.0.0" in the source doctrine.toml (the new worktree inherits it), firing the downgrade refusal before any write. Negative control: a creation arm that leaks its worktree, ref or ledger row after that refusal must fail the test — observe it red against today's clean candidate arm (which leaks its detached worktree) before the fix. Repair: worktree kept, non-zero exit; --allow-downgrade then succeeds. Implementer confirms no earlier currency check refuses on the raised stamp."""
+route = "control"
 
 [[finding.turn]]
 act = "raise"
@@ -127,6 +152,14 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = 'Accepted. Integrate into §5: failure lever = committed installed-version = "999.0.0" in the source doctrine.toml (the fork inherits it), which triggers the downgrade refusal before any write; asserts each creation arm leaves no worktree, ref, or ledger row. Repair test: same lever, worktree kept, non-zero exit; --allow-downgrade succeeds.'
+
+[[finding.turn]]
+act = "amend"
+role = "responder"
+note = "route assigned at lock: the finding doubts that the compensation tests can observe a failure"
+disposition = "fix-now"
+route = "control"
+response = """Accepted. Integrated (rev 28 sec-5): failure lever = committed installed-version = "999.0.0" in the source doctrine.toml (the new worktree inherits it), firing the downgrade refusal before any write. Negative control: a creation arm that leaks its worktree, ref or ledger row after that refusal must fail the test — observe it red against today's clean candidate arm (which leaks its detached worktree) before the fix. Repair: worktree kept, non-zero exit; --allow-downgrade then succeeds. Implementer confirms no earlier currency check refuses on the raised stamp."""
 
 [[finding]]
 id = "F-7"
@@ -135,7 +168,8 @@ severity = "major"
 title = "Ignored harness files bake the running binary's absolute path (DEC-402 consequence wrong)"
 detail = "Raised from an independent pi design + comparison (quotient research profile, session 32554e48; raw: .doctrine/slice/285/research/raw/pi-design-comparison.md D-7). CommandForm::Baked renders '<abs exec> <args>' for gitignored files (boot.rs:1105-1119); codex hooks are always Baked (boot.rs:2854); claude Local settings Baked (boot.rs:594-599). DEC-402's consequence 'hook commands use ${DOCTRINE_BIN:-doctrine}' holds only for tracked files. A fork's ignored config pins the orchestrator binary path."
 disposition = "fix-now"
-response = "Verified boot.rs:1105-1119, :2854, :594-599. Integrate: §6 risk — ignored harness config in a fork pins the running binary's absolute path; inside a confined worker jail with different mounts that path may not resolve (inference, not observed). Correct DEC-402's consequence text (portable form only for tracked files) via doctrine knowledge edit decision. Implementer to check one confined fork's hooks resolve; capture a backlog item if they do not."
+response = "Verified boot.rs:1105-1119, :2854, :594-599. Integrated: DEC-402 consequence corrected (portable form only for tracked files; gitignored config bakes the absolute exec); rev 28 sec-6 adds the baked-path risk. Separable second arm for the raiser to raise as a sibling if wanted: whether a confined fork's baked hook path resolves inside the worker jail (inference, not observed) — implementer checks one confined fork; backlog item if it does not resolve."
+route = "refresh"
 
 [[finding.turn]]
 act = "raise"
@@ -146,6 +180,14 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Verified boot.rs:1105-1119, :2854, :594-599. Integrate: §6 risk — ignored harness config in a fork pins the running binary's absolute path; inside a confined worker jail with different mounts that path may not resolve (inference, not observed). Correct DEC-402's consequence text (portable form only for tracked files) via doctrine knowledge edit decision. Implementer to check one confined fork's hooks resolve; capture a backlog item if they do not."
+
+[[finding.turn]]
+act = "amend"
+role = "responder"
+note = "route assigned at lock: DEC-402's consequence lagged boot.rs's CommandForm behaviour"
+disposition = "fix-now"
+route = "refresh"
+response = "Verified boot.rs:1105-1119, :2854, :594-599. Integrated: DEC-402 consequence corrected (portable form only for tracked files; gitignored config bakes the absolute exec); rev 28 sec-6 adds the baked-path risk. Separable second arm for the raiser to raise as a sibling if wanted: whether a confined fork's baked hook path resolves inside the worker jail (inference, not observed) — implementer checks one confined fork; backlog item if it does not resolve."
 
 [[finding]]
 id = "F-8"
