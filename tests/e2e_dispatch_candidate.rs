@@ -2306,8 +2306,10 @@ fn e2e_dispatch_candidate_create_provisions_gitignored_embed_assets() {
 ///
 /// The two-line assertion alone would pass on silence, so it is bracketed by the
 /// R5 controls: the install is COMMITTED (an untracked stamp leaves `regenerate`
-/// on its uninstalled-source skip), the create emits a provisioning row, and the
-/// codex link dir is populated in the worktree.
+/// on its uninstalled-source skip) and the codex link dir is populated in the
+/// worktree — the latter being this test's control for regeneration, which is
+/// what the worktree path depends on. (A `provisioned` row is the allowlist copy
+/// leg's, not regeneration's, so it proves nothing here.)
 #[test]
 fn candidate_create_from_installed_source_prints_two_lines() {
     let repo = tempfile::tempdir().unwrap();
@@ -2340,14 +2342,6 @@ fn candidate_create_from_installed_source_prints_two_lines() {
         ],
     );
     assert!(out.status.success(), "create failed: {}", stderr(&out));
-
-    // Control (worktree side): the copier ran, so a no-op regeneration cannot
-    // pass the two-line assertion by printing nothing.
-    assert!(
-        stderr(&out).contains("provisioned "),
-        "control: no provisioning row on stderr: {}",
-        stderr(&out)
-    );
 
     // Stdout: line 1 = target ref, line 2 = worktree path.
     let out_stdout = stdout(&out);

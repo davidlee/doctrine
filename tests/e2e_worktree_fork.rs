@@ -548,12 +548,13 @@ fn fork_refused_under_worker_mode() {
 const PROJECTION_DOMAIN: &[&str] = &[
     ".doctrine/skills",
     ".doctrine/agents",
-    ".doctrine/workflows",
+    // No workflows: doctrine ships none (no `plugins/doctrine/workflows`, the
+    // manifest lists the root but nothing populates it), so both trees are
+    // legitimately empty and comparing it would only compare two absences.
     ".doctrine/memory/shipped",
     ".agents/skills",
     ".claude/agents",
     ".claude/skills",
-    ".claude/workflows",
     ".codex",
     "AGENTS.md",
     "CLAUDE.md",
@@ -570,7 +571,7 @@ const REGENERATED_DOMAIN: &[&str] = &[
     ".agents/skills",
     ".claude/agents",
     ".claude/skills",
-    ".claude/workflows",
+    // `.claude/workflows` excluded for the same reason as EX-1's: none shipped.
     ".codex",
 ];
 
@@ -624,8 +625,12 @@ fn resolved_digest(root: &Path, domain: &[&str]) -> std::collections::BTreeMap<P
 }
 
 /// Every entry of each harness link dir resolves to a REAL payload inside its own
-/// tree — a symlink onto a directory must carry a `SKILL.md`, which is what makes
-/// the projected skill readable rather than a dangling name.
+/// tree. The payload's SHAPE is the member kind's: a `skills` link points at a
+/// canon DIRECTORY and must carry a `SKILL.md` (that is what makes the projected
+/// skill readable rather than a dangling name), while an `agents`/`workflows`
+/// link points at a canon FILE (`.doctrine/agents/<f>`, `.doctrine/workflows/<f>`).
+/// Accepting either shape everywhere would let a skill dir projected as a bare
+/// file — or an agent def projected as a dir — pass.
 fn assert_links_resolve(root: &Path, dirs: &[&str]) {
     let root = std::fs::canonicalize(root).expect("canonicalize link root");
     let mut seen = 0usize;
@@ -634,6 +639,7 @@ fn assert_links_resolve(root: &Path, dirs: &[&str]) {
         if !d.exists() {
             continue;
         }
+        let is_skill_dir = Path::new(dir).file_name() == Some(std::ffi::OsStr::new("skills"));
         for entry in std::fs::read_dir(&d).expect("read link dir") {
             let path = entry.expect("link dir entry").path();
             let canonical = std::fs::canonicalize(&path);
@@ -649,12 +655,21 @@ fn assert_links_resolve(root: &Path, dirs: &[&str]) {
                 path.display(),
                 resolved.display()
             );
-            assert!(
-                resolved.is_file() || resolved.join("SKILL.md").is_file(),
-                "{} must resolve to a real payload (a file, or a dir carrying SKILL.md), got {}",
-                path.display(),
-                resolved.display()
-            );
+            if is_skill_dir {
+                assert!(
+                    resolved.join("SKILL.md").is_file(),
+                    "{} must resolve to a skill dir carrying SKILL.md, got {}",
+                    path.display(),
+                    resolved.display()
+                );
+            } else {
+                assert!(
+                    resolved.is_file(),
+                    "{} must resolve to a real def file, got {}",
+                    path.display(),
+                    resolved.display()
+                );
+            }
             seen += 1;
         }
     }
@@ -727,10 +742,56 @@ fn fork_from_installed_source_projects_like_a_fresh_install() {
 
     let got = resolved_digest(&fork, PROJECTION_DOMAIN);
     let want = resolved_digest(&fresh, PROJECTION_DOMAIN);
+
+    // Positive control, per member and per side: `digest_domain` records a missing
+    // member as `absent`, so a `contains_key` on one member proves nothing and two
+    // absent-in-both trees would compare equal. EVERY compared member must be a
+    // real projection output in the fork AND in the fresh install — no member of
+    // this domain is legitimately absent: each is either a shipped install output
+    // (skills, agents, workflows, the memory corpus, the codex config, the two
+    // harness files, the managed ignore block, the orientation doc) or a tracked
+    // base backing install rewrites, and the source here is a real install.
+    for &rel in PROJECTION_DOMAIN {
+        for (side, digest) in [("fork", &got), ("fresh install", &want)] {
+            let value = digest.get(Path::new(rel));
+            assert!(
+                value.is_some_and(|digest| digest != common::ABSENT),
+                "positive control: {rel} is absent in the {side}, so the equality \
+                 below would be vacuous about it"
+            );
+        }
+    }
+
+    // One named artefact per family, so "populated" is a claim about what the legs
+    // actually projected rather than about a directory entry's existence.
     assert!(
-        got.contains_key(Path::new(".doctrine/skills")),
-        "positive control: the domain is populated in the fork"
+        fork.join(".codex/hooks.json").is_file(),
+        "control: the codex hook family is projected into the fork"
     );
+    let skills_dir = fork.join(".doctrine/skills");
+    let mut with_skill_md = 0usize;
+    for entry in std::fs::read_dir(&skills_dir).expect("read the fork's .doctrine/skills") {
+        if entry
+            .expect("skills entry")
+            .path()
+            .join("SKILL.md")
+            .is_file()
+        {
+            with_skill_md += 1;
+        }
+    }
+    assert!(
+        with_skill_md > 0,
+        "control: .doctrine/skills carries at least one skill dir with SKILL.md"
+    );
+    assert!(
+        std::fs::read_dir(fork.join(".doctrine/memory/shipped"))
+            .expect("read the fork's .doctrine/memory/shipped")
+            .next()
+            .is_some(),
+        "control: the shipped memory corpus is materialised (non-empty)"
+    );
+
     assert_eq!(
         got, want,
         "the fork's projection must equal a fresh install on the fork's own inputs"
@@ -739,7 +800,8 @@ fn fork_from_installed_source_projects_like_a_fresh_install() {
 
 /// SL-285 PHASE-03 EX-2 / VT-1: regeneration leaves nothing tracked-dirty, and
 /// creates no `.pi/skills` (pi reads `.agents/skills`; a duplicate dir makes it
-/// warn). Both controls are non-vacuous: the link dirs are proven non-empty.
+/// warn). The control is non-vacuous: `assert_links_resolve` proves both link
+/// dirs carry resolving entries, not merely that they exist.
 #[test]
 fn fork_from_installed_source_leaves_empty_porcelain_and_no_pi_skills() {
     let tmp = tempfile::tempdir().unwrap();
@@ -768,21 +830,9 @@ fn fork_from_installed_source_leaves_empty_porcelain_and_no_pi_skills() {
         stderr(&out)
     );
 
-    // Positive control: regeneration actually projected the derived tier.
-    assert!(
-        std::fs::read_dir(fork.join(".agents/skills"))
-            .expect("regenerated .agents/skills")
-            .next()
-            .is_some(),
-        "control: the codex link dir is populated"
-    );
-    assert!(
-        std::fs::read_dir(fork.join(".claude/skills"))
-            .expect("regenerated .claude/skills")
-            .next()
-            .is_some(),
-        "control: the claude link dir is populated"
-    );
+    // Positive control: regeneration actually projected and linked the derived
+    // tier — every entry resolves to a payload inside the fork.
+    assert_links_resolve(&fork, &[".claude/skills", ".agents/skills"]);
 
     assert_eq!(
         git(&fork, &["status", "--porcelain"]),

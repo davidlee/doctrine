@@ -288,6 +288,8 @@ fn row_naming<'a>(stderr: &'a str, verb: &str, name: &str) -> Option<&'a str> {
 /// `kept` in run 2 is `Notice::Shadows` (a real entry at a doctrine slot is
 /// reported and left alone, `install_ownership.rs:197`), and any red there is a
 /// real defect — `converge_leg` already forwards the writer (`install.rs:998`).
+/// Run 3 re-asserts the same `kept` row, so the convergence digest compares two
+/// runs that both demonstrably executed their legs.
 #[test]
 fn provision_from_installed_source_twice_converges_and_keeps_a_user_file_under_a_link_dir() {
     let tmp = tempfile::tempdir().unwrap();
@@ -360,12 +362,19 @@ fn provision_from_installed_source_twice_converges_and_keeps_a_user_file_under_a
         "only the withheld slot differs from run 1's projection"
     );
 
-    // Run 3: convergence — no further change to the derived tier.
+    // Run 3: convergence — no further change to the derived tier, and the run
+    // proves it ran: the same kept row as run 2 (a converged run is not a silent
+    // none — without this control the digest equality passes on a no-op).
     let third = provision(&source, &fork);
     assert!(
         third.status.success(),
         "third provision failed: {}",
         String::from_utf8_lossy(&third.stderr)
+    );
+    let third_stderr = String::from_utf8_lossy(&third.stderr);
+    assert!(
+        row_naming(&third_stderr, "kept", "code-review").is_some(),
+        "run 3 must keep the user file and say so; stderr: {third_stderr}"
     );
     assert_eq!(
         common::digest_domain(&fork, DERIVED_TIER),

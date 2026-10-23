@@ -287,15 +287,27 @@ pub(crate) fn tree_digest(
     acc
 }
 
-/// [`tree_digest`] restricted to `domain`, with a missing entry recorded as
-/// `absent` rather than dropped.
+/// [`digest_domain`]'s marker for a domain member that is missing from a tree.
 ///
-/// `tree_digest` `read_dir`-unwraps a directory, so it cannot express a plain
-/// file (`AGENTS.md`, `.gitignore`, `.mcp.json`) and panics on a directory a leg
-/// may not have written yet. A projection comparison must cover both, and must
-/// distinguish "missing in both" from "equal" — an entry that is absent in both
-/// trees is recorded `absent`, not omitted, so two trees that never ran a
-/// projection cannot pass as agreeing (SL-285 PHASE-03 R2).
+/// A caller comparing two digests must assert the value is NOT this: two trees
+/// that never ran a projection produce equal maps of `absent` values.
+pub(crate) const ABSENT: &str = "absent";
+
+/// [`tree_digest`] restricted to `domain`, with a missing member recorded as
+/// [`ABSENT`] rather than dropped.
+///
+/// `tree_digest` takes a DIRECTORY root (it `read_dir`-unwraps it), so it cannot
+/// digest one plain-file path on its own (`AGENTS.md`, `.mcp.json`); a domain
+/// member may be either a dir or a file, and this projection covers both.
+///
+/// Recording a missing member rather than omitting it keeps the absence
+/// VISIBLE; it does not by itself make a comparison non-vacuous — two trees that
+/// never ran a projection still produce equal maps — so a caller must assert
+/// every compared value is not [`ABSENT`].
+///
+/// `.git` and everything beneath it is excluded: VCS metadata is not a
+/// projection output, and its shape differs per checkout (a linked worktree's
+/// `.git` is a file naming the parent's gitdir, a primary tree's is a dir).
 pub(crate) fn digest_domain(
     root: &std::path::Path,
     domain: &[&str],
@@ -305,13 +317,15 @@ pub(crate) fn digest_domain(
     for rel in domain {
         let prefix = std::path::Path::new(*rel);
         if std::fs::symlink_metadata(root.join(*rel)).is_err() {
-            acc.insert(prefix.to_path_buf(), "absent".to_string());
+            acc.insert(prefix.to_path_buf(), ABSENT.to_string());
             continue;
         }
         acc.extend(
             whole
                 .iter()
-                .filter(|(path, _)| path.starts_with(prefix))
+                // `Path::starts_with` is component-wise, so this drops `.git`
+                // itself and everything under it, never `.github`.
+                .filter(|(path, _)| !path.starts_with(".git") && path.starts_with(prefix))
                 .map(|(path, digest)| (path.clone(), digest.clone())),
         );
     }
