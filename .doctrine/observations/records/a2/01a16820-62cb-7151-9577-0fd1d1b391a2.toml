@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a16820-62cb-7151-9577-0fd1d1b391a2"
+recorded_at = "2026-10-23T09:38:35.339490883Z"
+kind = "friction"
+summary = "[execute; SL-285] quotient write/implement profiles refuse the repo root as cwd"
+detail = "pi_agent profile=implement cwd=/home/david/dev/doctrine refused 'view-overlaps-protected': the rw root contains the protected profile layer /home/david/dev/doctrine/.quotient/profiles (the server's launch-dir project layer, checked even though the directory does not exist). Workaround: run writable delegates in a linked worktree below the root (.worktrees/SL-285), which costs a cold target/ build and a land step. AGENTS/CLAUDE.md's pi_agent guidance does not mention it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
