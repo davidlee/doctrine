@@ -85,12 +85,11 @@ pub(crate) const CODEX_CONFIG_FILE: &str = "config.toml";
 /// distinct user-facing remedy, so the planner never has to re-derive the cause
 /// from a path that happens to be unusable.
 ///
-/// `expect` — not the `cfg_attr(not(test), …)` form — while some variant still
-/// lacks a constructor in the test build: `NoCodexCli` is built by the planner
-/// (PHASE-04), so the expectation is fulfilled there and in the non-test build
-/// alike. It must become the `cfg_attr` form (or go) the moment the last variant
-/// has a constructor.
-#[expect(dead_code, reason = "wired in SL-286 PHASE-04")]
+/// `expect` is the `cfg_attr(not(test), …)` form because every variant now has a
+/// constructor in the test build (`NoCodexCli` is built by [`plan`]), so only the
+/// non-test build — where nothing calls the planner yet — can report it unused.
+/// It lapses when PHASE-04 wires the planner into install.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Degraded {
     /// `$CODEX_HOME` is set but empty, relative, or names nothing on disk.
@@ -237,17 +236,10 @@ pub(crate) fn classify_user(read: FileRead<'_>, bake: &Path) -> Result<UserEntry
         Ok(doc) => doc,
         Err(_) => return Err(Degraded::UserUnparseable),
     };
-    let Some(servers) = doc.get(CODEX_MCP_TABLE) else {
-        return Ok(UserEntry::Add);
-    };
-    let Some(servers) = servers.as_table_like() else {
-        return Err(Degraded::UserMalformed);
-    };
-    let Some(entry) = servers.get(CODEX_MCP_SERVER_KEY) else {
-        return Ok(UserEntry::Add);
-    };
-    let Some(table) = entry.as_table_like() else {
-        return Err(Degraded::UserMalformed);
+    let table = match doctrine_entry(&doc) {
+        EntryLookup::NoEntry => return Ok(UserEntry::Add),
+        EntryLookup::NotATable => return Err(Degraded::UserMalformed),
+        EntryLookup::Entry(table) => table,
     };
     let Some(command) = table.get("command").and_then(|i| i.as_str()) else {
         return Err(Degraded::UserMalformed);
@@ -274,6 +266,39 @@ pub(crate) fn classify_user(read: FileRead<'_>, bake: &Path) -> Result<UserEntry
         old: invocation(command, &args),
         dropped,
     })
+}
+
+/// The `[mcp_servers.doctrine]` entry inside a parsed config file — the three
+/// questions both classifiers ask before they differ. `NoEntry` is "there is
+/// nothing of ours here" (`Add` for the user layer, `Absent` for the project
+/// one); `NotATable` is "something of ours is there but unreadable as a server"
+/// (`Malformed` in both). Interpreting the table stays with each caller: the two
+/// layers disagree about *what* an entry means, not about where it lives.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+enum EntryLookup<'d> {
+    NoEntry,
+    NotATable,
+    Entry(&'d dyn toml_edit::TableLike),
+}
+
+/// Locate `[mcp_servers.doctrine]` in a parsed config file. Parsing itself stays
+/// with the caller, because a parse failure means different things per layer
+/// ([`Degraded::UserUnparseable`] vs [`ProjectEntry::Unreadable`]).
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+fn doctrine_entry(doc: &toml_edit::DocumentMut) -> EntryLookup<'_> {
+    let Some(servers) = doc.get(CODEX_MCP_TABLE) else {
+        return EntryLookup::NoEntry;
+    };
+    let Some(servers) = servers.as_table_like() else {
+        return EntryLookup::NotATable;
+    };
+    let Some(entry) = servers.get(CODEX_MCP_SERVER_KEY) else {
+        return EntryLookup::NoEntry;
+    };
+    match entry.as_table_like() {
+        Some(table) => EntryLookup::Entry(table),
+        None => EntryLookup::NotATable,
+    }
 }
 
 /// The project `.codex/config.toml` `[mcp_servers.doctrine]` entry, classified
@@ -317,17 +342,10 @@ pub(crate) fn classify_project(read: FileRead<'_>) -> ProjectEntry {
         Ok(doc) => doc,
         Err(_) => return ProjectEntry::Unreadable,
     };
-    let Some(servers) = doc.get(CODEX_MCP_TABLE) else {
-        return ProjectEntry::Absent;
-    };
-    let Some(servers) = servers.as_table_like() else {
-        return ProjectEntry::Malformed;
-    };
-    let Some(entry) = servers.get(CODEX_MCP_SERVER_KEY) else {
-        return ProjectEntry::Absent;
-    };
-    let Some(table) = entry.as_table_like() else {
-        return ProjectEntry::Malformed;
+    let table = match doctrine_entry(&doc) {
+        EntryLookup::NoEntry => return ProjectEntry::Absent,
+        EntryLookup::NotATable => return ProjectEntry::Malformed,
+        EntryLookup::Entry(table) => table,
     };
     if is_wrapper_form(table) {
         let extra_keys = table
@@ -408,6 +426,81 @@ fn render_dropped(key: &str, item: &toml_edit::Item) -> Vec<String> {
         Some(value) => vec![format!("{key} = {}", value.to_string().trim())],
         None => vec![key.to_string()],
     }
+}
+
+/// The codex user MCP leg's whole decision (design sec-leg § Plan): where the
+/// user file is, what to bake there, what each layer currently holds, and — if
+/// anything — the one cause that stops the leg. Partial facts are kept: a
+/// degradation at a later step still leaves the report able to name the file and
+/// the command the earlier steps resolved.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CodexUserPlan {
+    /// The user config file, when [`destination`] resolved it.
+    pub(crate) user_config: Option<PathBuf>,
+    /// The `doctrine` command to write, when [`bake`] resolved it.
+    pub(crate) bake: Option<PathBuf>,
+    /// The user entry, `None` when an earlier degradation stopped classification.
+    pub(crate) user: Option<UserEntry>,
+    /// The project entry — always classified, whatever the user leg did.
+    pub(crate) project: ProjectEntry,
+    /// The first cause, in step order; `None` means the leg can proceed.
+    pub(crate) degraded: Option<Degraded>,
+}
+
+impl CodexUserPlan {
+    /// Whether the leg has anything to do: a user write pending (`Add`/
+    /// `Replace`) or doctrine's own wrapper sitting in the project file — and
+    /// nothing degraded. A `PathShadow`, an `Override` or a `Current` alone is
+    /// worth a report, not a write, so the consent prompt is not asked.
+    #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+    pub(crate) fn proposes_change(&self) -> bool {
+        self.degraded.is_none()
+            && (matches!(self.user, Some(UserEntry::Add | UserEntry::Replace { .. }))
+                || matches!(self.project, ProjectEntry::OwnedWrapper { .. }))
+    }
+}
+
+/// Decide the whole leg from supplied facts. The user leg is a chain that stops
+/// at its first failure while keeping what it already resolved; the project file
+/// is read regardless, since its class is what the report discloses. The codex
+/// CLI is required only for a pending user write — reconciling an owned wrapper
+/// in doctrine's own project file needs no CLI.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn plan(
+    user: FileRead<'_>,
+    project: FileRead<'_>,
+    facts: &BakeFacts,
+    env: &CodexEnv,
+) -> CodexUserPlan {
+    let mut plan = CodexUserPlan {
+        user_config: None,
+        bake: None,
+        user: None,
+        project: ProjectEntry::Absent,
+        degraded: None,
+    };
+    let resolved = destination(env)
+        .and_then(|config| {
+            plan.user_config = Some(config);
+            bake(facts)
+        })
+        .and_then(|command| {
+            plan.bake = Some(command.clone());
+            classify_user(user, &command)
+        });
+    match resolved {
+        Ok(entry) => plan.user = Some(entry),
+        Err(degraded) => plan.degraded = Some(degraded),
+    }
+    plan.project = classify_project(project);
+    if plan.degraded.is_none()
+        && matches!(plan.user, Some(UserEntry::Add | UserEntry::Replace { .. }))
+        && !env.codex_on_path
+    {
+        plan.degraded = Some(Degraded::NoCodexCli);
+    }
+    plan
 }
 
 // ---------------------------------------------------------------------------
@@ -933,5 +1026,159 @@ mod tests {
             classify_project(FileRead::Unreadable),
             ProjectEntry::Unreadable
         );
+    }
+
+    // --- plan (design sec-leg § Plan) ---
+
+    fn env_ok() -> CodexEnv {
+        codex_env(None, false, Some("/home/u"))
+    }
+
+    fn facts_ok() -> BakeFacts {
+        bake_facts(Some(BAKE), Some(BAKE), Some(BAKE))
+    }
+
+    fn current_user() -> String {
+        format!("[mcp_servers.doctrine]\ncommand = \"{BAKE}\"\nargs = [\"serve\", \"--mcp\"]\n")
+    }
+
+    fn plan_of(user: &str, project_text: &str) -> CodexUserPlan {
+        plan(
+            FileRead::Text(user),
+            FileRead::Text(project_text),
+            &facts_ok(),
+            &env_ok(),
+        )
+    }
+
+    #[test]
+    fn plan_add_proposes_change() {
+        let planned = plan_of("model = \"gpt-5\"\n", "");
+        assert_eq!(
+            planned,
+            CodexUserPlan {
+                user_config: Some(PathBuf::from("/home/u/.codex/config.toml")),
+                bake: Some(PathBuf::from(BAKE)),
+                user: Some(UserEntry::Add),
+                project: ProjectEntry::Absent,
+                degraded: None,
+            }
+        );
+        assert!(planned.proposes_change());
+    }
+
+    #[test]
+    fn plan_current_with_an_absent_project_does_not_propose_change() {
+        let planned = plan_of(&current_user(), "");
+        assert_eq!(planned.user, Some(UserEntry::Current));
+        assert_eq!(planned.project, ProjectEntry::Absent);
+        assert!(!planned.proposes_change(), "nothing to write anywhere");
+    }
+
+    #[test]
+    fn proposes_change_for_an_owned_wrapper_with_a_current_user_entry() {
+        // No user write, so no codex CLI is needed — the removal is doctrine's
+        // own edit of its own project file.
+        let mut env = env_ok();
+        env.codex_on_path = false;
+        let planned = plan(
+            FileRead::Text(&current_user()),
+            FileRead::Text(&wrapper_entry("")),
+            &facts_ok(),
+            &env,
+        );
+        assert_eq!(planned.degraded, None);
+        assert!(
+            planned.proposes_change(),
+            "removing the old wrapper is a change even with the user entry current"
+        );
+    }
+
+    #[test]
+    fn plan_degraded_no_codex_cli_when_the_user_write_is_pending() {
+        let mut env = env_ok();
+        env.codex_on_path = false;
+        let planned = plan(FileRead::Absent, FileRead::Text(""), &facts_ok(), &env);
+        assert_eq!(planned.degraded, Some(Degraded::NoCodexCli));
+        assert_eq!(planned.user, Some(UserEntry::Add));
+        assert!(
+            !planned.proposes_change(),
+            "a degraded plan proposes nothing"
+        );
+    }
+
+    #[test]
+    fn plan_degraded_bad_codex_home_leaves_the_user_leg_unclassified() {
+        let env = codex_env(Some(""), true, Some("/home/u"));
+        let planned = plan(
+            FileRead::Absent,
+            FileRead::Text(&wrapper_entry("")),
+            &facts_ok(),
+            &env,
+        );
+        assert_eq!(planned.degraded, Some(Degraded::BadCodexHome));
+        assert_eq!(planned.user_config, None);
+        assert_eq!(planned.bake, None);
+        assert_eq!(planned.user, None, "stopped before classification");
+        assert_eq!(
+            planned.project,
+            ProjectEntry::OwnedWrapper { extra_keys: vec![] },
+            "the project layer is classified regardless"
+        );
+    }
+
+    #[test]
+    fn plan_degraded_exec_not_on_path_keeps_the_destination() {
+        let planned = plan(
+            FileRead::Absent,
+            FileRead::Text(""),
+            &bake_facts(Some("/src/doctrine"), None, None),
+            &env_ok(),
+        );
+        assert_eq!(planned.degraded, Some(Degraded::ExecNotOnPath));
+        assert_eq!(
+            planned.user_config,
+            Some(PathBuf::from("/home/u/.codex/config.toml")),
+            "step 1 succeeded, so the report can still name the file"
+        );
+        assert_eq!(planned.bake, None);
+        assert_eq!(planned.user, None);
+    }
+
+    #[test]
+    fn plan_degraded_user_unparseable_does_not_propose_change_even_with_a_wrapper() {
+        let planned = plan_of("not = [toml\n", &wrapper_entry(""));
+        assert_eq!(planned.degraded, Some(Degraded::UserUnparseable));
+        assert_eq!(planned.bake, Some(PathBuf::from(BAKE)));
+        assert_eq!(planned.user, None);
+        assert_eq!(
+            planned.project,
+            ProjectEntry::OwnedWrapper { extra_keys: vec![] }
+        );
+        assert!(!planned.proposes_change());
+    }
+
+    #[test]
+    fn plan_replace_proposes_change() {
+        let user = "[mcp_servers.doctrine]\ncommand = \"/old/bin/doctrine\"\nargs = [\"serve\"]\n";
+        let planned = plan_of(user, "");
+        assert!(matches!(planned.user, Some(UserEntry::Replace { .. })));
+        assert!(planned.proposes_change());
+    }
+
+    #[test]
+    fn plan_path_shadow_with_a_current_user_entry_does_not_propose_change() {
+        let planned = plan_of(
+            &current_user(),
+            "[mcp_servers.doctrine]\ncommand = \"doctrine\"\n",
+        );
+        assert_eq!(
+            planned.project,
+            ProjectEntry::PathShadow {
+                command: "doctrine".to_string()
+            }
+        );
+        assert_eq!(planned.degraded, None, "a shadow is warned, not degraded");
+        assert!(!planned.proposes_change(), "we write nothing, warn only");
     }
 }
