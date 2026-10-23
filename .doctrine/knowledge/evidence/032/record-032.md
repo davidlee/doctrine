@@ -72,3 +72,18 @@ Rejected as an installer action:
   growing (POL-003).
 
 Viable as a printed hint next to the install's codex step.
+
+
+## Layer precedence and serving outside a checkout (2026-10-23, SL-286 research)
+
+Probed on codex-cli 0.159.1 with an isolated `CODEX_HOME`:
+
+- When the user layer (`$CODEX_HOME/config.toml`) and the project layer
+  (`.codex/config.toml`) both define `[mcp_servers.doctrine]`, codex lists and
+  spawns the **project** entry. A stale project entry therefore shadows a
+  user-level one.
+- `CODEX_HOME` is honoured as the user layer.
+- `doctrine serve --mcp` (0.46.10) with no project marker above the cwd exits
+  with "No project root found", which codex reports as a handshake failure. In
+  a git repo without `.doctrine/` it starts, serves its tools, returns empty
+  results and writes nothing.
