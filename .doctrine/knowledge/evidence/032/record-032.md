@@ -87,3 +87,29 @@ Probed on codex-cli 0.159.1 with an isolated `CODEX_HOME`:
   with "No project root found", which codex reports as a handshake failure. In
   a git repo without `.doctrine/` it starts, serves its tools, returns empty
   results and writes nothing.
+
+
+## Recurrence (2026-10-23, later)
+
+Fresh `doctrine install --agent codex` (doctrine 0.47.0) into `/tmp/testcodex`;
+the user then trusted the project and its three hooks in codex. The MCP server
+still failed to load.
+
+- Trust ruled out: `~/.codex/config.toml` carries
+  `[projects."/tmp/testcodex"] trust_level = "trusted"`, and `codex mcp list` in
+  the directory lists `doctrine` (an untrusted control directory lists nothing:
+  codex skips an untrusted project layer silently).
+- The daemon is now **0.164.0** (`codex app-server --listen …`, pid 3529379), a
+  newer release than the 0.163.0 daemon above — so the gap survives a daemon
+  upgrade/restart, not only a long-lived stale daemon.
+- Its PATH (`/proc/3529379/environ`) carries the login-shell entries
+  (`~/.config/carapace/bin`, `~/nushell`, `~/.local/bin`, `~/.cargo/bin`, nix
+  profiles) but not `~/.local/share/doctrine/bin`; no `doctrine` exists in any
+  directory on it.
+- Replay under that PATH: `sh -c 'exec "${DOCTRINE_BIN:-doctrine}" --version'` →
+  `sh: line 1: exec: doctrine: not found`, exit 127.
+
+Bearing: the daemon's PATH is the login-session PATH, not the interactive
+shell's. An installer that adds its bin dir in shell rc only is invisible to it,
+so any PATH-dependent `command` form fails until the user's session environment
+changes. Strengthens SL-286's absolute-path registration.
