@@ -1955,38 +1955,31 @@ pub(crate) fn tracked_paths(
 }
 
 /// The tracked paths in `root` whose bytes differ from the index — `git status
-/// --porcelain --untracked-files=no`, the path from column 4 (a rename `R  a ->
-/// b` reports its destination). Untracked scratch is excluded by design: it is
-/// not part of the tracked tree. [`git_text`] is deliberately not used here — it
-/// trims, which would eat the first line's leading status column.
+/// --porcelain -z --untracked-files=no` parsed by [`parse_porcelain_status_z`]
+/// and flattened to the union of its `staged` and `tracked_dirty` axes (a
+/// rename/copy is already unwrapped to its destination there). Untracked
+/// scratch is excluded by design: it is not part of the tracked tree.
+///
+/// Both this and [`tracked_paths`] read NUL-separated raw paths, so their frames
+/// match and a caller may compare the two directly (SL-285 T4).
 ///
 /// # Errors
 ///
-/// Returns [`CaptureError::Git`] if `git status` fails or its output is not UTF-8.
+/// Returns [`CaptureError::Git`] if `git status` fails.
 pub(crate) fn tracked_dirty_paths(
     root: &Path,
 ) -> Result<std::collections::BTreeSet<PathBuf>, CaptureError> {
-    let bytes = git_bytes(root, &["status", "--porcelain", "--untracked-files=no"])?;
-    let status = std::str::from_utf8(&bytes)
-        .map_err(|e| CaptureError::Git(format!("non-utf8 output from git status: {e}")))?;
-    Ok(parse_porcelain_paths(status))
-}
-
-/// PURE. The paths in `git status --porcelain` output: porcelain v1 puts the
-/// status in columns 1-2 and the path from column 4. A rename or copy names
-/// both sides — the destination is the one that exists.
-fn parse_porcelain_paths(status: &str) -> std::collections::BTreeSet<PathBuf> {
-    status
-        .lines()
-        .filter_map(|line| {
-            let path = line.get(3..)?;
-            let renamed = line.starts_with('R') || line.starts_with('C');
-            Some(match (renamed, path.rsplit_once(" -> ")) {
-                (true, Some((_from, to))) => PathBuf::from(to),
-                _ => PathBuf::from(path),
-            })
-        })
-        .collect()
+    let raw = git_bytes(
+        root,
+        &["status", "--porcelain", "-z", "--untracked-files=no"],
+    )?;
+    let state = parse_porcelain_status_z(&raw);
+    Ok(state
+        .staged
+        .into_iter()
+        .chain(state.tracked_dirty)
+        .map(PathBuf::from)
+        .collect())
 }
 
 // --- SL-228 PHASE-01: the funnel read surface — git primitives (design §8) ----

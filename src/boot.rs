@@ -8140,6 +8140,43 @@ env_vars = ["DOCTRINE_BIN"]
         }
     }
 
+    /// VT-1 (SL-285 F6): the same planned==live agreement over files that already
+    /// exist — the import `Added` arm and an empty `mcpServers` merge, not just
+    /// the create arms.
+    #[test]
+    fn plan_wire_matches_live_over_existing_files() {
+        let sets: [&[Harness]; 2] = [&[Harness::Claude], &[Harness::Codex]];
+        let paths = |touched: &[Touched]| -> BTreeSet<PathBuf> {
+            touched.iter().map(|t| t.path.clone()).collect()
+        };
+        for set in sets {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path();
+            let exec = Path::new(FAKE_EXEC);
+            let import = if set.contains(&Harness::Claude) {
+                "CLAUDE.md"
+            } else {
+                "AGENTS.md"
+            };
+            fs::write(root.join(import), "# unrelated\n\nkeep me\n").unwrap();
+            fs::write(root.join(MCP_REL), r#"{"mcpServers":{}}"#).unwrap();
+
+            let planned = paths(&plan_wire(root, exec, set).unwrap());
+            let live = paths(
+                &apply_wire(root, exec, set, false)
+                    .unwrap()
+                    .touched()
+                    .unwrap(),
+            );
+            assert!(!live.is_empty(), "a live wire still writes for {set:?}");
+            assert_eq!(planned, live, "plan disagrees with live wire for {set:?}");
+            assert!(
+                plan_wire(root, exec, set).unwrap().is_empty(),
+                "second plan after the live wire is empty for {set:?}"
+            );
+        }
+    }
+
     // --- SL-087: produce(Memory) with active signpost memories ---
 
     fn write_memory_toml(items: &Path, uid: &str, kind: &str, st: &str, key: Option<&str>) {
