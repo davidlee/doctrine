@@ -928,6 +928,99 @@ fn print_ownership_plan(
     )
 }
 
+/// Memory sync leg: the shipped corpus under the ignore contract. Prints the
+/// counts line, or the failure line and `Err`.
+fn sync_memory_leg(root: &Path, out: &mut impl Write) -> anyhow::Result<LegOutcome> {
+    match crate::corpus::sync_corpus(root, &crate::corpus::embedded_assets(), false) {
+        Ok(report) => {
+            writeln!(
+                out,
+                "  corpus sync: {} new, {} changed, {} unchanged, {} prune",
+                report.plan.new.len(),
+                report.plan.changed.len(),
+                report.plan.unchanged.len(),
+                report.plan.prune.len(),
+            )?;
+            Ok(LegOutcome::done())
+        }
+        Err(e) => {
+            writeln!(out, "  memory sync failed: {e:#}")?;
+            Err(e)
+        }
+    }
+}
+
+/// Boot wiring leg: skipped when no harnesses detected. Any harness whose
+/// refresh failed fails the leg (RV-421 F-14).
+fn wire_boot_leg(
+    root: &Path,
+    exec: &Path,
+    harnesses: &[crate::boot::Harness],
+    out: &mut impl Write,
+) -> anyhow::Result<LegOutcome> {
+    if harnesses.is_empty() {
+        return Ok(LegOutcome::done());
+    }
+    match crate::boot::apply_wire(root, exec, harnesses, false) {
+        Ok(report) => match report.touched() {
+            Ok(touched) => Ok(LegOutcome::Done(touched)),
+            Err(failed) => Ok(LegOutcome::Failed(failed)),
+        },
+        Err(e) => {
+            writeln!(out, "  boot wire failed: {e:#}")?;
+            Err(e)
+        }
+    }
+}
+
+/// One convergence covers every harness (SL-281 D3) — none, nothing converges.
+/// Convergence reports per action, not per path: no touched paths.
+fn converge_leg(
+    root: &Path,
+    args: &InstallArgs<'_>,
+    manifest: &Manifest,
+    agents: &[String],
+    catalog: &[Entry],
+    selected: &[&Entry],
+    out: &mut impl Write,
+) -> anyhow::Result<LegOutcome> {
+    if agents.is_empty() {
+        return Ok(LegOutcome::done());
+    }
+    match with_wanted(
+        root,
+        args,
+        manifest,
+        agents,
+        catalog,
+        selected,
+        |cx, wanted| {
+            converge(
+                cx,
+                &manifest.framework.roots,
+                &manifest.harness,
+                wanted,
+                &mut *out,
+            )
+        },
+    ) {
+        Ok(()) => Ok(LegOutcome::done()),
+        Err(e) => {
+            writeln!(out, "  framework install failed: {e:#}")?;
+            Err(e)
+        }
+    }
+}
+
+/// A leg's result as the ledger entry it contributes: a failed leg has already
+/// printed its own failure line, so recording the failure is all that is left.
+fn leg_outcome(result: anyhow::Result<LegOutcome>) -> LegOutcome {
+    match result {
+        Ok(outcome) => outcome,
+        Err(e) => LegOutcome::failed(&e),
+    }
+}
+
 /// Run the forward steps: memory sync → boot wire → legacy starters →
 /// convergence. The install's one prompt already covered them all. Partial failure is non-fatal — errors are printed, the next step proceeds, and each leg's
 /// outcome is returned (SL-282: a caught failure must block the stamps).
@@ -940,48 +1033,18 @@ fn run_forward_steps(
     let root = plan.base.project_root.as_path();
     let registry = &manifest.harness;
     let agents = &plan.harnesses;
-    let harnesses = &plan.boot;
     let mut outcomes: Vec<(Leg, LegOutcome)> = Vec::new();
 
     print_forward_summary(plan, args, registry, FORWARD_LIVE)?;
 
     // 1. Memory sync — the shipped corpus lands under the ignore contract, so
     // the leg reports no touched paths.
-    let mut memory = LegOutcome::done();
-    match crate::corpus::sync_corpus(root, &crate::corpus::embedded_assets(), false) {
-        Ok(report) => {
-            let mut out = io::stdout();
-            writeln!(
-                out,
-                "  corpus sync: {} new, {} changed, {} unchanged, {} prune",
-                report.plan.new.len(),
-                report.plan.changed.len(),
-                report.plan.unchanged.len(),
-                report.plan.prune.len(),
-            )?;
-        }
-        Err(e) => {
-            writeln!(io::stdout(), "  memory sync failed: {e:#}")?;
-            memory = LegOutcome::failed(&e);
-        }
-    }
+    let memory = leg_outcome(sync_memory_leg(root, &mut io::stdout()));
     outcomes.push((Leg::MemorySync, memory));
 
     // 2. Boot wire — skipped when no harnesses detected. Any harness whose
     // refresh failed fails the leg (RV-421 F-14).
-    let mut boot = LegOutcome::done();
-    if !harnesses.is_empty() {
-        boot = match crate::boot::apply_wire(root, exec, harnesses, false) {
-            Ok(report) => match report.touched() {
-                Ok(touched) => LegOutcome::Done(touched),
-                Err(failed) => LegOutcome::Failed(failed),
-            },
-            Err(e) => {
-                writeln!(io::stdout(), "  boot wire failed: {e:#}")?;
-                LegOutcome::failed(&e)
-            }
-        };
-    }
+    let boot = leg_outcome(wire_boot_leg(root, exec, &plan.boot, &mut io::stdout()));
     outcomes.push((Leg::BootWiring, boot));
 
     // Legacy starter removal (SL-282): the retired starter leg's unedited copies
@@ -1001,26 +1064,19 @@ fn run_forward_steps(
 
     // 3. One convergence covers every harness (SL-281 D3) — none, nothing converges.
     // Convergence reports per action, not per path: no touched paths.
+    // Discovery is pre-leg, not a leg: its failure aborts the run (unchanged), so
+    // it stays outside `converge_leg` and its `Err` propagates.
     let catalog = discover()?;
     let selected = select_for_install_args(&catalog, args)?;
-
-    let mut convergence = LegOutcome::done();
-    if !agents.is_empty() {
-        let mut out = io::stdout();
-        let result = with_wanted(
-            root,
-            args,
-            manifest,
-            agents,
-            &catalog,
-            &selected,
-            |cx, wanted| converge(cx, &manifest.framework.roots, registry, wanted, &mut out),
-        );
-        if let Err(e) = result {
-            writeln!(out, "  framework install failed: {e:#}")?;
-            convergence = LegOutcome::failed(&e);
-        }
-    }
+    let convergence = leg_outcome(converge_leg(
+        root,
+        args,
+        manifest,
+        agents,
+        &catalog,
+        &selected,
+        &mut io::stdout(),
+    ));
     outcomes.push((Leg::Convergence, convergence));
 
     Ok(outcomes)
