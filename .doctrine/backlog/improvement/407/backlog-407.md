@@ -119,3 +119,35 @@ install where none fire is harder to notice by symptom.
 
 Unchanged: `references(originates_from) IMP-400`, `references(concerns) RFC-018`,
 `after SL-250`.
+
+## Leg 3 — the hook command resolves to a binary (added 2026-10-24)
+
+Field case, `~/dev/quotient`: after a clean `doctrine install`, every Claude
+`SessionStart` hook failed with
+
+```
+/bin/sh: line 1: ~/.local/share/doctrine/bin/doctrine: No such file or directory
+```
+
+Cause: the repo's `.envrc` ran `export DOCTRINE_BIN="~/.local/share/doctrine/bin/doctrine"`.
+Because of the double quotes, `~` was never expanded. Doctrine's hooks, and the
+`.mcp.json` `command`, run `${DOCTRINE_BIN:-doctrine}`, and the shell does not
+tilde-expand a parameter's value. The binary existed. The install was
+correct. Nothing pointed at the env var.
+
+This is another reason hooks don't fire, after layer 5 ("entries present,
+canonical, sole"): the entries are right but their command cannot run. The
+check:
+
+- `DOCTRINE_BIN` set → it must be an absolute path to an executable file. Name
+  the specific mistakes: a leading literal `~`, a relative path, a missing
+  file, or a file that isn't executable.
+- unset → `doctrine` must resolve on `PATH`. Flag a `PATH` element that starts
+  with a literal `~` (the same `.envrc` also had one).
+
+Unlike layers 1–4 this reads no per-user file, only the process environment,
+so it needs no POL-002 opt-in. It is a plausibility check under `R7`: doctor
+sees *its own* environment, which equals the harness's only when both inherit
+it from the same shell or direnv. The finding should say so. It isn't
+Claude-only: `.mcp.json`, and any harness form that uses `${DOCTRINE_BIN:-doctrine}`,
+fail the same way. If this leg outgrows IMP-407's Claude scope, split it out.
