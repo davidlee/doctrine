@@ -803,25 +803,26 @@ pub(crate) fn execute(
     }
 
     // 5. The user write — the only effect on codex itself.
-    let mut wrote_user = false;
-    if plan.user_write_pending() {
+    let user_report = match &plan.user {
+        Some(UserEntry::Add) => Some(registered(config, bake)),
+        Some(UserEntry::Replace { old, dropped }) => Some(replaced(config, bake, old, dropped)),
+        Some(UserEntry::Current) | None => None,
+    };
+    let wrote_user = user_report.is_some();
+    if let Some(report) = user_report {
         if let Err(failure) = cli.mcp_add(bake) {
             let reason = add_failed(&failure.stderr);
             emit(out, &reason)?;
             return Ok(CodexUserOutcome::Refused(reason));
         }
-        wrote_user = true;
-        let report = match &plan.user {
-            Some(UserEntry::Add) => registered(config, bake),
-            Some(UserEntry::Replace { old, dropped }) => replaced(config, bake, old, dropped),
-            _ => anyhow::bail!("execute: a pending user write must classify as Add or Replace"),
-        };
         emit(out, &report)?;
     }
 
     // 6. Retiring doctrine's own project wrapper. A failure here leaves the
     //    written user entry shadowed, which is a different report from a failure
-    //    with nothing else written (design RV-427 F-6).
+    //    with nothing else written (design RV-427 F-6): the cause is disclosed
+    //    beneath it, and the daemon is stale either way because the user entry
+    //    did change (EX-6).
     let mut touched = Vec::new();
     if matches!(plan.project, ProjectEntry::OwnedWrapper { .. }) {
         match remove_project_wrapper(project_config) {
@@ -831,11 +832,14 @@ pub(crate) fn execute(
             }
             Err(err) => {
                 let reason = if wrote_user {
-                    wrapper_still_overrides()
+                    format!("{}\n  {err}", wrapper_still_overrides())
                 } else {
                     wrapper_not_removed(&err)
                 };
                 emit(out, &reason)?;
+                if wrote_user {
+                    emit(out, &app_server_restart())?;
+                }
                 return Ok(CodexUserOutcome::Refused(reason));
             }
         }
@@ -881,7 +885,7 @@ fn project_refusal(entry: &ProjectEntry) -> Option<String> {
 /// that no longer holds a wrapper doctrine recognises.
 fn remove_project_wrapper(project_config: &Path) -> Result<(), String> {
     let text = fs::read_to_string(project_config).map_err(|e| e.to_string())?;
-    let stripped = remove_wrapper(&text).ok_or_else(|| NOT_OUR_WRAPPER.to_string())?;
+    let stripped = remove_wrapper(&text).ok_or_else(|| text::NOT_OUR_WRAPPER.to_string())?;
     crate::fsutil::write_atomic_through_link(project_config, stripped.as_bytes())
         .map_err(|e| format!("{e:#}"))
 }
@@ -892,11 +896,6 @@ fn emit(out: &mut dyn Write, block: &str) -> anyhow::Result<()> {
     writeln!(out, "{block}")?;
     Ok(())
 }
-
-/// Why a write-time re-classification refused the project edit: the file changed
-/// between [`plan`] and [`execute`], so the entry is not the one that was planned
-/// for. Nothing is ever removed on a guess.
-const NOT_OUR_WRAPPER: &str = "the entry is no longer a doctrine wrapper";
 
 /// The consent block for a proposed change (design sec-leg § Consent), or `None`
 /// when there is nothing to approve. A pending user write shows file, command and
@@ -1250,6 +1249,10 @@ which may fail (EVD-032). Use an absolute path, or remove it.";
     pub(super) const CAUSE_EXEC_UNRESOLVED: &str =
         "the running doctrine's path could not be resolved";
     pub(super) const CAUSE_NO_CODEX_CLI: &str = "codex is not on PATH";
+    /// Why a write-time re-classification refused the project edit: the file
+    /// changed between `plan` and `execute`, so the entry is not the one that was
+    /// planned for. Nothing is ever removed on a guess.
+    pub(super) const NOT_OUR_WRAPPER: &str = "the entry is no longer a doctrine wrapper";
 }
 
 // ---------------------------------------------------------------------------
@@ -2575,6 +2578,15 @@ mod tests {
         }
     }
 
+    /// Skip `test` when the read-only mode did not bite: a root process ignores
+    /// it, so there is nothing to prove. Says so, rather than passing vacuously.
+    fn skips_as_root(took: bool) -> bool {
+        if !took {
+            eprintln!("skipped: running as root, chmod 0o555 does not deny writes");
+        }
+        !took
+    }
+
     impl Drop for ReadOnlyDir {
         fn drop(&mut self) {
             use std::os::unix::fs::PermissionsExt;
@@ -2618,32 +2630,36 @@ mod tests {
         let config = planned.user_config.clone().unwrap();
 
         let read_only = ReadOnlyDir::new(dir.path());
-        if !read_only.took {
-            return; // root ignores the mode: nothing to prove here
+        if skips_as_root(read_only.took) {
+            return;
         }
 
         let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
 
         assert_eq!(codex.calls.borrow().as_slice(), [add_args(Path::new(BAKE))]);
-        assert_eq!(
-            outcome,
-            CodexUserOutcome::Refused(wrapper_still_overrides())
+        let CodexUserOutcome::Refused(reason) = outcome else {
+            panic!("a failed removal after a user write is a refusal, got {outcome:?}");
+        };
+        assert!(
+            reason.starts_with(&wrapper_still_overrides()),
+            "a written user entry shadowed by the wrapper is the worse failure, got {reason:?}"
         );
         assert!(
-            printed.starts_with(&format!("{}\n", registered(&config, Path::new(BAKE)))),
-            "the user write landed before the removal failed, got {printed:?}"
-        );
-        assert!(
-            printed.ends_with(&format!("{}\n", wrapper_still_overrides())),
-            "a written user entry shadowed by the wrapper is the worse failure, got {printed:?}"
+            reason.lines().nth(1).is_some_and(|l| l.starts_with("  ")),
+            "the write error is disclosed as an indented second line, got {reason:?}"
         );
         assert!(
             wrapper_still_overrides().contains("rerun install"),
             "the remedy is a rerun"
         );
-        assert!(
-            !printed.contains(text::APP_SERVER),
-            "the leg refused, so no daemon hint: {printed}"
+        assert_eq!(
+            printed,
+            format!(
+                "{}\n{reason}\n{}\n",
+                registered(&config, Path::new(BAKE)),
+                app_server_restart()
+            ),
+            "register, the refusal, then the daemon hint: the user entry did change"
         );
         assert_eq!(
             project_bytes(dir.path()),
@@ -2659,8 +2675,8 @@ mod tests {
         let planned = plan_of(&current_user(), &wrapper);
 
         let read_only = ReadOnlyDir::new(dir.path());
-        if !read_only.took {
-            return; // root ignores the mode: nothing to prove here
+        if skips_as_root(read_only.took) {
+            return;
         }
 
         let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
@@ -2692,6 +2708,7 @@ mod tests {
         let changed = "[mcp_servers.doctrine]\ncommand = \"/opt/doctrine\"\n";
         let dir = project_dir(changed);
         let planned = plan_of("model = \"gpt-5\"\n", &wrapper);
+        let config = planned.user_config.clone().unwrap();
         assert_eq!(
             planned.project,
             ProjectEntry::OwnedWrapper { extra_keys: vec![] },
@@ -2701,11 +2718,25 @@ mod tests {
         let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
 
         assert_eq!(codex.calls.borrow().as_slice(), [add_args(Path::new(BAKE))]);
-        assert_eq!(
-            outcome,
-            CodexUserOutcome::Refused(wrapper_still_overrides())
+        let CodexUserOutcome::Refused(reason) = outcome else {
+            panic!("expected a refusal, got {outcome:?}");
+        };
+        assert!(
+            reason.starts_with(&wrapper_still_overrides()),
+            "the user write landed, so the wrapper still wins, got {reason:?}"
         );
-        assert!(printed.ends_with(&format!("{}\n", wrapper_still_overrides())));
+        assert!(
+            reason.contains(text::NOT_OUR_WRAPPER),
+            "the re-read's own cause is disclosed, got {reason:?}"
+        );
+        assert_eq!(
+            printed,
+            format!(
+                "{}\n{reason}\n{}\n",
+                registered(&config, Path::new(BAKE)),
+                app_server_restart()
+            )
+        );
         assert_eq!(
             project_bytes(dir.path()),
             changed,
@@ -2793,16 +2824,6 @@ mod tests {
             add_command(bake),
             format!("{CODEX_CLI} {}", add_args(bake).join(" "))
         );
-        // The prompt and the runner share one argv.
-        let fake = FakeCodex::ok();
-        fake.mcp_add(bake).unwrap();
-        assert_eq!(fake.calls.borrow().as_slice(), [add_args(bake)]);
-        // A scripted failure comes back with its stderr — the runner's only
-        // failure channel.
-        let failing = FakeCodex::failing("permission denied");
-        let err = failing.mcp_add(bake).unwrap_err();
-        assert_eq!(err.stderr, "permission denied");
-        assert_eq!(failing.calls.borrow().as_slice(), [add_args(bake)]);
     }
 
     #[test]
