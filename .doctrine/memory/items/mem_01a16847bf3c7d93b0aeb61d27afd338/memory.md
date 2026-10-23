@@ -50,3 +50,20 @@ Calibration update, SL-286 PHASE-01 (2026-10-24):
 - `implement` again hit the 30-request ceiling on a 5-task prompt, leaving a
   complete green tree. Compile and check before re-delegating.
 - Retrieve this memory before the first delegation, not at harvest.
+
+Calibration update, IMP-522 (2026-10-24) — **supersedes the first two bullets
+above** (write-root refusal; no cargo/git):
+
+- Doctrine now has its own quotient forms (`just quotient-forms`, policy
+  `~/.config/quotient/doctrine.policy.json`, server launched outside the repo).
+  `write`/`implement` with `cwd` = repo root is accepted; no worktree or
+  per-subtree session needed.
+- The write form has cargo/rustc/mold/cc **and git** (probed: `git status`,
+  `git log` work in the primary tree). Delegates can run focused tests
+  themselves; a focused `cargo test --bin doctrine <filter>` took 69 s warm.
+  Tell them **not to commit or stage** — git is writable there.
+- Delegates share the in-tree `target/`: a concurrent orchestrator cargo run
+  blocks on the build lock. Don't run cargo while a delegate is building.
+- Every call must pass `cwd`: the launch dir is no longer an allowed root.
+- Still true: 30-request ceiling, ≤ ~4 exact rulings per `implement` run,
+  orchestrator runs negative controls and the gate.

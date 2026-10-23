@@ -4,7 +4,7 @@ schema_version = 1
 memory_type = "pattern"
 status = "active"
 title = "pi_agent writable delegates: worktree below root, orchestrator verifies"
-summary = "quotient write/implement refuse the repo root; run them in a .worktrees/<x> fork; their sandbox has no cargo or git, so say so in the prompt and verify yourself"
+summary = "pi_agent delegation in doctrine: repo-root writes + cargo/git available since IMP-522; request ceiling, calibration, negative controls"
 created = "2026-10-23"
 updated = "2026-10-23"
 
