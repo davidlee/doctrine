@@ -82,6 +82,8 @@ skills, agent defs, or memory the governance assumes.
 - Tracked content unchanged; generated paths remain gitignored.
 - Repeated repair converges without damaging user-owned harness entries.
 - Second-generation fork (fork of a fork) regenerates the same harness set.
+- No `.pi/skills` is created: pi reads `.agents/skills`, and skills in both
+  places make pi emit duplicate warnings (user, 2026-10-23).
 - Failure compensation checked per caller (fork, passthrough, both candidate
   arms) and repair preservation; downgrade refusal.
 - ISS-352 resolved; SPEC-012 REQ-189 wording updated for the copy/regenerate
