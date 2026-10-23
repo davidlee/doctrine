@@ -523,13 +523,27 @@ impl CodexUserPlan {
         matches!(self.user, Some(UserEntry::Add | UserEntry::Replace { .. }))
     }
 
+    /// Whether the project entry blocks the execute step: a `PATH` shadow, an
+    /// uninterpretable entry, or an unreadable project file all mean the user
+    /// write would not be what codex runs here, so execute writes nothing.
+    #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+    pub(crate) fn project_blocks(&self) -> bool {
+        matches!(
+            self.project,
+            ProjectEntry::PathShadow { .. } | ProjectEntry::Malformed | ProjectEntry::Unreadable
+        )
+    }
+
     /// Whether the leg has anything to do: a user write pending (`Add`/
     /// `Replace`) or doctrine's own wrapper sitting in the project file — and
-    /// nothing degraded. A `PathShadow`, an `Override` or a `Current` alone is
-    /// worth a report, not a write, so the consent prompt is not asked.
+    /// nothing degraded, and the project entry not blocking. A `PathShadow`, a
+    /// `Malformed` or an `Unreadable` project entry means execute writes nothing
+    /// here (design § Execute), so nothing is proposed and no consent is asked;
+    /// an `Override`, a `Current` or no entry at all blocks nothing.
     #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
     pub(crate) fn proposes_change(&self) -> bool {
         self.degraded.is_none()
+            && !self.project_blocks()
             && (self.user_write_pending()
                 || matches!(self.project, ProjectEntry::OwnedWrapper { .. }))
     }
@@ -1660,6 +1674,69 @@ mod tests {
         );
         assert_eq!(planned.degraded, None, "a shadow is warned, not degraded");
         assert!(!planned.proposes_change(), "we write nothing, warn only");
+    }
+
+    #[test]
+    fn proposes_change_false_when_the_project_entry_is_a_path_shadow() {
+        let planned = plan_of(
+            "model = \"gpt-5\"\n",
+            "[mcp_servers.doctrine]\ncommand = \"doctrine\"\n",
+        );
+        assert_eq!(planned.degraded, None);
+        assert_eq!(planned.user, Some(UserEntry::Add));
+        assert!(planned.project_blocks(), "a shadow blocks the execute step");
+        assert!(
+            !planned.proposes_change(),
+            "a user write would not take effect here, so nothing is proposed"
+        );
+    }
+
+    #[test]
+    fn proposes_change_false_when_the_project_entry_is_malformed() {
+        let planned = plan_of(
+            "model = \"gpt-5\"\n",
+            "[mcp_servers.doctrine]\ncommand = \"\"\n",
+        );
+        assert_eq!(planned.degraded, None);
+        assert_eq!(planned.user, Some(UserEntry::Add));
+        assert_eq!(planned.project, ProjectEntry::Malformed);
+        assert!(!planned.proposes_change());
+    }
+
+    #[test]
+    fn proposes_change_false_when_the_project_file_is_unreadable() {
+        let user = "[mcp_servers.doctrine]\ncommand = \"/old/bin/doctrine\"\nargs = [\"serve\"]\n";
+        let planned = plan_of(user, "not = [toml\n");
+        assert_eq!(planned.degraded, None);
+        assert!(matches!(planned.user, Some(UserEntry::Replace { .. })));
+        assert_eq!(planned.project, ProjectEntry::Unreadable);
+        assert!(!planned.proposes_change());
+    }
+
+    #[test]
+    fn proposes_change_true_despite_a_project_override() {
+        let planned = plan_of(
+            "model = \"gpt-5\"\n",
+            "[mcp_servers.doctrine]\ncommand = \"/opt/doctrine\"\n",
+        );
+        assert!(matches!(planned.project, ProjectEntry::Override { .. }));
+        assert!(
+            !planned.project_blocks(),
+            "an override is not ours to fix but it does not block"
+        );
+        assert!(
+            planned.proposes_change(),
+            "the user entry is still worth writing"
+        );
+    }
+
+    #[test]
+    fn consent_block_is_absent_when_the_project_entry_blocks() {
+        let planned = plan_of(
+            "model = \"gpt-5\"\n",
+            "[mcp_servers.doctrine]\ncommand = \"doctrine\"\n",
+        );
+        assert_eq!(consent_block(&planned), None);
     }
 
     // --- consent text (design sec-leg § Consent) ---
