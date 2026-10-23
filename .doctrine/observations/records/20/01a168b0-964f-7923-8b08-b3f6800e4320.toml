@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a168b0-964f-7923-8b08-b3f6800e4320"
+recorded_at = "2026-10-23T12:16:05.711500248Z"
+kind = "friction"
+summary = "[design; SL-286] knowledge edit facet subverb order and closed basis vocabulary cost two refused calls"
+detail = "doctrine knowledge edit DEC-405 decision --choice ... fails with only 'For more information, try --help' (the ID must follow the subverb: knowledge edit decision DEC-405). The error names no cause. Separately, ASM --basis is a closed token set (observation, prior-art, ...) that the help text does not list."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
