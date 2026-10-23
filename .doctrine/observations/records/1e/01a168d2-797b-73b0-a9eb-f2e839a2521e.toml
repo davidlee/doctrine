@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a168d2-797b-73b0-a9eb-f2e839a2521e"
+recorded_at = "2026-10-23T12:53:06.55506874Z"
+kind = "friction"
+summary = "[design; SL-286] human section attestations with run-level acceptance also recorded design-accepted (ISS-512 recurrence)"
+detail = "One apply carrying nine att- declarations (reviewer human) plus acceptance basis 'sections ok. accept DEC-411.' recorded act cpa-design-accepted in reviewing, though the user had not accepted the design and RV-427 is still open. The lock stays blocked on review-disposed, so no early lock, but the run now carries a user act the user did not give."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
