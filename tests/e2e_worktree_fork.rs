@@ -538,52 +538,63 @@ fn fork_refused_under_worker_mode() {
 // "something was written" but "what was written equals what a fresh install on
 // the same inputs writes". Everything here drives the built binary; the fixtures
 // come from `common::installed_source` (two harnesses, detection-only) and
-// `common::fresh_inputs` (the fork's tracked inputs alone).
+// `common::fresh_inputs` (the fork's tracked inputs alone). The compared domains
+// are `common`'s too: `PROJECTION_DOMAIN` for the whole projection (EX-1),
+// `regenerated_domain()` for the regenerated tier alone (EX-4).
 // ---------------------------------------------------------------------------
 
-/// The projection domain EX-1 compares. Base backings are INCLUDED — install
-/// writes them, so the comparison also proves install is idempotent on the
-/// committed tree; the stamp (`.doctrine/doctrine.toml`) is the only exclusion,
-/// because install records it and regeneration does not (DEC-401).
-const PROJECTION_DOMAIN: &[&str] = &[
-    ".doctrine/skills",
-    ".doctrine/agents",
-    // No workflows: doctrine ships none (no `plugins/doctrine/workflows`, the
-    // manifest lists the root but nothing populates it), so both trees are
-    // legitimately empty and comparing it would only compare two absences.
-    ".doctrine/memory/shipped",
-    ".agents/skills",
-    ".claude/agents",
-    ".claude/skills",
-    ".codex",
-    "AGENTS.md",
-    "CLAUDE.md",
-    ".mcp.json",
-    ".gitignore",
-    ".doctrine/project-orientation.md",
-];
+/// The installed-source fixture: a real install ([`common::installed_source`]) plus
+/// a fork of its HEAD on `branch`, with the tempdir that owns both.
+///
+/// The second install is a PRECONDITION, not a probe: it must converge to the
+/// COMMITTED bytes, so the wiring the fork inherits is what `plan_wire` would
+/// write. A dirty tree here means the fork's regeneration refuses (`stale source
+/// wiring`) — STOP and report the paths; never relax this comparison.
+fn fork_installed_source(branch: &str) -> (tempfile::TempDir, PathBuf) {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = common::installed_source(&tmp.path().join("src"));
 
-/// Second generation compares the REGENERATED tier only: the base backings are
-/// the same commit in both trees, so including them would pad a claim about
-/// regeneration with bytes nobody regenerated.
-const REGENERATED_DOMAIN: &[&str] = &[
-    ".doctrine/skills",
-    ".agents/skills",
-    ".claude/agents",
-    ".claude/skills",
-    // `.claude/workflows` excluded for the same reason as EX-1's: none shipped.
-    ".codex",
-];
+    let again = common::install(&source);
+    assert!(
+        again.status.success(),
+        "second install must succeed: {}",
+        stderr(&again)
+    );
+    assert_eq!(
+        git(&source, &["status", "--porcelain"]),
+        "",
+        "STOP: install is not idempotent on the committed tree (SL-285 PHASE-03 \
+         EX-1), so the fork's regeneration would refuse stale tracked wiring"
+    );
 
-/// `doctrine install --yes -p <root>`, with NO `--agent`: an explicit agent is a
-/// directive that skips detection, and the whole point is that the harness set is
-/// derived from the tree's own committed bytes.
-fn install(root: &Path) -> Output {
-    common::doctrine_cmd(root)
-        .args(["install", "--yes", "-p"])
-        .arg(root)
-        .output()
-        .expect("spawn doctrine install")
+    let base = git(&source, &["rev-parse", "HEAD"]);
+    let fork = tmp.path().join("fork");
+    let out = run(
+        &source,
+        None,
+        &[
+            "worktree",
+            "fork",
+            "--base",
+            &base,
+            "--branch",
+            branch,
+            "--dir",
+            fork.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "fork from an installed source must succeed: {}",
+        stderr(&out)
+    );
+    assert!(
+        !stderr(&out).contains("stale source wiring"),
+        "STOP: the fork's regeneration refused tracked wiring (SL-285 PHASE-03 \
+         EX-1): {}",
+        stderr(&out)
+    );
+    (tmp, fork)
 }
 
 /// A tree's projection digest with every symlink re-expressed by its RESOLVED
@@ -680,58 +691,12 @@ fn assert_links_resolve(root: &Path, dirs: &[&str]) {
 /// install on the fork's OWN inputs projects — not what the source tree holds.
 #[test]
 fn fork_from_installed_source_projects_like_a_fresh_install() {
-    let tmp = tempfile::tempdir().unwrap();
-    let source = common::installed_source(&tmp.path().join("src"));
-
-    // R3 precondition: a second install must converge to the COMMITTED bytes, so
-    // the wiring the fork inherits is what `plan_wire` would write. A dirty tree
-    // here means the fork's regeneration refuses (`stale source wiring`) — STOP
-    // and report the paths; never relax this comparison.
-    let again = install(&source);
-    assert!(
-        again.status.success(),
-        "second install must succeed: {}",
-        stderr(&again)
-    );
-    assert_eq!(
-        git(&source, &["status", "--porcelain"]),
-        "",
-        "STOP (R3): install is not idempotent on the committed tree, so the fork's \
-         regeneration would refuse stale tracked wiring"
-    );
-
-    let base = git(&source, &["rev-parse", "HEAD"]);
-    let holder = tempfile::tempdir().unwrap();
-    let fork = holder.path().join("fork");
-    let out = run(
-        &source,
-        None,
-        &[
-            "worktree",
-            "fork",
-            "--base",
-            &base,
-            "--branch",
-            "proj",
-            "--dir",
-            fork.to_str().unwrap(),
-        ],
-    );
-    assert!(
-        out.status.success(),
-        "fork from an installed source must succeed: {}",
-        stderr(&out)
-    );
-    assert!(
-        !stderr(&out).contains("stale source wiring"),
-        "STOP (R3): the fork's regeneration refused tracked wiring: {}",
-        stderr(&out)
-    );
+    let (_tmp, fork) = fork_installed_source("proj");
 
     // The baseline: install on the fork's tracked inputs alone (no derived tier,
     // no copied allowlisted file — regeneration reads neither).
     let (_fresh_holder, fresh) = common::fresh_inputs(&fork);
-    let fresh_install = install(&fresh);
+    let fresh_install = common::install(&fresh);
     assert!(
         fresh_install.status.success(),
         "install on the fresh inputs must succeed: {}",
@@ -740,8 +705,8 @@ fn fork_from_installed_source_projects_like_a_fresh_install() {
 
     assert_links_resolve(&fork, &[".claude/skills", ".agents/skills"]);
 
-    let got = resolved_digest(&fork, PROJECTION_DOMAIN);
-    let want = resolved_digest(&fresh, PROJECTION_DOMAIN);
+    let got = resolved_digest(&fork, common::PROJECTION_DOMAIN);
+    let want = resolved_digest(&fresh, common::PROJECTION_DOMAIN);
 
     // Positive control, per member and per side: `digest_domain` records a missing
     // member as `absent`, so a `contains_key` on one member proves nothing and two
@@ -751,7 +716,7 @@ fn fork_from_installed_source_projects_like_a_fresh_install() {
     // (skills, agents, workflows, the memory corpus, the codex config, the two
     // harness files, the managed ignore block, the orientation doc) or a tracked
     // base backing install rewrites, and the source here is a real install.
-    for &rel in PROJECTION_DOMAIN {
+    for &rel in common::PROJECTION_DOMAIN {
         for (side, digest) in [("fork", &got), ("fresh install", &want)] {
             let value = digest.get(Path::new(rel));
             assert!(
@@ -804,31 +769,7 @@ fn fork_from_installed_source_projects_like_a_fresh_install() {
 /// dirs carry resolving entries, not merely that they exist.
 #[test]
 fn fork_from_installed_source_leaves_empty_porcelain_and_no_pi_skills() {
-    let tmp = tempfile::tempdir().unwrap();
-    let source = common::installed_source(&tmp.path().join("src"));
-    let base = git(&source, &["rev-parse", "HEAD"]);
-    let holder = tempfile::tempdir().unwrap();
-    let fork = holder.path().join("fork");
-
-    let out = run(
-        &source,
-        None,
-        &[
-            "worktree",
-            "fork",
-            "--base",
-            &base,
-            "--branch",
-            "clean",
-            "--dir",
-            fork.to_str().unwrap(),
-        ],
-    );
-    assert!(
-        out.status.success(),
-        "fork from an installed source must succeed: {}",
-        stderr(&out)
-    );
+    let (_tmp, fork) = fork_installed_source("clean");
 
     // Positive control: regeneration actually projected and linked the derived
     // tier — every entry resolves to a payload inside the fork.
@@ -851,30 +792,11 @@ fn fork_from_installed_source_leaves_empty_porcelain_and_no_pi_skills() {
 /// must not shed a link, a def or a baked hook.
 #[test]
 fn second_generation_fork_matches_the_first() {
-    let tmp = tempfile::tempdir().unwrap();
-    let source = common::installed_source(&tmp.path().join("src"));
-    let base = git(&source, &["rev-parse", "HEAD"]);
-    let holder = tempfile::tempdir().unwrap();
-    let first = holder.path().join("gen1");
-
-    let out = run(
-        &source,
-        None,
-        &[
-            "worktree",
-            "fork",
-            "--base",
-            &base,
-            "--branch",
-            "gen1",
-            "--dir",
-            first.to_str().unwrap(),
-        ],
-    );
-    assert!(out.status.success(), "first fork: {}", stderr(&out));
+    let (_tmp, first) = fork_installed_source("gen1");
 
     // Generation 2 forks FROM a linked worktree, not from the primary tree.
     let base2 = git(&first, &["rev-parse", "HEAD"]);
+    let holder = tempfile::tempdir().unwrap();
     let second = holder.path().join("gen2");
     let out = run(
         &first,
@@ -915,9 +837,10 @@ fn second_generation_fork_matches_the_first() {
 
     // Bytes, not names: same defs, same links (resolved in their own tree), same
     // baked hook command.
+    let domain = common::regenerated_domain();
     assert_eq!(
-        resolved_digest(&first, REGENERATED_DOMAIN),
-        resolved_digest(&second, REGENERATED_DOMAIN),
+        resolved_digest(&first, &domain),
+        resolved_digest(&second, &domain),
         "generation 2 must regenerate the SAME derived tier as generation 1"
     );
 }

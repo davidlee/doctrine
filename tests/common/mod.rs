@@ -346,7 +346,7 @@ pub(crate) fn digest_domain(
 ///
 /// Staged EXPLICITLY, never `git add -A`: a sweep would commit whatever a leg
 /// happened to write, `.codex/` above all — the shipped managed `.gitignore` block
-/// carries no entry for it (SL-285 PHASE-03 R4b).
+/// carries no entry for it (SL-285 PHASE-03).
 const INSTALL_TRACKED: &[&str] = &[
     ".gitignore",
     ".claude/settings.json",
@@ -356,6 +356,67 @@ const INSTALL_TRACKED: &[&str] = &[
     DOCTRINE_TOML,
     ".doctrine/project-orientation.md",
 ];
+
+/// The projection domain: every member `install` projects into a tree, and which a
+/// fork's `regenerate` must therefore reproduce (SL-285 PHASE-03 EX-1).
+///
+/// Derived members come first; the base backings — files install REWRITES from
+/// scratch rather than deriving — trail them. The split exists so a caller
+/// asserting about REGENERATION alone can take [`regenerated_domain`] and not pad
+/// the claim with bytes nobody regenerated. The stamp (`.doctrine/doctrine.toml`)
+/// is the one exclusion: install records it and regeneration does not (DEC-401).
+pub(crate) const PROJECTION_DOMAIN: &[&str] = &[
+    ".doctrine/skills",
+    ".doctrine/agents",
+    ".doctrine/memory/shipped",
+    ".agents/skills",
+    ".claude/agents",
+    ".claude/skills",
+    ".codex",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".mcp.json",
+    ".gitignore",
+    ".doctrine/project-orientation.md",
+];
+
+/// [`PROJECTION_DOMAIN`]'s base backings: identical in two trees at the same
+/// commit, so comparing them says nothing about regeneration.
+const BASE_BACKINGS: &[&str] = &[
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".mcp.json",
+    ".gitignore",
+    ".doctrine/project-orientation.md",
+];
+
+/// [`PROJECTION_DOMAIN`] minus [`BASE_BACKINGS`] — the regenerated tier alone.
+///
+/// The workflow roots are deliberately NOT members: doctrine ships no workflows
+/// (no `plugins/doctrine/workflows`; the manifest lists the root but nothing
+/// populates it), so both sides are legitimately empty and comparing them would
+/// only ever compare two absences.
+pub(crate) fn regenerated_domain() -> Vec<&'static str> {
+    PROJECTION_DOMAIN
+        .iter()
+        .copied()
+        .filter(|rel| !BASE_BACKINGS.contains(rel))
+        .collect()
+}
+
+/// `doctrine install --yes -p <root>` with NO `--agent`: an explicit agent is a
+/// directive that skips detection, and the fixtures' point is that the harness set
+/// is derived from the tree's own committed bytes.
+///
+/// Non-asserting, so the caller decides what a failed install means; this is the
+/// one install spawn, and [`install_into`] is the committing wrapper.
+pub(crate) fn install(root: &std::path::Path) -> std::process::Output {
+    doctrine_cmd(root)
+        .args(["install", "--yes", "-p"])
+        .arg(root)
+        .output()
+        .expect("spawn doctrine install")
+}
 
 /// Write `text` at `root/rel`, creating parents. Private: the plants below are
 /// this module's only writers, so the path is always a literal.
@@ -368,16 +429,16 @@ fn plant(root: &std::path::Path, rel: &str, text: &str) {
 
 /// Install `root` for real, then commit what the install wrote.
 ///
-/// Two harnesses, **detection only** (SL-285 PHASE-03 R3): `.claude/settings.json`
+/// Two harnesses, **detection only** (SL-285 PHASE-03): `.claude/settings.json`
 /// of `{}` makes `detect_harnesses` select claude, and a regular `AGENTS.md` —
 /// never a link onto `CLAUDE.md` — selects codex. No `--agent` is passed: an
 /// explicit agent is a directive that skips detection, and the point of the
 /// fixture is that `regenerate` re-derives the same set from these same committed
 /// bytes.
 ///
-/// `.gitignore` gains `/.codex` (appended, never clobbered) before the install (R4b): the managed block the
-/// install splices in has no such entry, and the codex config is regenerated, so
-/// it must never be tracked.
+/// `.gitignore` gains `/.codex` (appended, never clobbered) before the install: the
+/// managed block the install splices in has no such entry, and the codex config is
+/// regenerated, so it must never be tracked.
 pub(crate) fn install_into(root: &std::path::Path) {
     plant(root, ".claude/settings.json", "{}\n");
     plant(root, "AGENTS.md", "# Agents\n");
@@ -385,11 +446,7 @@ pub(crate) fn install_into(root: &std::path::Path) {
     let prior = std::fs::read_to_string(&ignore).unwrap_or_default();
     std::fs::write(&ignore, format!("{prior}/.codex\n")).expect("append /.codex ignore");
 
-    let out = doctrine_cmd(root)
-        .args(["install", "--yes", "-p"])
-        .arg(root)
-        .output()
-        .expect("spawn doctrine install");
+    let out = install(root);
     assert!(
         out.status.success(),
         "install in {} failed: {}",

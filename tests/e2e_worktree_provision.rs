@@ -1,4 +1,4 @@
-//! SL-029 PHASE-01 T8 — end-to-end over the built binary.
+//! SL-029 PHASE-01 — end-to-end over the built binary.
 //!
 //! Drives `doctrine worktree provision` / `check-allowlist` against a real temp
 //! git repo with a linked sibling worktree: an allowlisted gitignored file is
@@ -253,19 +253,20 @@ fn check_allowlist_exit_codes() {
     );
 }
 
-/// The derived runtime tier, relative to a fork: what `provision` REGENERATES
-/// from the source after the copy (design §3) — never what it copies.
-const DERIVED_TIER: &[&str] = &[
-    ".doctrine/skills",
-    ".doctrine/agents",
-    ".doctrine/workflows",
-    ".doctrine/memory/shipped",
-    ".agents/skills",
-    ".claude/skills",
-    ".claude/agents",
-    ".claude/workflows",
-    ".codex",
-];
+/// The workflow roots: doctrine ships no workflows (the manifest lists the root
+/// but nothing populates it), so they stay empty either side of a repair — kept in
+/// the domain regardless, so the convergence claim spans them.
+const WORKFLOW_ROOTS: &[&str] = &[".doctrine/workflows", ".claude/workflows"];
+
+/// What `provision` REGENERATES from the source after the copy (design §3) — never
+/// what it copies: the shared regenerated tier ([`common::regenerated_domain`])
+/// plus the workflow roots.
+fn derived_tier() -> Vec<&'static str> {
+    common::regenerated_domain()
+        .into_iter()
+        .chain(WORKFLOW_ROOTS.iter().copied())
+        .collect()
+}
 
 /// The stderr row whose verb is `verb` and whose remainder names `name` — the
 /// progress rows pad the verb to a fixed column (`install::row`), so a substring
@@ -296,6 +297,7 @@ fn provision_from_installed_source_twice_converges_and_keeps_a_user_file_under_a
     let source = common::installed_source(&tmp.path().join("src"));
     let fork = tmp.path().join("fork");
     add_worktree(&source, &fork);
+    let tier = derived_tier();
 
     // Run 1: the derived tier is materialised and linked in the fork.
     let first = provision(&source, &fork);
@@ -309,9 +311,9 @@ fn provision_from_installed_source_twice_converges_and_keeps_a_user_file_under_a
         row_naming(&first_stderr, "linked", "code-review").is_some(),
         "run 1 must link a skill from the default desired set; stderr: {first_stderr}"
     );
-    let before_plant = common::digest_domain(&fork, DERIVED_TIER);
+    let before_plant = common::digest_domain(&fork, &tier);
 
-    // R9: a plain user-owned FILE at a slot run 1 filled with a symlink.
+    // A plain user-owned FILE at a slot run 1 filled with a symlink.
     let slot = fork.join(".agents/skills/code-review");
     assert!(
         fs::symlink_metadata(&slot)
@@ -350,7 +352,7 @@ fn provision_from_installed_source_twice_converges_and_keeps_a_user_file_under_a
     );
 
     // The repair changed that one slot and nothing else in the tier.
-    let after_plant = common::digest_domain(&fork, DERIVED_TIER);
+    let after_plant = common::digest_domain(&fork, &tier);
     let changed: Vec<PathBuf> = after_plant
         .iter()
         .filter(|(path, digest)| before_plant.get(*path) != Some(*digest))
@@ -377,7 +379,7 @@ fn provision_from_installed_source_twice_converges_and_keeps_a_user_file_under_a
         "run 3 must keep the user file and say so; stderr: {third_stderr}"
     );
     assert_eq!(
-        common::digest_domain(&fork, DERIVED_TIER),
+        common::digest_domain(&fork, &tier),
         after_plant,
         "a third run converges: a kept slot is stable, not oscillating"
     );
