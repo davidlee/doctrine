@@ -19,3 +19,20 @@ Observed SL-285 (2026-10-23).
 - Negative controls are cheap to run yourself: neutralise the fix with a
   temporary `if false &&`/`if false { … } else { … }` (a plain deletion trips
   `unused`/`dead_code` deny and you get a compile error, not a red test).
+
+Calibration update, SL-285 PHASE-03 (2026-10-23), first use of the new profiles:
+
+- `review` (max): two adversarial passes (sheet, test diff) — every code
+  citation spot-checked true; found real vacuity (an "absent on both sides"
+  equality, a control that matched the copy leg's row). One finding was wrong
+  on the evidence (it assumed claude hooks land in settings.local.json) —
+  adjudicate, don't adopt.
+- `implement` (high): reliable at ≤ ~4 exact rulings per run; a 6-fix run hit
+  the 31-request ceiling mid-edit (edits kept; continue the `session` with
+  "finish X, ≤4 requests"). Continuing the sheet author's session for later
+  tasks is cheap (cached context) and keeps intent.
+- `write` (off): fine for mechanical sheet updates given verbatim text.
+- `read` (off): good recon (jail mounts, CLI shapes) in ~6 requests.
+- Delegates write green-first verification tests; the orchestrator must still
+  run negative controls (neutralise the behaviour, watch red) — delegates
+  predicted green and could not tell vacuous green from real green.

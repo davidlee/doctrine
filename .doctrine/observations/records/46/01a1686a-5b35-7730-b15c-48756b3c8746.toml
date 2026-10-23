@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1686a-5b35-7730-b15c-48756b3c8746"
+recorded_at = "2026-10-23T10:59:23.061391355Z"
+kind = "friction"
+summary = "[execute; SL-285] worktree land refuses tree-unclean on another agent's uncommitted files in the shared primary tree"
+detail = "Landing sl-285 onto edge: land-refused: tree-unclean. The only dirt is another agent's .doctrine/doctrine.toml + backlog-288.toml (handover: leave them). Merge is conflict-free (git merge-tree clean, disjoint paths). Multi-agent primary trees make a whole-tree cleanliness precondition block landing; a path-disjointness check would suffice."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
