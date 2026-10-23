@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 401
+slug = "regeneration-success-contract-no-marker"
+title = "Regeneration success contract, no marker"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Convergence keeps shadowing real files and foreign symlinks and skips changed entries while returning Ok (install.rs:3155, :3216). DEC-398 also wrote the local marker last as a success signal; DEC-400 drops the marker leg."
+choice = "Ownership exceptions convergence already tolerates are acceptable and disclosed as 'kept'; any I/O or bake error in a regeneration leg is failure. No marker is written; failure is signalled by creation rollback (DEC-397) or a non-zero repair exit."
+alternatives = ["Treat any kept/skipped entry as incomplete regeneration", "Write the local marker last as a success signal"]
+rationale = "Matches install's ownership model (SL-281) and respects user-owned harness entries; an explicit failure path needs no on-disk signal."
+consequences = ["Regeneration legs are fatal", " unlike install's non-fatal forward legs"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-398"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-285"

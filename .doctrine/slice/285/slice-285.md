@@ -31,10 +31,11 @@ skills, agent defs, or memory the governance assumes.
   the copy step, so it is self-sufficient and harness-independent (POL-003).
   The conflicted candidate arm copies only and discloses the repair command;
   `doctrine worktree provision <dir>` is the repair path (DEC-396).
-- Regenerated: shipped memory corpus, skills/agent defs/harness link dirs,
-  universal boot snapshot, local install marker (written last, on success).
-  Not: boot wiring, legacy starters, or the tracked version stamp (DEC-392,
-  DEC-398). Harness set resolved in the source tree (DEC-393).
+- Regenerated: install's forward legs — shipped memory corpus, harness config
+  and hooks (boot wiring), skills/agent defs/harness link dirs. Not: legacy
+  starters, the tracked version stamp, the local marker, or the boot snapshot
+  (session hooks regenerate it). A tracked-file change refuses (DEC-402,
+  DEC-401). Harness set resolved in the source tree (DEC-393).
 - Failure: creation compensates every resource it created — including the
   existing clean-candidate worktree leak; repair never deletes, discloses, and
   is re-runnable (DEC-397). Refuse a downgrade unless `--allow-downgrade`

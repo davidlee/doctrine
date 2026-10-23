@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 400
+slug = "fork-regeneration-legs-no-marker"
+title = "Fork regeneration legs, no marker"
+record_kind = "decision"
+status = "superseded"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "A provisioned worktree lacks the derived tier install projects (ISS-352). DEC-392 also regenerated the local install marker on the claim that status otherwise reports 'not installed'; read_install_marker (install.rs:3476) already falls back to the main worktree's marker for a linked worktree, falsifying that claim."
+choice = "Regenerate = MemorySync + Convergence (skills, agent defs, harness link dirs) + universal boot snapshot. Exclude BootWiring, LegacyStarters, the tracked doctrine.toml stamp, and the local install marker."
+alternatives = ["Run full doctrine install in the fork", "Also write the local install marker"]
+rationale = "BootWiring and the tracked stamp dirty tracked files. The marker needs a new marker-only writer, nothing reads it as a completion signal, and linked worktrees already read main's marker."
+consequences = ["Fork tree stays clean against its born frame", "boot snapshot no longer depends on a harness session hook", "status in a fork reports main's install version"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-392"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = ["DEC-402"]   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-285"

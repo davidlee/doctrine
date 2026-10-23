@@ -16,7 +16,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/install.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install_ownership.rs"
@@ -24,7 +24,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "install/manifest.toml"
@@ -32,7 +32,39 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "plugins/doctrine/skills/worktree/SKILL.md"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/provision.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/fork.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/allowlist.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_worktree_fork.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_worktree_provision.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/common/mod.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"
