@@ -85,14 +85,12 @@ pub(crate) const CODEX_CONFIG_FILE: &str = "config.toml";
 /// distinct user-facing remedy, so the planner never has to re-derive the cause
 /// from a path that happens to be unusable.
 ///
-/// `expect` rather than the `cfg_attr(not(test), …)` form: the variants arrive
-/// with the planners that construct them (PHASE-04), so several are unbuilt in
-/// *every* build until then. The expectation is a tripwire — it must go once the
-/// last variant has a constructor.
-#[expect(
-    dead_code,
-    reason = "variants arrive with their constructing planner in SL-286 PHASE-04"
-)]
+/// `expect` — not the `cfg_attr(not(test), …)` form — while some variant still
+/// lacks a constructor in the test build: `NoCodexCli` is built by the planner
+/// (PHASE-04), so the expectation is fulfilled there and in the non-test build
+/// alike. It must become the `cfg_attr` form (or go) the moment the last variant
+/// has a constructor.
+#[expect(dead_code, reason = "wired in SL-286 PHASE-04")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Degraded {
     /// `$CODEX_HOME` is set but empty, relative, or names nothing on disk.
@@ -121,7 +119,11 @@ pub(crate) enum Degraded {
 pub(crate) struct CodexEnv {
     /// `$CODEX_HOME` as set — `None` means unset (empty is a distinct, bad value).
     pub(crate) codex_home: Option<std::ffi::OsString>,
-    /// The shell's probe of that path: codex only honours an existing directory.
+    /// The shell's probe of that path: doctrine only honours an entry that names
+    /// an existing directory. Codex's own handling of a missing or relative
+    /// `$CODEX_HOME` is unprobed (design RV-427 `F-9`), so doctrine refuses to
+    /// guess rather than falling back to `$HOME` and writing where codex will not
+    /// read.
     pub(crate) codex_home_exists: bool,
     /// `$HOME` — the fallback anchor for the user config file.
     pub(crate) home: Option<PathBuf>,
@@ -180,6 +182,139 @@ pub(crate) fn bake(facts: &BakeFacts) -> Result<PathBuf, Degraded> {
     match (&facts.path_doctrine, &facts.path_doctrine_canonical) {
         (Some(path_doctrine), Some(canonical)) if canonical == exec => Ok(path_doctrine.clone()),
         _ => Err(Degraded::ExecNotOnPath),
+    }
+}
+
+/// A config file as the shell read it. Three states, not `Option<&str>`: "absent"
+/// (create the file) and "unreadable" (refuse, and say why) are different
+/// answers, and collapsing them would let a permission error look like a fresh
+/// install — the defect ISS-495 records on the Claude read.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FileRead<'a> {
+    Absent,
+    Unreadable,
+    Text(&'a str),
+}
+
+/// The user's `[mcp_servers.doctrine]` entry against the entry doctrine would
+/// write. `Replace` carries what the planner cannot derive once the table is
+/// gone: the old invocation, as the report shows it, and every key being dropped
+/// — the consent text has to name what the user loses.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum UserEntry {
+    /// No entry to overwrite.
+    Add,
+    /// Already exactly the canonical entry — nothing to write.
+    Current,
+    Replace {
+        /// The existing entry's own invocation: command then args, single-spaced.
+        old: String,
+        /// Every key the write removes, in file order.
+        dropped: Vec<String>,
+    },
+}
+
+/// Classify the user's `[mcp_servers.doctrine]` entry: absent → [`UserEntry::Add`],
+/// already ours — command and serve args as baked, `enabled` not `false` →
+/// [`UserEntry::Current`] (nothing is written, so nothing is dropped), a stdio
+/// entry doctrine can interpret → [`UserEntry::Replace`]. `bake` is the path the
+/// entry *should* carry ([`bake`]), so an entry pointing anywhere else is ours to
+/// replace. Everything the classifier cannot interpret — a url transport, a
+/// non-string `command`, `args` that are not an array of strings — is
+/// `UserMalformed`: guessing would mean overwriting a server doctrine does not
+/// understand. Every other key survives a `Current` and is named in `dropped`
+/// when replacing.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn classify_user(read: FileRead<'_>, bake: &Path) -> Result<UserEntry, Degraded> {
+    let text = match read {
+        FileRead::Absent => return Ok(UserEntry::Add),
+        FileRead::Unreadable => return Err(Degraded::UserUnreadable),
+        FileRead::Text(text) => text,
+    };
+    let doc: toml_edit::DocumentMut = match text.parse() {
+        Ok(doc) => doc,
+        Err(_) => return Err(Degraded::UserUnparseable),
+    };
+    let Some(servers) = doc.get(CODEX_MCP_TABLE) else {
+        return Ok(UserEntry::Add);
+    };
+    let Some(servers) = servers.as_table_like() else {
+        return Err(Degraded::UserMalformed);
+    };
+    let Some(entry) = servers.get(CODEX_MCP_SERVER_KEY) else {
+        return Ok(UserEntry::Add);
+    };
+    let Some(table) = entry.as_table_like() else {
+        return Err(Degraded::UserMalformed);
+    };
+    let Some(command) = table.get("command").and_then(|i| i.as_str()) else {
+        return Err(Degraded::UserMalformed);
+    };
+    // A url transport is a server doctrine cannot own — never silently replaced.
+    if table.get("url").is_some() {
+        return Err(Degraded::UserMalformed);
+    }
+    let Some(args) = string_args(table) else {
+        return Err(Degraded::UserMalformed);
+    };
+    // `enabled` is the one key that can veto: codex honours a disabled server,
+    // so a matching entry that is switched off is not the entry we want.
+    let enabled_off = table.get("enabled").and_then(toml_edit::Item::as_bool) == Some(false);
+    if !enabled_off && Path::new(command) == bake && args_are_serve(&args) {
+        return Ok(UserEntry::Current);
+    }
+    let dropped: Vec<String> = table
+        .iter()
+        .filter(|(key, _)| !matches!(*key, "command" | "args"))
+        .flat_map(|(key, item)| render_dropped(key, item))
+        .collect();
+    Ok(UserEntry::Replace {
+        old: invocation(command, &args),
+        dropped,
+    })
+}
+
+/// The entry's `args` as strings, or `None` when `args` is absent or holds a
+/// non-string.
+fn string_args(table: &dyn toml_edit::TableLike) -> Option<Vec<String>> {
+    table
+        .get("args")
+        .and_then(|i| i.as_array())
+        .and_then(|a| a.iter().map(|v| v.as_str().map(String::from)).collect())
+}
+
+/// Whether `args` is exactly the serve invocation — derived from
+/// [`CODEX_MCP_SERVE_ARGS`], never a second literal.
+fn args_are_serve(args: &[String]) -> bool {
+    args.iter()
+        .map(String::as_str)
+        .eq(CODEX_MCP_SERVE_ARGS.split_whitespace())
+}
+
+/// The entry's own invocation, as the report shows it: command then args,
+/// single-spaced.
+fn invocation(command: &str, args: &[String]) -> String {
+    std::iter::once(command)
+        .chain(args.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// How one key about to be dropped is named in the report. A value keeps its
+/// TOML spelling (`enabled = false`); a sub-table lists its keys (`env.FOO`),
+/// because a nested value's spelling is not what the user is being asked about.
+fn render_dropped(key: &str, item: &toml_edit::Item) -> Vec<String> {
+    if let Some(table) = item.as_table_like() {
+        return table
+            .iter()
+            .map(|(sub, _)| format!("{key}.{sub}"))
+            .collect();
+    }
+    match item.as_value() {
+        Some(value) => vec![format!("{key} = {}", value.to_string().trim())],
+        None => vec![key.to_string()],
     }
 }
 
@@ -380,5 +515,167 @@ mod tests {
     fn bake_exec_unresolved_when_the_running_binary_is_unknown() {
         let facts = bake_facts(None, Some("/bin/doctrine"), Some("/bin/doctrine"));
         assert_eq!(bake(&facts), Err(Degraded::ExecUnresolved));
+    }
+
+    // --- classify_user (the user's [mcp_servers.doctrine] entry) ---
+
+    const BAKE: &str = "/usr/local/bin/doctrine";
+
+    fn classify(text: &str) -> Result<UserEntry, Degraded> {
+        classify_user(FileRead::Text(text), Path::new(BAKE))
+    }
+
+    #[test]
+    fn classify_user_add_when_the_file_is_absent() {
+        assert_eq!(
+            classify_user(FileRead::Absent, Path::new(BAKE)),
+            Ok(UserEntry::Add)
+        );
+    }
+
+    #[test]
+    fn classify_user_add_when_mcp_servers_is_missing() {
+        assert_eq!(classify("model = \"gpt-5\"\n"), Ok(UserEntry::Add));
+    }
+
+    #[test]
+    fn classify_user_add_when_the_doctrine_entry_is_missing() {
+        assert_eq!(
+            classify("[mcp_servers.other]\ncommand = \"x\"\n"),
+            Ok(UserEntry::Add)
+        );
+    }
+
+    #[test]
+    fn classify_user_current_when_command_and_args_match() {
+        let text = format!(
+            "[mcp_servers.doctrine]\ncommand = \"{BAKE}\"\nargs = [\"serve\", \"--mcp\"]\n"
+        );
+        assert_eq!(classify(&text), Ok(UserEntry::Current));
+    }
+
+    #[test]
+    fn classify_user_current_with_enabled_true() {
+        let text = format!(
+            "[mcp_servers.doctrine]\ncommand = \"{BAKE}\"\nargs = [\"serve\", \"--mcp\"]\nenabled = true\n"
+        );
+        assert_eq!(
+            classify(&text),
+            Ok(UserEntry::Current),
+            "a `true` flag changes nothing codex runs, so there is nothing to write"
+        );
+    }
+
+    #[test]
+    fn classify_user_current_with_a_nested_env_table() {
+        let text = format!(
+            "[mcp_servers.doctrine]\ncommand = \"{BAKE}\"\nargs = [\"serve\", \"--mcp\"]\n\n[mcp_servers.doctrine.env]\nFOO = \"x\"\n"
+        );
+        assert_eq!(
+            classify(&text),
+            Ok(UserEntry::Current),
+            "extra keys do not stop a Current — nothing is written, so nothing is lost"
+        );
+    }
+
+    #[test]
+    fn classify_user_replace_when_disabled() {
+        let text = format!(
+            "[mcp_servers.doctrine]\ncommand = \"{BAKE}\"\nargs = [\"serve\", \"--mcp\"]\nenabled = false\n"
+        );
+        assert_eq!(
+            classify(&text),
+            Ok(UserEntry::Replace {
+                old: format!("{BAKE} serve --mcp"),
+                dropped: vec!["enabled = false".to_string()],
+            }),
+            "a disabled matching entry is still replaced — the write is what enables it"
+        );
+    }
+
+    #[test]
+    fn classify_user_replace_when_the_command_differs() {
+        let text = "[mcp_servers.doctrine]\ncommand = \"/old/bin/doctrine\"\nargs = [\"serve\", \"--mcp\"]\n";
+        assert_eq!(
+            classify(text),
+            Ok(UserEntry::Replace {
+                old: "/old/bin/doctrine serve --mcp".to_string(),
+                dropped: vec![],
+            })
+        );
+    }
+
+    #[test]
+    fn classify_user_replace_drops_enabled_false_and_nested_env() {
+        let text = format!(
+            "[mcp_servers.doctrine]\ncommand = \"{BAKE}\"\nargs = [\"serve\", \"--mcp\"]\nenabled = false\n\n[mcp_servers.doctrine.env]\nFOO = \"x\"\n"
+        );
+        assert_eq!(
+            classify(&text),
+            Ok(UserEntry::Replace {
+                old: format!("{BAKE} serve --mcp"),
+                dropped: vec!["enabled = false".to_string(), "env.FOO".to_string()],
+            }),
+            "the report names exactly what the user loses"
+        );
+    }
+
+    #[test]
+    fn classify_user_malformed_for_a_url_transport() {
+        let with_command = format!(
+            "[mcp_servers.doctrine]\ncommand = \"{BAKE}\"\nargs = [\"serve\", \"--mcp\"]\nurl = \"https://example.test/mcp\"\n"
+        );
+        assert_eq!(classify(&with_command), Err(Degraded::UserMalformed));
+        assert_eq!(
+            classify("[mcp_servers.doctrine]\nurl = \"https://example.test/mcp\"\n"),
+            Err(Degraded::UserMalformed),
+            "a url entry is not a stdio server doctrine can own"
+        );
+    }
+
+    #[test]
+    fn classify_user_malformed_when_command_is_not_a_string() {
+        assert_eq!(
+            classify("[mcp_servers.doctrine]\ncommand = 3\nargs = [\"serve\"]\n"),
+            Err(Degraded::UserMalformed)
+        );
+    }
+
+    #[test]
+    fn classify_user_malformed_when_args_are_not_strings() {
+        let base = format!("[mcp_servers.doctrine]\ncommand = \"{BAKE}\"\n");
+        assert_eq!(
+            classify(&format!("{base}args = [\"serve\", 3]\n")),
+            Err(Degraded::UserMalformed)
+        );
+        assert_eq!(
+            classify(&format!("{base}args = \"serve --mcp\"\n")),
+            Err(Degraded::UserMalformed),
+            "a bare string is not the array codex expects"
+        );
+        assert_eq!(classify(&base), Err(Degraded::UserMalformed), "args absent");
+    }
+
+    #[test]
+    fn classify_user_malformed_when_mcp_servers_is_not_a_table() {
+        assert_eq!(classify("mcp_servers = 3\n"), Err(Degraded::UserMalformed));
+        assert_eq!(
+            classify("[mcp_servers]\ndoctrine = 3\n"),
+            Err(Degraded::UserMalformed),
+            "the entry itself is not table-like"
+        );
+    }
+
+    #[test]
+    fn classify_user_unparseable_when_the_text_is_not_toml() {
+        assert_eq!(classify("not = [toml\n"), Err(Degraded::UserUnparseable));
+    }
+
+    #[test]
+    fn classify_user_unreadable_when_the_read_failed() {
+        assert_eq!(
+            classify_user(FileRead::Unreadable, Path::new(BAKE)),
+            Err(Degraded::UserUnreadable)
+        );
     }
 }
