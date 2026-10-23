@@ -86,6 +86,8 @@ exit_criteria = [
   { id = "EX-5", text = "PathShadow / Malformed / Unreadable project entry: no writes, Refused (holds install incomplete). Override never blocks the user write and is reported." },
   { id = "EX-6", text = "Every user write is followed by the daemon-restart hint." },
   { id = "EX-7", text = "A symlinked .codex/config.toml keeps its link after the wrapper removal (RV-427 F-7); the fsutil change is covered at fsutil level." },
+  { id = "EX-8", text = "execute returns codex_mcp's own outcome type (Done(touched) / Refused(reason)); install maps it to LegOutcome in PHASE-04. codex_mcp never names install's private LegOutcome (that import would create an install↔codex_mcp cycle)." },
+  { id = "EX-9", text = "execute writes its progress to a caller-supplied writer, not io::stdout() (precedent: SL-285 PHASE-01 EX-7)." },
 ]
 verification = [
   { id = "VT-1", expects = "unit execute with a fake CodexCli: consented, add fails, removal fails, declined, degraded, project refusal, current", test_file = "src/codex_mcp.rs", keywords = ["trait CodexCli", "fn execute(", "FakeCodex", "rerun install"], waived = false },
@@ -107,7 +109,8 @@ exit_criteria = [
   { id = "EX-3", text = "Consent is asked only when the plan proposes a change, after Proceed? and before any leg runs; default No; -y consents without asking; --dry-run of install and boot install shows the consent content, never asks and never runs the leg (RV-427 F-12)." },
   { id = "EX-4", text = "Leg::CodexUserMcp is named 'codex user MCP' in incomplete_line; a Refused leg withholds the version stamp, Done (incl. degraded) does not." },
   { id = "EX-5", text = "boot.rs no longer contains install_codex_mcp, plan_codex_mcp, codex_mcp_entry or codex_mcp_fallback_snippet; RefreshReport.mcp is NotApplicable for codex; codex hooks behaviour unchanged." },
-  { id = "EX-6", text = "install::regenerate and worktree provisioning never build or run the leg (DEC-411)." },
+  { id = "EX-6", text = "install::regenerate and worktree provisioning never build or run the leg (DEC-411). This holds by construction: regenerate reaches codex MCP today only through the boot-wiring leg → install_refresh, which no longer touches MCP; the new leg is added in run_forward_steps, never inside wire_boot_leg / sync_memory_leg / converge_leg (the legs regenerate composes)." },
+  { id = "EX-9", text = "Both consent questions reuse install::prompt_confirm (the helper boot install's 'Wire doctrine boot …? [y/N]' already uses); no new prompt helper." },
   { id = "EX-7", text = "Existing suites that asserted the project wrapper write (e2e_codex_install, e2e_install_flow) are updated to the new behaviour; the codex --yes flow in e2e_install_flow asserts the degraded line under the safe CODEX_HOME. Hook assertions are kept." },
   { id = "EX-8", text = "architecture_layering passes with the command tangle baseline unchanged." },
 ]

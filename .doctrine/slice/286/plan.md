@@ -40,6 +40,11 @@ PHASE-02 codex_mcp pure plan ─▶ PHASE-03 execute shell ─▶ PHASE-04 wire 
   so no commit leaves codex with both or neither registration path. Existing
   suites that asserted the project wrapper are updated there to keep the phase
   green; PHASE-05 adds the new binary-driven coverage.
+- **Consent reuses `install::prompt_confirm`**, and the leg sits in
+  `run_forward_steps` rather than inside a leg `install::regenerate` composes,
+  so DEC-411 (explicit install only) holds by construction.
+- **`codex_mcp` returns its own outcome type**; install maps it to its private
+  `LegOutcome`, keeping the dependency one-way.
 - **VH last.** The interactive-codex check (EVD-032 recurrence) and ASM-014 need
   the installed binary and a real daemon.
 
