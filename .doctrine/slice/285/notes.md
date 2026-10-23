@@ -48,6 +48,7 @@ reconciliation"):
   materialise). User confirmed 2026-10-23 (QUE-229 answered: keep); integrate into sec-4 and sec-6.
 - **Provisioning progress reaches `out` for the boot-wiring leg too**
   (`boot::apply_wire_into`); PHASE-01 left it on stdout (PHASE-02 review F1).
+- **Clean-fork fixture ignores `/.codex` itself** (user ruling 2026-10-23, PHASE-03 R4 (b)): the shipped managed `.gitignore` block lacks `.codex/` (and `.doctrine/slice/*/research/`) for new projects — ISS-531, tagged `next`, out of SL-285 scope. EX-2 is proven relative to a clean source.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
