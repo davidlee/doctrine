@@ -2300,6 +2300,80 @@ fn e2e_dispatch_candidate_create_provisions_gitignored_embed_assets() {
     );
 }
 
+/// SL-285 PHASE-03 EX-7 / VT: the `--worktree` create still prints exactly two
+/// machine lines (ref, path) when the source is an installed tree whose derived
+/// tier is regenerated into the candidate worktree.
+///
+/// The two-line assertion alone would pass on silence, so it is bracketed by the
+/// R5 controls: the install is COMMITTED (an untracked stamp leaves `regenerate`
+/// on its uninstalled-source skip), the create emits a provisioning row, and the
+/// codex link dir is populated in the worktree.
+#[test]
+fn candidate_create_from_installed_source_prints_two_lines() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    common::install_into(dir);
+    prepare_review(dir);
+
+    // Control (source side): HEAD's tree carries the stamp, so the candidate
+    // worktree is a checkout of a real install and regeneration has work to do.
+    let stamp = git(dir, &["show", "HEAD:.doctrine/doctrine.toml"]);
+    assert!(
+        stamp.contains("installed-version"),
+        "control: HEAD must track the install stamp, got: {stamp}"
+    );
+
+    let out = create(
+        dir,
+        None,
+        &[
+            "--role",
+            "review_surface",
+            "--payload",
+            "impl_bundle",
+            "--base",
+            "refs/heads/main",
+            "--label",
+            "installed-001",
+            "--worktree",
+        ],
+    );
+    assert!(out.status.success(), "create failed: {}", stderr(&out));
+
+    // Control (worktree side): the copier ran, so a no-op regeneration cannot
+    // pass the two-line assertion by printing nothing.
+    assert!(
+        stderr(&out).contains("provisioned "),
+        "control: no provisioning row on stderr: {}",
+        stderr(&out)
+    );
+
+    // Stdout: line 1 = target ref, line 2 = worktree path.
+    let out_stdout = stdout(&out);
+    let lines: Vec<&str> = out_stdout.lines().collect();
+    assert_eq!(
+        lines.len(),
+        2,
+        "expected two stdout lines, got: {out_stdout}"
+    );
+    let wt_path = std::path::PathBuf::from(lines[1]);
+    assert!(
+        wt_path.exists(),
+        "worktree path should exist: {}",
+        wt_path.display()
+    );
+
+    assert!(
+        std::fs::read_dir(wt_path.join(".agents/skills"))
+            .expect("regenerated .agents/skills in the candidate worktree")
+            .next()
+            .is_some(),
+        "control: the codex link dir is populated in {}",
+        wt_path.display()
+    );
+}
+
 // SL-285 PHASE-02 EX-2/EX-3 / RV-425 F-6: the CLEAN arm's provision refuses a stamp
 // newer than the running binary; nothing durable survives — the ref is rolled back
 // and, per Q4, the half-created candidate worktree is removed too.

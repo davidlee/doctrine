@@ -286,3 +286,147 @@ pub(crate) fn tree_digest(
     walk(dir, dir, &mut acc);
     acc
 }
+
+/// [`tree_digest`] restricted to `domain`, with a missing entry recorded as
+/// `absent` rather than dropped.
+///
+/// `tree_digest` `read_dir`-unwraps a directory, so it cannot express a plain
+/// file (`AGENTS.md`, `.gitignore`, `.mcp.json`) and panics on a directory a leg
+/// may not have written yet. A projection comparison must cover both, and must
+/// distinguish "missing in both" from "equal" — an entry that is absent in both
+/// trees is recorded `absent`, not omitted, so two trees that never ran a
+/// projection cannot pass as agreeing (SL-285 PHASE-03 R2).
+pub(crate) fn digest_domain(
+    root: &std::path::Path,
+    domain: &[&str],
+) -> std::collections::BTreeMap<std::path::PathBuf, String> {
+    let whole = tree_digest(root);
+    let mut acc = std::collections::BTreeMap::new();
+    for rel in domain {
+        let prefix = std::path::Path::new(*rel);
+        if std::fs::symlink_metadata(root.join(*rel)).is_err() {
+            acc.insert(prefix.to_path_buf(), "absent".to_string());
+            continue;
+        }
+        acc.extend(
+            whole
+                .iter()
+                .filter(|(path, _)| path.starts_with(prefix))
+                .map(|(path, digest)| (path.clone(), digest.clone())),
+        );
+    }
+    acc
+}
+
+// ---------------------------------------------------------------------------
+// installed-source fixtures (SL-285 PHASE-03: projection fidelity)
+//
+// A fork regenerates the derived tier from the SOURCE's tracked inputs, so a
+// fixture standing one up must be a real install: a tracked `installed-version`,
+// both harnesses derivable from COMMITTED bytes, and every install output
+// committed — the fork is a checkout of HEAD, so an uncommitted install would
+// leave the fork un-installed and every assertion vacuously true.
+// ---------------------------------------------------------------------------
+
+/// The tracked files an install writes or rewrites, relative to the project root.
+///
+/// Staged EXPLICITLY, never `git add -A`: a sweep would commit whatever a leg
+/// happened to write, `.codex/` above all — the shipped managed `.gitignore` block
+/// carries no entry for it (SL-285 PHASE-03 R4b).
+const INSTALL_TRACKED: &[&str] = &[
+    ".gitignore",
+    ".claude/settings.json",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".mcp.json",
+    DOCTRINE_TOML,
+    ".doctrine/project-orientation.md",
+];
+
+/// Write `text` at `root/rel`, creating parents. Private: the plants below are
+/// this module's only writers, so the path is always a literal.
+fn plant(root: &std::path::Path, rel: &str, text: &str) {
+    let path = root.join(rel);
+    std::fs::create_dir_all(path.parent().expect("planted path has a parent"))
+        .expect("create planted dir");
+    std::fs::write(&path, text).expect("plant file");
+}
+
+/// Install `root` for real, then commit what the install wrote.
+///
+/// Two harnesses, **detection only** (SL-285 PHASE-03 R3): `.claude/settings.json`
+/// of `{}` makes `detect_harnesses` select claude, and a regular `AGENTS.md` —
+/// never a link onto `CLAUDE.md` — selects codex. No `--agent` is passed: an
+/// explicit agent is a directive that skips detection, and the point of the
+/// fixture is that `regenerate` re-derives the same set from these same committed
+/// bytes.
+///
+/// `.gitignore` gains `/.codex` (appended, never clobbered) before the install (R4b): the managed block the
+/// install splices in has no such entry, and the codex config is regenerated, so
+/// it must never be tracked.
+pub(crate) fn install_into(root: &std::path::Path) {
+    plant(root, ".claude/settings.json", "{}\n");
+    plant(root, "AGENTS.md", "# Agents\n");
+    let ignore = root.join(".gitignore");
+    let prior = std::fs::read_to_string(&ignore).unwrap_or_default();
+    std::fs::write(&ignore, format!("{prior}/.codex\n")).expect("append /.codex ignore");
+
+    let out = doctrine_cmd(root)
+        .args(["install", "--yes", "-p"])
+        .arg(root)
+        .output()
+        .expect("spawn doctrine install");
+    assert!(
+        out.status.success(),
+        "install in {} failed: {}",
+        root.display(),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let mut add = vec!["add", "--"];
+    add.extend(
+        INSTALL_TRACKED
+            .iter()
+            .copied()
+            .filter(|rel| root.join(*rel).exists()),
+    );
+    git(root, &add);
+    git(root, &["commit", "-q", "-m", "installed"]);
+}
+
+/// A repo carrying a committed install — the SOURCE a fork is provisioned from.
+///
+/// Returns the canonical root, as `root::find` and `regenerate` will see it.
+/// Proves the fork inherits a tracked `installed-version`, so regeneration runs
+/// its legs instead of taking the uninstalled-source skip.
+pub(crate) fn installed_source(dir: &std::path::Path) -> std::path::PathBuf {
+    init_repo(dir);
+    install_into(dir);
+    std::fs::canonicalize(dir).expect("canonicalize installed source")
+}
+
+/// A detached worktree of `src`'s HEAD: the fork's **tracked** inputs and nothing
+/// else — no derived tier, no copied allowlisted file.
+///
+/// This is the projection-fidelity baseline (PHASE-03 EX-1): an `install` here
+/// starts from the same inputs `regenerate` saw inside the fork, so the two
+/// projections must agree. A real `.git` is required — install reads tracked
+/// paths — and a detached worktree is how git produces that tree exactly. The
+/// caller removes the worktree; the returned `TempDir` owns the directory.
+pub(crate) fn fresh_inputs(src: &std::path::Path) -> (tempfile::TempDir, std::path::PathBuf) {
+    let holder = tempfile::tempdir().expect("tempdir for fresh inputs");
+    let dest = holder.path().join("fresh");
+    let head = git(src, &["rev-parse", "HEAD"]);
+    git(
+        src,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            dest.to_str().expect("utf8 fresh path"),
+            &head,
+        ],
+    );
+    (holder, dest)
+}

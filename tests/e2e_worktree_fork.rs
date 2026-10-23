@@ -530,3 +530,344 @@ fn fork_refused_under_worker_mode() {
     );
     assert!(!target.exists(), "refused fork creates nothing");
 }
+
+// ---------------------------------------------------------------------------
+// SL-285 PHASE-03 — projection fidelity from an INSTALLED source
+//
+// `fork` composes the copy with `install::regenerate`, so the property is not
+// "something was written" but "what was written equals what a fresh install on
+// the same inputs writes". Everything here drives the built binary; the fixtures
+// come from `common::installed_source` (two harnesses, detection-only) and
+// `common::fresh_inputs` (the fork's tracked inputs alone).
+// ---------------------------------------------------------------------------
+
+/// The projection domain EX-1 compares. Base backings are INCLUDED — install
+/// writes them, so the comparison also proves install is idempotent on the
+/// committed tree; the stamp (`.doctrine/doctrine.toml`) is the only exclusion,
+/// because install records it and regeneration does not (DEC-401).
+const PROJECTION_DOMAIN: &[&str] = &[
+    ".doctrine/skills",
+    ".doctrine/agents",
+    ".doctrine/workflows",
+    ".doctrine/memory/shipped",
+    ".agents/skills",
+    ".claude/agents",
+    ".claude/skills",
+    ".claude/workflows",
+    ".codex",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".mcp.json",
+    ".gitignore",
+    ".doctrine/project-orientation.md",
+];
+
+/// Second generation compares the REGENERATED tier only: the base backings are
+/// the same commit in both trees, so including them would pad a claim about
+/// regeneration with bytes nobody regenerated.
+const REGENERATED_DOMAIN: &[&str] = &[
+    ".doctrine/skills",
+    ".agents/skills",
+    ".claude/agents",
+    ".claude/skills",
+    ".claude/workflows",
+    ".codex",
+];
+
+/// `doctrine install --yes -p <root>`, with NO `--agent`: an explicit agent is a
+/// directive that skips detection, and the whole point is that the harness set is
+/// derived from the tree's own committed bytes.
+fn install(root: &Path) -> Output {
+    common::doctrine_cmd(root)
+        .args(["install", "--yes", "-p"])
+        .arg(root)
+        .output()
+        .expect("spawn doctrine install")
+}
+
+/// A tree's projection digest with every symlink re-expressed by its RESOLVED
+/// target, relative to that tree's own root.
+///
+/// `common::tree_digest` records symlinks UNFOLLOWED as `link:<value>`, so a raw
+/// comparison would flag a difference that is only the two trees' roots whenever a
+/// link carries an absolute target. Resolving each link and stripping its own root
+/// makes `link:.doctrine/skills/code-review` mean the same thing in both trees, and
+/// a dangling link fails here by name instead of passing as a byte difference.
+fn resolved_digest(root: &Path, domain: &[&str]) -> std::collections::BTreeMap<PathBuf, String> {
+    let root = std::fs::canonicalize(root).expect("canonicalize digest root");
+    common::digest_domain(&root, domain)
+        .into_iter()
+        .map(|(rel, digest)| {
+            let Some(target) = digest.strip_prefix("link:") else {
+                return (rel, digest);
+            };
+            let link = root.join(&rel);
+            let canonical = std::fs::canonicalize(&link);
+            assert!(
+                canonical.is_ok(),
+                "harness link {} -> {target} must resolve (clippy::panic is denied \
+                 workspace-wide, so a failure is an assertion, not a panic)",
+                link.display()
+            );
+            let resolved = canonical.expect("checked: the link resolves");
+            let stripped = resolved.strip_prefix(&root);
+            assert!(
+                stripped.is_ok(),
+                "harness link {} must resolve inside its own tree, got {}",
+                link.display(),
+                resolved.display()
+            );
+            let own = stripped.expect("checked: inside its own tree");
+            (rel, format!("link:{}", own.display()))
+        })
+        .collect()
+}
+
+/// Every entry of each harness link dir resolves to a REAL payload inside its own
+/// tree — a symlink onto a directory must carry a `SKILL.md`, which is what makes
+/// the projected skill readable rather than a dangling name.
+fn assert_links_resolve(root: &Path, dirs: &[&str]) {
+    let root = std::fs::canonicalize(root).expect("canonicalize link root");
+    let mut seen = 0usize;
+    for dir in dirs {
+        let d = root.join(dir);
+        if !d.exists() {
+            continue;
+        }
+        for entry in std::fs::read_dir(&d).expect("read link dir") {
+            let path = entry.expect("link dir entry").path();
+            let canonical = std::fs::canonicalize(&path);
+            assert!(
+                canonical.is_ok(),
+                "{} must resolve — a dangling link projects a name, not a payload",
+                path.display()
+            );
+            let resolved = canonical.expect("checked: the link resolves");
+            assert!(
+                resolved.starts_with(&root),
+                "{} must resolve inside its own tree, got {}",
+                path.display(),
+                resolved.display()
+            );
+            assert!(
+                resolved.is_file() || resolved.join("SKILL.md").is_file(),
+                "{} must resolve to a real payload (a file, or a dir carrying SKILL.md), got {}",
+                path.display(),
+                resolved.display()
+            );
+            seen += 1;
+        }
+    }
+    assert!(seen > 0, "positive control: {dirs:?} carried link entries");
+}
+
+/// SL-285 PHASE-03 EX-1 / VT-1: a fork of an installed source projects what an
+/// install on the fork's OWN inputs projects — not what the source tree holds.
+#[test]
+fn fork_from_installed_source_projects_like_a_fresh_install() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = common::installed_source(&tmp.path().join("src"));
+
+    // R3 precondition: a second install must converge to the COMMITTED bytes, so
+    // the wiring the fork inherits is what `plan_wire` would write. A dirty tree
+    // here means the fork's regeneration refuses (`stale source wiring`) — STOP
+    // and report the paths; never relax this comparison.
+    let again = install(&source);
+    assert!(
+        again.status.success(),
+        "second install must succeed: {}",
+        stderr(&again)
+    );
+    assert_eq!(
+        git(&source, &["status", "--porcelain"]),
+        "",
+        "STOP (R3): install is not idempotent on the committed tree, so the fork's \
+         regeneration would refuse stale tracked wiring"
+    );
+
+    let base = git(&source, &["rev-parse", "HEAD"]);
+    let holder = tempfile::tempdir().unwrap();
+    let fork = holder.path().join("fork");
+    let out = run(
+        &source,
+        None,
+        &[
+            "worktree",
+            "fork",
+            "--base",
+            &base,
+            "--branch",
+            "proj",
+            "--dir",
+            fork.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "fork from an installed source must succeed: {}",
+        stderr(&out)
+    );
+    assert!(
+        !stderr(&out).contains("stale source wiring"),
+        "STOP (R3): the fork's regeneration refused tracked wiring: {}",
+        stderr(&out)
+    );
+
+    // The baseline: install on the fork's tracked inputs alone (no derived tier,
+    // no copied allowlisted file — regeneration reads neither).
+    let (_fresh_holder, fresh) = common::fresh_inputs(&fork);
+    let fresh_install = install(&fresh);
+    assert!(
+        fresh_install.status.success(),
+        "install on the fresh inputs must succeed: {}",
+        stderr(&fresh_install)
+    );
+
+    assert_links_resolve(&fork, &[".claude/skills", ".agents/skills"]);
+
+    let got = resolved_digest(&fork, PROJECTION_DOMAIN);
+    let want = resolved_digest(&fresh, PROJECTION_DOMAIN);
+    assert!(
+        got.contains_key(Path::new(".doctrine/skills")),
+        "positive control: the domain is populated in the fork"
+    );
+    assert_eq!(
+        got, want,
+        "the fork's projection must equal a fresh install on the fork's own inputs"
+    );
+}
+
+/// SL-285 PHASE-03 EX-2 / VT-1: regeneration leaves nothing tracked-dirty, and
+/// creates no `.pi/skills` (pi reads `.agents/skills`; a duplicate dir makes it
+/// warn). Both controls are non-vacuous: the link dirs are proven non-empty.
+#[test]
+fn fork_from_installed_source_leaves_empty_porcelain_and_no_pi_skills() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = common::installed_source(&tmp.path().join("src"));
+    let base = git(&source, &["rev-parse", "HEAD"]);
+    let holder = tempfile::tempdir().unwrap();
+    let fork = holder.path().join("fork");
+
+    let out = run(
+        &source,
+        None,
+        &[
+            "worktree",
+            "fork",
+            "--base",
+            &base,
+            "--branch",
+            "clean",
+            "--dir",
+            fork.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "fork from an installed source must succeed: {}",
+        stderr(&out)
+    );
+
+    // Positive control: regeneration actually projected the derived tier.
+    assert!(
+        std::fs::read_dir(fork.join(".agents/skills"))
+            .expect("regenerated .agents/skills")
+            .next()
+            .is_some(),
+        "control: the codex link dir is populated"
+    );
+    assert!(
+        std::fs::read_dir(fork.join(".claude/skills"))
+            .expect("regenerated .claude/skills")
+            .next()
+            .is_some(),
+        "control: the claude link dir is populated"
+    );
+
+    assert_eq!(
+        git(&fork, &["status", "--porcelain"]),
+        "",
+        "every generated path must be ignored: a dirty porcelain is a real \
+         ignore-contract defect, not a fixture problem"
+    );
+    assert!(
+        !fork.join(".pi/skills").exists(),
+        "no .pi/skills is created — pi reads .agents/skills and warns on a duplicate"
+    );
+}
+
+/// SL-285 PHASE-03 EX-4 / VT-1: a fork of a fork regenerates the same harness set
+/// — the derived tier is derived from the parent's own inputs, so generation 2
+/// must not shed a link, a def or a baked hook.
+#[test]
+fn second_generation_fork_matches_the_first() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = common::installed_source(&tmp.path().join("src"));
+    let base = git(&source, &["rev-parse", "HEAD"]);
+    let holder = tempfile::tempdir().unwrap();
+    let first = holder.path().join("gen1");
+
+    let out = run(
+        &source,
+        None,
+        &[
+            "worktree",
+            "fork",
+            "--base",
+            &base,
+            "--branch",
+            "gen1",
+            "--dir",
+            first.to_str().unwrap(),
+        ],
+    );
+    assert!(out.status.success(), "first fork: {}", stderr(&out));
+
+    // Generation 2 forks FROM a linked worktree, not from the primary tree.
+    let base2 = git(&first, &["rev-parse", "HEAD"]);
+    let second = holder.path().join("gen2");
+    let out = run(
+        &first,
+        None,
+        &[
+            "worktree",
+            "fork",
+            "--base",
+            &base2,
+            "--branch",
+            "gen2",
+            "--dir",
+            second.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "second generation fork: {}",
+        stderr(&out)
+    );
+
+    // Positive controls: the child really is provisioned, and clean.
+    assert!(
+        std::fs::read_dir(second.join(".agents/skills"))
+            .expect("regenerated .agents/skills")
+            .next()
+            .is_some(),
+        "control: generation 2 carries the codex link dir"
+    );
+    assert_eq!(
+        git(&second, &["status", "--porcelain"]),
+        "",
+        "generation 2 leaves nothing tracked-dirty"
+    );
+
+    assert_links_resolve(&first, &[".claude/skills", ".agents/skills"]);
+    assert_links_resolve(&second, &[".claude/skills", ".agents/skills"]);
+
+    // Bytes, not names: same defs, same links (resolved in their own tree), same
+    // baked hook command.
+    assert_eq!(
+        resolved_digest(&first, REGENERATED_DOMAIN),
+        resolved_digest(&second, REGENERATED_DOMAIN),
+        "generation 2 must regenerate the SAME derived tier as generation 1"
+    );
+}

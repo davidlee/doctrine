@@ -7,7 +7,8 @@
 //! (VT-7), a non-sibling fork is refused (VT-6), a statically-bad allowlist
 //! exits nonzero (VT-7), a tier-naming `.worktreeinclude` fails closed copying
 //! nothing (VT-8), and an absent `.worktreeinclude` copies nothing at exit 0
-//! (VT-9).
+//! (VT-9). SL-285 PHASE-03 adds the repair case over an installed source: two
+//! `provision` runs converge, and a user file at a link slot is kept (VT-2).
 
 #![allow(
     clippy::expect_used,
@@ -249,5 +250,126 @@ fn check_allowlist_exit_codes() {
     assert!(
         !check_allowlist(&source).status.success(),
         "negation → nonzero"
+    );
+}
+
+/// The derived runtime tier, relative to a fork: what `provision` REGENERATES
+/// from the source after the copy (design §3) — never what it copies.
+const DERIVED_TIER: &[&str] = &[
+    ".doctrine/skills",
+    ".doctrine/agents",
+    ".doctrine/workflows",
+    ".doctrine/memory/shipped",
+    ".agents/skills",
+    ".claude/skills",
+    ".claude/agents",
+    ".claude/workflows",
+    ".codex",
+];
+
+/// The stderr row whose verb is `verb` and whose remainder names `name` — the
+/// progress rows pad the verb to a fixed column (`install::row`), so a substring
+/// join like `"kept code-review"` never occurs in the output.
+fn row_naming<'a>(stderr: &'a str, verb: &str, name: &str) -> Option<&'a str> {
+    let needle = format!("  {verb} ");
+    stderr
+        .lines()
+        .find(|line| line.starts_with(&needle) && line.contains(name))
+}
+
+/// SL-285 PHASE-03 EX-3 / VT-2: repairing a provisioned fork is idempotent, and
+/// a user-owned file standing at a doctrine link slot is kept, not clobbered.
+///
+/// The source is a real install ([`common::installed_source`]), so the fork
+/// inherits a tracked `installed-version` and regeneration runs its legs instead
+/// of taking the uninstalled-source skip — a no-op repair would otherwise pass
+/// every assertion by silence. Run 1's `linked code-review` row is the positive
+/// control that the name is in the default desired set (`install.rs:1169`);
+/// `kept` in run 2 is `Notice::Shadows` (a real entry at a doctrine slot is
+/// reported and left alone, `install_ownership.rs:197`), and any red there is a
+/// real defect — `converge_leg` already forwards the writer (`install.rs:998`).
+#[test]
+fn provision_from_installed_source_twice_converges_and_keeps_a_user_file_under_a_link_dir() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = common::installed_source(&tmp.path().join("src"));
+    let fork = tmp.path().join("fork");
+    add_worktree(&source, &fork);
+
+    // Run 1: the derived tier is materialised and linked in the fork.
+    let first = provision(&source, &fork);
+    assert!(
+        first.status.success(),
+        "first provision failed: {}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let first_stderr = String::from_utf8_lossy(&first.stderr);
+    assert!(
+        row_naming(&first_stderr, "linked", "code-review").is_some(),
+        "run 1 must link a skill from the default desired set; stderr: {first_stderr}"
+    );
+    let before_plant = common::digest_domain(&fork, DERIVED_TIER);
+
+    // R9: a plain user-owned FILE at a slot run 1 filled with a symlink.
+    let slot = fork.join(".agents/skills/code-review");
+    assert!(
+        fs::symlink_metadata(&slot)
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "control: run 1 left a symlink at {}",
+        slot.display()
+    );
+    fs::remove_file(&slot).unwrap();
+    fs::write(&slot, "mine\n").unwrap();
+
+    // Run 2: the repair keeps the user's file and reports it.
+    let second = provision(&source, &fork);
+    assert!(
+        second.status.success(),
+        "second provision failed: {}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    let second_stderr = String::from_utf8_lossy(&second.stderr);
+    assert!(
+        row_naming(&second_stderr, "kept", "code-review").is_some(),
+        "run 2 must keep the user file and say so; stderr: {second_stderr}"
+    );
+    assert_eq!(
+        fs::read_to_string(&slot).unwrap(),
+        "mine\n",
+        "the user's bytes survive the repair"
+    );
+    assert!(
+        !fs::symlink_metadata(&slot)
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "the slot is still the user's plain file, not a reinstated link"
+    );
+
+    // The repair changed that one slot and nothing else in the tier.
+    let after_plant = common::digest_domain(&fork, DERIVED_TIER);
+    let changed: Vec<PathBuf> = after_plant
+        .iter()
+        .filter(|(path, digest)| before_plant.get(*path) != Some(*digest))
+        .map(|(path, _)| path.clone())
+        .collect();
+    assert_eq!(
+        changed,
+        vec![PathBuf::from(".agents/skills/code-review")],
+        "only the withheld slot differs from run 1's projection"
+    );
+
+    // Run 3: convergence — no further change to the derived tier.
+    let third = provision(&source, &fork);
+    assert!(
+        third.status.success(),
+        "third provision failed: {}",
+        String::from_utf8_lossy(&third.stderr)
+    );
+    assert_eq!(
+        common::digest_domain(&fork, DERIVED_TIER),
+        after_plant,
+        "a third run converges: a kept slot is stable, not oscillating"
     );
 }
