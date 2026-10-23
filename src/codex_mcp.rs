@@ -276,6 +276,98 @@ pub(crate) fn classify_user(read: FileRead<'_>, bake: &Path) -> Result<UserEntry
     })
 }
 
+/// The project `.codex/config.toml` `[mcp_servers.doctrine]` entry, classified
+/// by form rather than by name: the project layer is where a user, a previous
+/// doctrine, and the codex CLI itself may all have written, so the planner has to
+/// say which of them it is looking at before advising anything (design sec-leg
+/// § Plan step 4). Only an owned wrapper is doctrine's to remove.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ProjectEntry {
+    /// No entry, or no project file.
+    Absent,
+    /// A wrapper line doctrine emitted ([`is_wrapper_form`]) — removed with the
+    /// user write. `extra_keys` is everything else it carries, as the report
+    /// names it, so the consent text can state what the user loses.
+    OwnedWrapper { extra_keys: Vec<String> },
+    /// An explicit choice doctrine will not touch: a path command (absolute or
+    /// relative), or a url transport — `target` is the command or the url.
+    Override { target: String },
+    /// A bare-name command, resolved through `PATH` at codex launch — a different
+    /// `doctrine` may run. Untouched, but the install is incomplete.
+    PathShadow { command: String },
+    /// Not interpretable: empty command, wrong types, not a table.
+    Malformed,
+    /// The project file exists but could not be read or parsed.
+    Unreadable,
+}
+
+/// Classify the project's `[mcp_servers.doctrine]` entry. The wrapper check
+/// comes *before* the command checks because a wrapper's `command` is the bare
+/// name `sh`: asking [`is_wrapper_form`] first is what keeps doctrine's own old
+/// entry from being read as a `PATH` shadow of something else.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn classify_project(read: FileRead<'_>) -> ProjectEntry {
+    let text = match read {
+        FileRead::Absent => return ProjectEntry::Absent,
+        FileRead::Unreadable => return ProjectEntry::Unreadable,
+        FileRead::Text(text) => text,
+    };
+    let doc: toml_edit::DocumentMut = match text.parse() {
+        Ok(doc) => doc,
+        Err(_) => return ProjectEntry::Unreadable,
+    };
+    let Some(servers) = doc.get(CODEX_MCP_TABLE) else {
+        return ProjectEntry::Absent;
+    };
+    let Some(servers) = servers.as_table_like() else {
+        return ProjectEntry::Malformed;
+    };
+    let Some(entry) = servers.get(CODEX_MCP_SERVER_KEY) else {
+        return ProjectEntry::Absent;
+    };
+    let Some(table) = entry.as_table_like() else {
+        return ProjectEntry::Malformed;
+    };
+    if is_wrapper_form(table) {
+        let extra_keys = table
+            .iter()
+            .filter(|(key, _)| !matches!(*key, "command" | "args" | "env_vars"))
+            .flat_map(|(key, item)| render_dropped(key, item))
+            .collect();
+        return ProjectEntry::OwnedWrapper { extra_keys };
+    }
+    // A url transport is a server doctrine cannot replace with a stdio entry —
+    // an explicit choice, like a path command.
+    if let Some(url) = table.get("url") {
+        return match url.as_str() {
+            Some(url) => ProjectEntry::Override {
+                target: url.to_string(),
+            },
+            None => ProjectEntry::Malformed,
+        };
+    }
+    let Some(command) = table.get("command").and_then(|i| i.as_str()) else {
+        return ProjectEntry::Malformed;
+    };
+    if command.is_empty() {
+        return ProjectEntry::Malformed;
+    }
+    // Absent `args` is fine here (a bare command is a complete entry); present
+    // but unreadable is not.
+    if table.get("args").is_some() && string_args(table).is_none() {
+        return ProjectEntry::Malformed;
+    }
+    if command.contains('/') {
+        return ProjectEntry::Override {
+            target: command.to_string(),
+        };
+    }
+    ProjectEntry::PathShadow {
+        command: command.to_string(),
+    }
+}
+
 /// The entry's `args` as strings, or `None` when `args` is absent or holds a
 /// non-string.
 fn string_args(table: &dyn toml_edit::TableLike) -> Option<Vec<String>> {
@@ -676,6 +768,170 @@ mod tests {
         assert_eq!(
             classify_user(FileRead::Unreadable, Path::new(BAKE)),
             Err(Degraded::UserUnreadable)
+        );
+    }
+
+    // --- classify_project (the project's [mcp_servers.doctrine] entry) ---
+
+    /// The project entry as doctrine's own install emitted it, built from the
+    /// constants so a wording change cannot leave a stale fixture behind.
+    fn wrapper_entry(extra: &str) -> String {
+        format!(
+            "[mcp_servers.doctrine]\ncommand = \"{CODEX_MCP_SHELL}\"\n\
+             args = [\"{CODEX_MCP_SHELL_FLAG}\", '{CODEX_MCP_WRAPPER}']\n\
+             env_vars = [\"{CODEX_MCP_ENV}\"]\n{extra}"
+        )
+    }
+
+    fn project(text: &str) -> ProjectEntry {
+        classify_project(FileRead::Text(text))
+    }
+
+    #[test]
+    fn classify_project_absent_when_the_file_is_absent() {
+        assert_eq!(classify_project(FileRead::Absent), ProjectEntry::Absent);
+    }
+
+    #[test]
+    fn classify_project_absent_when_mcp_servers_is_missing() {
+        assert_eq!(project("model = \"gpt-5\"\n"), ProjectEntry::Absent);
+        assert_eq!(
+            project("[mcp_servers.other]\ncommand = \"x\"\n"),
+            ProjectEntry::Absent,
+            "another server is not ours"
+        );
+    }
+
+    #[test]
+    fn classify_project_owned_wrapper_with_no_extra_keys() {
+        assert_eq!(
+            project(&wrapper_entry("")),
+            ProjectEntry::OwnedWrapper { extra_keys: vec![] },
+            "env_vars is part of what doctrine emitted, not a user extra"
+        );
+    }
+
+    #[test]
+    fn classify_project_owned_wrapper_lists_extra_keys() {
+        assert_eq!(
+            project(&wrapper_entry("enabled = false\nstartup_timeout_sec = 5\n")),
+            ProjectEntry::OwnedWrapper {
+                extra_keys: vec![
+                    "enabled = false".to_string(),
+                    "startup_timeout_sec = 5".to_string(),
+                ],
+            },
+            "the report names exactly what removing the wrapper loses"
+        );
+    }
+
+    #[test]
+    fn classify_project_override_for_an_absolute_command() {
+        assert_eq!(
+            project("[mcp_servers.doctrine]\ncommand = \"/opt/doctrine\"\n"),
+            ProjectEntry::Override {
+                target: "/opt/doctrine".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn classify_project_override_for_a_relative_command() {
+        assert_eq!(
+            project("[mcp_servers.doctrine]\ncommand = \"./bin/doctrine\"\n"),
+            ProjectEntry::Override {
+                target: "./bin/doctrine".to_string(),
+            },
+            "a relative path is still an explicit choice, not a PATH shadow"
+        );
+    }
+
+    #[test]
+    fn classify_project_override_for_a_url_transport() {
+        assert_eq!(
+            project("[mcp_servers.doctrine]\nurl = \"https://example.test/mcp\"\n"),
+            ProjectEntry::Override {
+                target: "https://example.test/mcp".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn classify_project_malformed_when_url_is_not_a_string() {
+        assert_eq!(
+            project("[mcp_servers.doctrine]\nurl = 3\n"),
+            ProjectEntry::Malformed
+        );
+    }
+
+    #[test]
+    fn classify_project_path_shadow_for_a_bare_name() {
+        assert_eq!(
+            project("[mcp_servers.doctrine]\ncommand = \"doctrine\"\n"),
+            ProjectEntry::PathShadow {
+                command: "doctrine".to_string(),
+            },
+            "a bare name resolves through PATH, so it may run something else"
+        );
+    }
+
+    #[test]
+    fn classify_project_malformed_when_command_is_empty() {
+        assert_eq!(
+            project("[mcp_servers.doctrine]\ncommand = \"\"\n"),
+            ProjectEntry::Malformed
+        );
+    }
+
+    #[test]
+    fn classify_project_malformed_when_command_is_not_a_string() {
+        assert_eq!(
+            project("[mcp_servers.doctrine]\ncommand = 1\n"),
+            ProjectEntry::Malformed
+        );
+        assert_eq!(
+            project("[mcp_servers.doctrine]\nargs = [\"serve\"]\n"),
+            ProjectEntry::Malformed,
+            "command is absent"
+        );
+    }
+
+    #[test]
+    fn classify_project_malformed_when_args_hold_a_non_string() {
+        assert_eq!(
+            project("[mcp_servers.doctrine]\ncommand = \"doctrine\"\nargs = [\"serve\", 3]\n"),
+            ProjectEntry::Malformed
+        );
+        assert_eq!(
+            project("[mcp_servers.doctrine]\ncommand = \"doctrine\"\nargs = \"serve --mcp\"\n"),
+            ProjectEntry::Malformed,
+            "a bare string is not the array codex expects"
+        );
+    }
+
+    #[test]
+    fn classify_project_malformed_when_the_entry_is_not_a_table() {
+        assert_eq!(
+            project("[mcp_servers]\ndoctrine = \"x\"\n"),
+            ProjectEntry::Malformed
+        );
+        assert_eq!(
+            project("mcp_servers = 3\n"),
+            ProjectEntry::Malformed,
+            "mcp_servers itself is not table-like"
+        );
+    }
+
+    #[test]
+    fn classify_project_unreadable_when_the_text_is_not_toml() {
+        assert_eq!(project("not = [toml\n"), ProjectEntry::Unreadable);
+    }
+
+    #[test]
+    fn classify_project_unreadable_when_the_read_failed() {
+        assert_eq!(
+            classify_project(FileRead::Unreadable),
+            ProjectEntry::Unreadable
         );
     }
 }
