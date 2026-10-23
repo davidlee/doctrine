@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 409
+slug = "codex-mcp-drops-doctrine-bin-override"
+title = "Codex loses the DOCTRINE_BIN override"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-286 inq-7. DEC-323's wrapper forwarded `DOCTRINE_BIN` so the jail/dispatch could redirect codex to a dev binary. Under the daemon the env is frozen anyway, and the user-level entry bakes an absolute path."
+choice = "Accept the loss for codex. Per-project redirection uses a project-level override entry (inq-4)."
+alternatives = ["Bake DOCTRINE_BIN at install time — would bake dev builds (inq-2)"]
+rationale = "The override did not work under the daemon; the project layer provides the per-project lever."
+consequences = ["README drops the `sh` dependency declaration for codex"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-286"

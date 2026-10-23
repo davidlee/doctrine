@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 403
+slug = "codex-mcp-user-level-on-plain-install"
+title = "Codex MCP registers at user level on plain install"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-286 inq-1. EVD-032: interactive codex spawns MCP servers from a daemon whose PATH is frozen; only an absolute command survives. POL-002 forbids that path in a client-tracked file; the user-level codex config is not one."
+choice = 'Plain `doctrine install` (codex harness) writes `[mcp_servers.doctrine]` to the user-level codex config `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) with `command = <absolute doctrine path>`, `args = ["serve", "--mcp"]`. No `--global` gate.'
+alternatives = ["Gate the user-level write behind `install --global` — the codex fix would be inert for anyone not passing it", "Keep the project-level `sh -c` wrapper (DEC-323) — fails under the daemon (EVD-032)", "Restart the codex daemon from install — rejected in EVD-032"]
+rationale = "Running install for the codex harness is already the opt-in; a separate gate would leave the default broken."
+consequences = ["First user-level write by install; governed by the out-of-repo write rule (inq-8)", "The entry applies to every codex session on the machine, hence inq-3"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-286"

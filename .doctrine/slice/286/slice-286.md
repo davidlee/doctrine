@@ -37,35 +37,44 @@ such a file. Restarting the daemon from `install` was considered and rejected
 1. **Register at user level.** `boot install`'s codex arm writes
    `[mcp_servers.doctrine]` to the user-level codex config (`$CODEX_HOME/config.toml`,
    default `~/.codex/config.toml`). The entry is `command = <absolute path to
-   doctrine>`, `args = ["serve", "--mcp"]`. The write is narrow-path and
-   edit-preserving, as today: own only shapes doctrine has emitted, refresh a
-   stale owned entry, leave foreign entries alone, and print a snippet when
-   ownership is unclear.
-2. **Retire the project-level entry.** An owned project-level entry (the wrapper
-   forms in `CODEX_MCP_WRAPPER_FORMS`) is removed, so it can't shadow or
-   contradict the user-level one. Foreign project-level entries are left alone
-   and disclosed.
-3. **Governance.** Supersede DEC-323 (and DEC-332 where its ownership shape
-   changes) with a new decision. Revise REQ-484 (SPEC-011) through a Revision
-   (ADR-013). Update the README declaration of the `sh` dependency.
-4. **Disclosure.** The install report names the user-level file it wrote and the
-   path it baked. It also carries the daemon-restart hint (EVD-032): an already-
+   doctrine>`, `args = ["serve", "--mcp"]` (DEC-403). Doctrine owns the user-level
+   table by name and writes only `command` and `args`, preserving other keys and
+   reporting a changed command old → new; a malformed entry gets a snippet
+   (DEC-406). A binary inside the installed project is never baked (DEC-404).
+   Degradation is disclosed, never a failure (DEC-408).
+2. **Retire the project-level entry; respect overrides.** An owned project-level
+   entry (the wrapper forms in `CODEX_MCP_WRAPPER_FORMS`) is removed, since codex
+   prefers the project layer. A foreign absolute-path project entry is a
+   deliberate override: untouched, reported, not held incomplete. A foreign
+   PATH-dependent one is warned and holds install incomplete (DEC-406; partially
+   resolves ISS-528).
+3. **Rootless MCP server.** `serve --mcp` completes the handshake with no tools
+   and a disclosed reason when no project root resolves (DEC-405).
+4. **Governance.** DEC-406 supersedes DEC-323 and DEC-332; DEC-407 supersedes
+   DEC-325. Revise REQ-484 (SPEC-011) through a Revision (ADR-013). Drop the
+   README declaration of the `sh` dependency for codex (DEC-409).
+5. **Disclosure.** The install report names the user-level file it wrote and the
+   path it baked, plus one line for project-level retirement, override or shadow
+   (DEC-407). It also carries the daemon-restart hint (EVD-032): an already-
    running codex daemon keeps its old config until restarted.
-5. **Name the pattern.** This is doctrine's first user-level install write. Record
-   the rule for when `install` may write outside the repo, so later arms follow
-   it rather than reinventing it.
+6. **Name the pattern.** DEC-410 records when `install` may write outside the
+   repo.
 
 ## Non-Goals
 
 - **Claude (`.mcp.json`) and pi arms.** They don't share the daemon failure.
-  Whether to move them to user level for uniformity is an open question for
-  design to record (a QUE or a backlog item), not to implement here.
+  Whether to move them to user level for uniformity is IDE-069.
 - **Codex hooks (`.codex/hooks.json`).** Already baked (`the_codex_arm_renders_the_baked_form`);
   unchanged unless design finds the same daemon issue there.
 - **Daemon management.** No `codex app-server daemon restart` from `install`.
 - **Post-write verification** (`codex mcp get doctrine`) remains IMP-497.
+- **Writing a project-level override.** Manual only; doctrine never writes a
+  machine path into a project file (POL-002).
+- **Nix-store baked paths** breaking after GC: RSK-234.
 
 ## Risks, assumptions, open questions
+
+Resolved in design by DEC-403..DEC-410; kept as the scoping record.
 
 - **Losing the `DOCTRINE_BIN` override.** The wrapper let the jail and dispatch
   point codex at a dev binary. An absolute path doesn't. Design must say what
@@ -92,15 +101,20 @@ such a file. Restarting the daemon from `install` was considered and rejected
 
 - `src/boot.rs`: codex MCP arm (`CODEX_CONFIG_REL`, `CODEX_MCP_WRAPPER*`,
   `codex_mcp_entry`, `classify_codex_entry`, `plan_codex_mcp`,
-  `install_codex_mcp`) and its tests.
-- `tests/` install end-to-end coverage for the codex arm.
+  `install_codex_mcp`), the report path (`wire()`, `mcp_rel`,
+  `RefreshOutcome::PrintedFallback`) and their tests.
+- `src/mcp_server/`, `src/commands/serve.rs`: rootless `serve --mcp`.
+- `tests/` install end-to-end coverage for the codex arm (hermetic `CODEX_HOME`).
 - `README.md`: codex MCP section and the `sh` dependency declaration.
-- Governance: DEC-323, DEC-332, REQ-484 / SPEC-011.
+- Governance: DEC-323, DEC-332, DEC-325 (superseded), REQ-484 / SPEC-011.
 
 ## Verification intent
 
-- Unit: plan/classify matrix for user-level entries (absent, owned-current,
-  owned-stale, foreign, malformed) and for project-level retirement.
+- Unit: plan/classify matrix for user-level entries (absent, current, changed
+  command, extra keys preserved, malformed) and for project-level entries
+  (owned wrapper → removed, absolute override, PATH-dependent foreign).
+- Unit/E2E: bake guard refuses a binary inside the project root; rootless
+  `serve --mcp` handshakes with no tools.
 - E2E: install against a temp `CODEX_HOME` writes the absolute-path entry,
   removes an owned project wrapper, and leaves foreign entries alone.
 - VH: interactive codex in this repo connects to doctrine after

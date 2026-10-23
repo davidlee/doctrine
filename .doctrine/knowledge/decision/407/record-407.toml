@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 407
+slug = "codex-mcp-report-computed-path"
+title = "Codex MCP report carries a computed user path and a retirement line"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-286 inq-5. DEC-325 keeps one `mcp: RefreshOutcome` and derives the reported file from the harness via `mcp_rel` (`'static`). The codex user file is computed at runtime and a project retirement also needs reporting."
+choice = "Keep one MCP outcome for the user-level write; the reported file becomes a computed path (no `'static` `mcp_rel` for codex). Project-level removal, override and shadow findings report as one additional line."
+alternatives = ["A second report field for codex", "Carry paths in every outcome variant, churning the Claude leg"]
+rationale = "Smallest change that reports both layers honestly."
+consequences = ["Amends DEC-325 (supersede)", "`RefreshOutcome::PrintedFallback.hook_file: &'static str` can no longer name the codex file"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-286"

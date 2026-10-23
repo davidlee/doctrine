@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 408
+slug = "codex-mcp-user-level-degradation"
+title = "User-level codex write degrades with disclosure"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-286 inq-6. The user-level write depends on a resolvable home and a writable, parseable config; in the bwrap jail `~/.codex` may be absent or read-only."
+choice = "Resolve `$CODEX_HOME`, else `$HOME/.codex`. No resolvable home, unreadable, unparseable or unwritable config: write nothing, disclose the cause, print the snippet; install reports degraded, not failed. A missing config file is created."
+alternatives = ["Fail the install", "Silently skip"]
+rationale = "STD-003 (no silent skip) and the existing PrintedFallback posture."
+consequences = ["Jail installs normally degrade to a printed snippet"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-286"

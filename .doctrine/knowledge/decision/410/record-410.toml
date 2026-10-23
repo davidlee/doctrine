@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 410
+slug = "install-out-of-repo-write-rule"
+title = "Install may write outside the repo only to a harness's own user config"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-286 inq-8 / scope objective 5. First user-level install write; later arms need a rule rather than reinventing one."
+choice = "`install` may write outside the repo only when: the target is the harness's own user-level config, resolved from that harness's documented location (env override first); the write is narrow-path and edit-preserving; any baked path is an absolute, non-transient binary (never inside the installed project); every write names the file and baked value in the report; and any degradation is disclosed with a snippet. Never a file a client repo tracks."
+alternatives = ["Leave the rule implicit in the codex arm"]
+rationale = "Names the pattern once so the Claude/pi question (inq-9) and future arms follow it."
+consequences = ["REQ-484 (SPEC-011) revised through a Revision (ADR-013) to the user-level form", "Supersessions: DEC-323, DEC-332, DEC-325 by this slice's records"]
+decided_by = "user"
+decided_on = "2026-10-23"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "shapes"
+target = "SL-286"
