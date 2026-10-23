@@ -1,0 +1,35 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 32
+slug = "codex-daemon-path-misses-doctrine"
+title = "Interactive codex spawns MCP from a daemon whose PATH lacks doctrine"
+record_kind = "evidence"
+status = "captured"
+created = "2026-10-23"
+updated = "2026-10-23"
+tags = ["codex", "install", "mcp"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = 'Interactive codex (0.163.0 app-server daemon) spawns MCP servers from the daemon process, whose PATH is frozen at daemon start; there the DEC-323 sh wrapper fails with "exec: doctrine: not found" (exit 127), surfaced as an MCP handshake failure. codex exec spawns MCP itself with the caller PATH and works.'
+provenance = "reproduction"
+confidence = "high"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "disputes"
+target = "DEC-323"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "live-codex evidence for the MCP seam re-verification"
+target = "IMP-497"
