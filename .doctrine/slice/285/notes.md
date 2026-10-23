@@ -50,6 +50,27 @@ reconciliation"):
   (`boot::apply_wire_into`); PHASE-01 left it on stdout (PHASE-02 review F1).
 - **Clean-fork fixture ignores `/.codex` itself** (user ruling 2026-10-23, PHASE-03 R4 (b)): the shipped managed `.gitignore` block lacks `.codex/` (and `.doctrine/slice/*/research/`) for new projects — ISS-531, tagged `next`, out of SL-285 scope. EX-2 is proven relative to a clean source.
 
+## F-7 observation (PHASE-03 EX-6, RV-425 F-7)
+
+Observed 2026-10-23: one `--worker` fork minted from the primary tree by the
+SL-285 binary (`DOCTRINE_BIN=<SL-285>/target/debug/doctrine worktree fork …
+--worker`), probed under the real jail prefix (`doctrine worktree jail-prefix`
+→ `bwrap --ro-bind / / … --bind <fork> <fork> --unshare-net --`).
+
+- Ignored `.codex/hooks.json` bakes `<SL-285 tree>/target/debug/doctrine …` (absolute).
+  Inside the jail: `test -x` OK; `<baked> prompt resolve --role orchestrator` exit 0.
+- Tracked `.claude/settings.json` and `.mcp.json` carry the portable
+  `${DOCTRINE_BIN:-doctrine}`; inside the jail it resolves via inherited PATH to
+  `~/.local/share/doctrine/bin/doctrine` (0.46.10), exit 0.
+- Fork porcelain clean (this repo ignores `/.codex`).
+
+Verdict: resolves — because the Linux jail read-only binds the whole host root,
+so every host absolute path is visible at the same location. No backlog item.
+Residual (already design sec-6 risk): the baked hook pins the *minting* binary;
+rebuilding or deleting that tree changes or breaks the fork's codex hooks, and a
+jail that stops binding `/` (or the macOS sandbox-exec arm, not probed) would
+need re-checking. Awaiting user confirmation (VH-1).
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-10-23 · PHASE-02 · fork sl-285 5727bb85b
