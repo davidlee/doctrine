@@ -90,12 +90,16 @@ fresh-as-of: 2026-10-23 · reconcile (audit RV-426 concluded) · edge c3a2e0d55+
 - mem_01a1680243ea78e383f785c81fff6e07 — apply_wire dry-run reports no touched paths (superseded by plan_wire)
 - mem_01a1680244397e23b4c63de9a0223fad — linked worktrees read main's install marker; ignored hook files bake the absolute exec
 
-### Open
-- QUE-229 — answered: keep the re-tier (integrate at reconcile)
+### Records (all settled)
+- QUE-229 — answered: keep the re-tier (integrated at reconcile)
 - DEC-402 — regeneration legs + tracked-file guard
 - DEC-396 — ProvisionMode single entry
 - DEC-397 — creation compensates, repair preserves
 - DEC-393 — harness set from source
-- DEC-399 — downgrade refusal (amend per carry: uninstalled source / absent dest stamp)
-- DEC-401 — fatal legs (amend per carry: Refused halts)
-- residual: tests/common `fresh_inputs` leaves a registered git worktree after TempDir drop
+- DEC-399 — downgrade refusal (amended at reconcile)
+- DEC-401 — fatal legs (amended at reconcile)
+- CHR-182 — `fresh_inputs` leaves a registered git worktree after TempDir drop
+
+### Reconciled
+- RV-426 Reconciliation Outcome: selectors (F-4), design deltas (F-5/F-6), DEC-399/401 amended
+- REV-075 done — REQ-189 / SPEC-012 copy-then-regenerate wording
