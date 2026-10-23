@@ -58,6 +58,18 @@ pub(crate) fn write_stamp(root: &std::path::Path, version: &str) {
     .unwrap();
 }
 
+/// Plant AND commit the tracked stamp — the F-6 lever: a worktree added from this
+/// commit inherits it, so regeneration refuses the downgrade (SL-285 PHASE-02).
+///
+/// `-f`: the sync-side fixtures ignore `.doctrine/` wholesale (the provision
+/// fixture does), while the production stamp is tracked — forcing the add is the
+/// faithful shape and keeps the lever independent of a fixture's ignore rules.
+pub(crate) fn commit_stamp(root: &std::path::Path, version: &str) {
+    write_stamp(root, version);
+    git(root, &["add", "-f", DOCTRINE_TOML]);
+    git(root, &["commit", "-q", "-m", "stamp"]);
+}
+
 /// The digest convention the shell uses (`crate::git::sha256`), mirrored so a
 /// test can declare what a content binding must match. Byte-identical to it,
 /// and to `contentset`'s own copy — the shape a leaf owns directly rather than

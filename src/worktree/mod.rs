@@ -73,12 +73,12 @@ pub(crate) use create::run_create_fork;
 // per-worktree record. Its second consumer (`worker_commit`) went with the claude arm
 // at SL-254 PHASE-06; `mcp_server::dispatch`'s import path is the remaining one.
 pub(crate) use dispatch_record::{ForkExpect, ResolveRefusal, require_binding, resolve_agent};
-pub(crate) use fork::run_fork;
+pub(crate) use fork::{remove_worktree_dir, run_fork};
 pub(crate) use gc::run_gc;
 pub(crate) use import::run_import;
 pub(crate) use inventory::run_list;
 pub(crate) use land::run_land;
-pub(crate) use provision::{run_check_allowlist, run_provision};
+pub(crate) use provision::{ProvisionMode, run_check_allowlist, run_provision};
 
 #[cfg(test)]
 pub(crate) use coordinate::{CoordAction, CoordRefusal, base_has_slice_plan, classify_coordinate};
@@ -119,11 +119,16 @@ pub(crate) use allowlist::{DERIVED_RUNTIME, WITHHELD};
 
 #[derive(Subcommand)]
 pub(crate) enum WorktreeCommand {
-    /// Copy allowlisted files into a worktree fork.
+    /// Copy allowlisted files into a worktree fork, then regenerate its derived
+    /// runtime tier from the source.
     /// The sole copy path; the coordination/runtime tier is always excluded.
     Provision {
         /// The target sibling worktree to populate.
         fork: PathBuf,
+
+        /// Permit regenerating a derived tier newer than the running binary.
+        #[arg(long)]
+        allow_downgrade: bool,
 
         /// Explicit source project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
@@ -385,7 +390,15 @@ pub(crate) fn dispatch(
     landing: inventory::LandingOracle<'_>,
 ) -> anyhow::Result<()> {
     match cmd {
-        WorktreeCommand::Provision { fork, path } => run_provision(path, &fork),
+        WorktreeCommand::Provision {
+            fork,
+            allow_downgrade,
+            path,
+        } => run_provision(
+            path,
+            &fork,
+            ProvisionMode::CopyThenRegenerate { allow_downgrade },
+        ),
         WorktreeCommand::CheckAllowlist { path } => run_check_allowlist(path),
         WorktreeCommand::BranchPointCheck { base, head, path } => {
             run_branch_point_check(path, &base, head)

@@ -2,7 +2,7 @@
 //! fork machine — extracted from worktree/mod.rs (SL-116 PHASE-02).
 
 use super::dispatch_record::{ForkBinding, coord_and_name};
-use super::provision::run_provision;
+use super::provision::{ProvisionMode, run_provision};
 use crate::git;
 use crate::root;
 use anyhow::{Context, bail};
@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 /// The branch-agnostic half of [`rollback_fork`], shared with the SL-064
 /// coordinate Resume rollback (which must KEEP the pre-existing branch). Returns
 /// surviving debris.
-pub(super) fn remove_worktree_dir(repo: &Path, dir: &Path) -> Vec<String> {
+pub(crate) fn remove_worktree_dir(repo: &Path, dir: &Path) -> Vec<String> {
     let mut debris = Vec::new();
 
     // Remove the linked worktree registration (force: drop dirty/locked).
@@ -186,7 +186,14 @@ pub(super) fn fork_core(
             .with_context(|| format!("git worktree add {} {branch}", dir.display()))?;
 
         // --- Step 4: provision via the sole copier (do NOT reimplement copying) ---
-        run_provision(Some(repo.to_path_buf()), dir).context("provision fork")?;
+        run_provision(
+            Some(repo.to_path_buf()),
+            dir,
+            ProvisionMode::CopyThenRegenerate {
+                allow_downgrade: false,
+            },
+        )
+        .context("provision fork")?;
 
         Ok(())
     })();

@@ -3706,8 +3706,8 @@ fn apply_wire_to(
     Ok(wired)
 }
 
-/// [`apply_wire_to`] on stdout: the shell `boot install` and the install legs
-/// use — same signature and behaviour as ever.
+/// [`apply_wire_to`] on stdout: the shell `boot install` uses — same signature
+/// and behaviour as ever.
 pub(crate) fn apply_wire(
     root: &Path,
     exec: &Path,
@@ -3720,6 +3720,19 @@ pub(crate) fn apply_wire(
         WirePass::Live
     };
     apply_wire_to(root, exec, harnesses, pass, &mut io::stdout())
+}
+
+/// Live boot wiring with its progress written to `out` (SL-285): `install`
+/// passes stdout (byte-identical to [`apply_wire`]) and worktree provisioning
+/// passes stderr, so a fork's wiring progress never leaks onto its
+/// machine-clean stdout.
+pub(crate) fn apply_wire_into(
+    root: &Path,
+    exec: &Path,
+    harnesses: &[Harness],
+    out: &mut dyn io::Write,
+) -> anyhow::Result<WireReport> {
+    apply_wire_to(root, exec, harnesses, WirePass::Live, out)
 }
 
 /// The paths boot wiring would write, computed by the same dry-run arms

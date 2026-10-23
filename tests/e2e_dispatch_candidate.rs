@@ -2300,6 +2300,83 @@ fn e2e_dispatch_candidate_create_provisions_gitignored_embed_assets() {
     );
 }
 
+// SL-285 PHASE-02 EX-2/EX-3 / RV-425 F-6: the CLEAN arm's provision refuses a stamp
+// newer than the running binary; nothing durable survives — the ref is rolled back
+// and, per Q4, the half-created candidate worktree is removed too.
+#[test]
+fn e2e_dispatch_candidate_create_compensates_on_downgrade_refusal() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    // A CLEAN-merge fixture: review/064 merges into the advanced main without
+    // conflict, so this exercises the clean arm (`--worktree`), never the
+    // conflicted one — no conflict fixture, no resolution the operator owes.
+    build_fixture(dir);
+    // The lever rides the COMMIT: the candidate worktree checks out `--base`
+    // (`refs/heads/main`) and the source stamp is read from this working tree.
+    common::commit_stamp(dir, "999.0.0");
+    prepare_review(dir);
+
+    let out = create(
+        dir,
+        None,
+        &[
+            "--role",
+            "review_surface",
+            "--payload",
+            "impl_bundle",
+            "--base",
+            "refs/heads/main",
+            "--label",
+            "downgrade-001",
+            "--worktree",
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "a recorded version newer than the binary must refuse; stdout: {}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("999.0.0"),
+        "the refusal names the recorded version; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains("provision candidate worktree"),
+        "the failure happened AFTER creation — the provision context proves it; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        !stderr(&out).contains("resolve the markers"),
+        "the conflicted arm is not involved; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        !ref_exists(dir, "candidate/064/downgrade-001"),
+        "the candidate ref is rolled back"
+    );
+    // `.doctrine/state/dispatch/candidate` — `dispatch::CANDIDATE_WORKTREE_SUBPATH`
+    // + the row id (`cand-{slice:03}-{label}`).
+    let wt_path = dir
+        .join(".doctrine/state/dispatch/candidate")
+        .join("cand-064-downgrade-001");
+    assert!(
+        !wt_path.exists(),
+        "the half-created candidate worktree is removed, not leaked: {}",
+        wt_path.display()
+    );
+    let toml = std::fs::read_to_string(dir.join(".doctrine/dispatch/064/candidates.toml"))
+        .unwrap_or_default();
+    // The ledger row is written only AFTER provisioning, so the downgrade refusal
+    // aborts before it — this is a guard against a row for a candidate that was
+    // rolled back, not the discriminator that proves the failure was post-creation
+    // (the `provision candidate worktree` context above is).
+    assert!(
+        !toml.contains("downgrade-001"),
+        "no ledger row survives the rollback: {toml}"
+    );
+}
+
 // --- SL-212 PHASE-03: conflict + --worktree materialises merge-tree's output ---
 //
 // The conflict arm no longer just parks the branch at base — it materialises

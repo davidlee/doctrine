@@ -9,7 +9,7 @@ use crate::root;
 use anyhow::{Context, bail};
 
 use super::fork::{remove_worktree_dir, rollback_fork};
-use super::provision::run_provision;
+use super::provision::{ProvisionMode, run_provision};
 use super::shared::{gather_fork_worktree, matches, resolve_commit};
 
 /// The outcome of a successful coordination setup (SL-085, design D9).
@@ -231,7 +231,14 @@ pub(crate) fn coordinate(
     // From here on, any failure compensates. Create rolls back the branch it
     // minted; Resume KEEPS the pre-existing branch (only its worktree is removed).
     let finish = (|| -> anyhow::Result<()> {
-        run_provision(Some(root.to_path_buf()), dir).context("provision coordination worktree")?;
+        run_provision(
+            Some(root.to_path_buf()),
+            dir,
+            ProvisionMode::CopyThenRegenerate {
+                allow_downgrade: false,
+            },
+        )
+        .context("provision coordination worktree")?;
         crate::slice::run_phases(Some(dir.to_path_buf()), slice, false)
             .context("regenerate runtime phase sheets")?;
         Ok(())

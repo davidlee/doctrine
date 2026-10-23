@@ -127,7 +127,7 @@ relation_graph = "command"  # uniformly command — all-kind seam through adr, b
 slice = "command"           # → engine/leaf + coverage, coverage_scan, conduct, dtoml, estimate, input, lifecycle, plan, rec, requirement, review_ledger, state, value; slice entity-kind handler
 spec = "command"            # → engine/leaf + registry, requirement; spec entity-kind handler
 standard = "command"        # → engine/leaf; standard entity-kind handler
-worktree = "command"        # → fsutil, git, root, slice; worktree fork/coordinate/import
+worktree = "command"        # → fsutil, git, install, root, slice; worktree fork/coordinate/import (install: SL-285 provision regenerates the derived tier)
 regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, regression, worktree, root
 
 # ── sub-classified umbrellas ─────────────────────────────────────────────
@@ -149,12 +149,12 @@ regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, re
 # the in-session arm; confinement is now the kernel-level bwrap/sandbox-exec jail
 # established at spawn (`scripts/spawn-confined.sh`), not a hook.
 "worktree::marker" = "engine"     # SL-254: worker identity is the `DOCTRINE_WORKER` env leg and nothing else; imports root (leaf) only — no MARKER file I/O (the disk marker is gone), though `run_status` still resolves a root via `root::find` (a filesystem stat) and writes stdout
-"worktree::provision" = "engine"   # provision is impure shell; imports engine + leaf
+"worktree::provision" = "command"  # SL-285: copy + install::regenerate — composes a command-tier verb, so command tier
 "worktree::import" = "engine"      # import classify+run; imports engine + leaf
 "worktree::land" = "engine"        # land classify+run; imports engine + leaf
 "worktree::gc" = "engine"          # gc classify+run; imports engine + leaf
 "worktree::inventory" = "engine"   # SL-190: worktree list classify+run; imports engine (gc, marker) + leaf (git, root)
-"worktree::fork" = "engine"        # fork; imports engine + leaf
+"worktree::fork" = "command"       # SL-285: fork_core provisions through worktree::provision (command: install::regenerate) — same upward-edge shape as worktree::coordinate
 # SL-254: `worktree::subagent` DELETED — SubagentStart/SubagentStop stamping and
 # worker nomination retired with the in-session arm; the worker is a confined
 # subprocess whose identity rides the environment, so there is nothing to stamp.

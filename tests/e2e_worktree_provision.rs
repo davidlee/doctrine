@@ -66,14 +66,21 @@ fn add_worktree(source: &Path, fork: &Path) {
     );
 }
 
-fn provision(source: &Path, fork: &Path) -> Output {
+/// `worktree provision <fork> -p <source>` plus any extra `flags` (e.g.
+/// `--allow-downgrade`, SL-285 PHASE-02).
+fn provision_with(source: &Path, fork: &Path, flags: &[&str]) -> Output {
     common::doctrine_cmd(source)
         .args(["worktree", "provision"])
         .arg(fork)
+        .args(flags)
         .arg("-p")
         .arg(source)
         .output()
         .expect("spawn doctrine")
+}
+
+fn provision(source: &Path, fork: &Path) -> Output {
+    provision_with(source, fork, &[])
 }
 
 fn check_allowlist(source: &Path) -> Output {
@@ -122,6 +129,41 @@ fn provision_copies_allowlisted_files_and_withholds_the_tier() {
     assert!(
         stderr.contains("withheld") && stderr.contains("handover.md"),
         "withheld file is warned: {stderr}"
+    );
+}
+
+// SL-285 PHASE-02 EX-4 / RV-425 F-6: a repair whose fork carries a stamp newer
+// than the running binary is refused by its regeneration, and `--allow-downgrade`
+// is the lever that lets the regeneration proceed. The allowlist copy runs FIRST,
+// so the refusal guards regenerate's own writes, not every write in the repair;
+// nothing under test deletes the fork, so `fork.exists()` would be tautological.
+#[test]
+fn provision_refuses_a_downgrade_and_keeps_the_fork() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = init_source(&tmp.path().join("src"));
+    // The lever must ride the COMMIT: the fork below is a checkout of this HEAD,
+    // so its own tracked stamp is what the downgrade check reads.
+    common::commit_stamp(&source, "999.0.0");
+    let fork = tmp.path().join("fork");
+    add_worktree(&source, &fork);
+
+    let out = provision(&source, &fork);
+    assert!(
+        !out.status.success(),
+        "a recorded version newer than the binary must refuse; stdout: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("999.0.0"),
+        "the refusal names the recorded version; stderr: {stderr}"
+    );
+
+    let ok = provision_with(&source, &fork, &["--allow-downgrade"]);
+    assert!(
+        ok.status.success(),
+        "--allow-downgrade proceeds: {}",
+        String::from_utf8_lossy(&ok.stderr)
     );
 }
 

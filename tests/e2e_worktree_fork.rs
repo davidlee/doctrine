@@ -335,6 +335,119 @@ fn fork_rolls_back_on_provision_failure() {
     assert!(!dir.exists(), "fork dir reaped");
 }
 
+// SL-285 PHASE-02 EX-3 / RV-425 F-6: a base carrying a tracked stamp NEWER than
+// the running binary is refused by the fork's regeneration, and the compensation
+// reverses the claim, the worktree and the dir alike.
+#[test]
+fn fork_rolls_back_on_downgrade_refusal() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    common::commit_stamp(src.path(), "999.0.0");
+    let base = git(src.path(), &["rev-parse", "HEAD"]);
+    let holder = tempfile::tempdir().unwrap();
+    let dir = holder.path().join("dg");
+
+    let out = run(
+        src.path(),
+        None,
+        &[
+            "worktree",
+            "fork",
+            "--base",
+            &base,
+            "--branch",
+            "wkr-dg",
+            "--dir",
+            dir.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "a recorded version newer than the binary must refuse; stdout: {}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("999.0.0"),
+        "the refusal names the recorded version; stderr: {}",
+        stderr(&out)
+    );
+    // GONE — the downgrade refusal is a post-add failure, so it rolls back.
+    assert!(
+        !worktree_registered(src.path(), &dir),
+        "worktree rolled back (gone); worktree list: {}",
+        git(src.path(), &["worktree", "list"])
+    );
+    assert!(
+        !branch_exists(src.path(), "wkr-dg"),
+        "branch rolled back (gone)"
+    );
+    assert!(!dir.exists(), "fork dir reaped");
+}
+
+// SL-285 PHASE-02: the same downgrade refusal on a BOUND worker fork. The record
+// is written between the claim and the worktree, so the compensation must reverse
+// the binding too — otherwise a rolled-back fork leaves a record for a fork that
+// no longer exists.
+#[test]
+fn worker_fork_rolls_back_its_binding_on_downgrade_refusal() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    common::commit_stamp(src.path(), "999.0.0");
+    let coord = std::fs::canonicalize(src.path()).unwrap();
+    let base = git(&coord, &["rev-parse", "HEAD"]);
+    let name = "wkr-bound-dg";
+    let branch = format!("dispatch/{name}");
+    // The binding only takes when the dir is the `<coord>/.worktrees/<name>`
+    // layout the resolver strips — the same fixture the bound-fork path assumes.
+    let dir = coord.join(".worktrees").join(name);
+
+    let out = run(
+        &coord,
+        None,
+        &[
+            "worktree",
+            "fork",
+            "--base",
+            &base,
+            "--branch",
+            &branch,
+            "--dir",
+            dir.to_str().unwrap(),
+            "--worker",
+            "--slice",
+            "285",
+            "--phase",
+            "PHASE-01",
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "a recorded version newer than the binary must refuse; stdout: {}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("999.0.0"),
+        "the refusal names the recorded version; stderr: {}",
+        stderr(&out)
+    );
+    // GONE — every leg, the bounding record included.
+    assert!(
+        !worktree_registered(&coord, &dir),
+        "worktree rolled back (gone); worktree list: {}",
+        git(&coord, &["worktree", "list"])
+    );
+    assert!(!branch_exists(&coord, &branch), "branch rolled back (gone)");
+    assert!(!dir.exists(), "fork dir reaped");
+    let record = coord
+        .join(".doctrine/state/dispatch/record")
+        .join(format!("{name}.toml"));
+    assert!(
+        !record.exists(),
+        "the durable binding is reversed with the fork: {}",
+        record.display()
+    );
+}
+
 // --- VT-4: Orchestrator refusal drives the real CLI ---
 
 #[test]

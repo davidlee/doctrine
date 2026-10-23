@@ -961,7 +961,7 @@ fn wire_boot_leg(
     if harnesses.is_empty() {
         return Ok(LegOutcome::done());
     }
-    match crate::boot::apply_wire(root, exec, harnesses, false) {
+    match crate::boot::apply_wire_into(root, exec, harnesses, &mut *out) {
         Ok(report) => match report.touched() {
             Ok(touched) => Ok(LegOutcome::Done(touched)),
             Err(failed) => Ok(LegOutcome::Failed(failed)),
@@ -1111,13 +1111,6 @@ fn run_forward_steps(
 /// Refuses when `source`'s stamp is unreadable, when `dest`'s stamp outranks the
 /// running binary without `allow_downgrade`, when the preflight hits tracked
 /// wiring, or when a leg fails.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by the regeneration verb, SL-285 PHASE-02"
-    )
-)]
 pub(crate) fn regenerate(
     source: &Path,
     dest: &Path,
@@ -8130,6 +8123,29 @@ mod tests_regenerate {
             fs::read(&mcp).unwrap(),
             before,
             "refused before any write — the file is byte-identical",
+        );
+    }
+
+    /// SL-285: the live boot-wiring leg reports on the caller's `out`, never
+    /// stdout — provisioning passes stderr, so a fork's stdout stays clean.
+    #[test]
+    fn regenerate_sends_boot_wiring_progress_to_out() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = repo_with_stamp(&tmp.path().join("repo"), Some(env!("CARGO_PKG_VERSION")));
+        // Claude is detected by its `detect` dir. Nothing here is tracked beyond
+        // the stamp, so the stale-wiring preflight passes and the wiring runs.
+        fs::create_dir_all(repo.join(".claude")).unwrap();
+
+        let mut out = Vec::new();
+        regenerate(&repo, &repo, false, &mut out).expect("the wiring leg runs");
+        let captured = text(&out);
+        assert!(
+            captured.contains("created:"),
+            "boot wiring progress lands on `out`: {captured}",
+        );
+        assert!(
+            captured.contains("claude:"),
+            "the claude harness reports on `out`: {captured}",
         );
     }
 

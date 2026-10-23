@@ -277,6 +277,101 @@ fn coordinate_create_rolls_back_branch_on_provision_failure() {
     assert!(!coord.exists(), "coordination dir reaped");
 }
 
+// SL-285 PHASE-02 EX-3 / RV-425 F-6: a trunk carrying a stamp newer than the
+// binary is refused by the coordination tree's regeneration, and Create's
+// compensation reverses DIR + WORKTREE + the branch it minted.
+#[test]
+fn coordinate_create_rolls_back_on_downgrade_refusal() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    seed_plan(src.path(), 64);
+    // The lever rides the COMMIT: the coord tree is a checkout of this trunk.
+    common::commit_stamp(src.path(), "999.0.0");
+    let holder = tempfile::tempdir().unwrap();
+    let coord = holder.path().join("dg");
+
+    let out = run(
+        src.path(),
+        None,
+        &[
+            "worktree",
+            "coordinate",
+            "--slice",
+            "64",
+            "--dir",
+            coord.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "a recorded version newer than the binary must refuse; stdout: {}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("999.0.0"),
+        "the refusal names the recorded version; stderr: {}",
+        stderr(&out)
+    );
+    assert!(!coord.exists(), "coordination dir reaped");
+    assert!(
+        !worktree_registered(src.path(), &coord),
+        "worktree rolled back; list: {}",
+        git(src.path(), &["worktree", "list"])
+    );
+    assert!(
+        !branch_exists(src.path(), COORD_BRANCH),
+        "Create rollback drops the freshly minted branch"
+    );
+}
+
+// SL-285 PHASE-02 EX-3 / RV-425 F-6: the Resume arm's compensation differs — the
+// downgrade refusal removes the resumed worktree and KEEPS the pre-existing branch
+// (a resume never deletes work it did not mint).
+#[test]
+fn coordinate_resume_keeps_branch_on_downgrade_refusal() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    seed_plan(src.path(), 64);
+    // Stamp ON the coordination branch (the resumed checkout is what carries the
+    // dest stamp), and on trunk too (the source stamp is read from the working
+    // tree, which main has checked out again below).
+    common::commit_stamp(src.path(), "999.0.0");
+    git(src.path(), &["branch", COORD_BRANCH]);
+    let holder = tempfile::tempdir().unwrap();
+    let coord = holder.path().join("resumed");
+
+    let out = run(
+        src.path(),
+        None,
+        &[
+            "worktree",
+            "coordinate",
+            "--slice",
+            "64",
+            "--dir",
+            coord.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "a recorded version newer than the binary must refuse; stdout: {}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("999.0.0"),
+        "the refusal names the recorded version; stderr: {}",
+        stderr(&out)
+    );
+    // KEPT — Resume compensates only its own worktree, never the branch.
+    assert!(
+        branch_exists(src.path(), COORD_BRANCH),
+        "resume KEEPS the pre-existing coordination branch"
+    );
+    assert!(!coord.exists(), "resumed worktree dir reaped");
+    assert!(!worktree_registered(src.path(), &coord), "no registration");
+    assert_eq!(dispatch_branch_count(src.path()), 1, "one dispatch branch");
+}
+
 // --- VT-2: impersonation — a worker process refuses `coordinate` anywhere ---
 
 #[test]
