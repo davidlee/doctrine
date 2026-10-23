@@ -33,3 +33,39 @@ Options, none taken yet:
 Option 2 looks right. Raised while implementing PHASE-16 T6; the phase does not
 depend on the answer, and the shipped runbook is not yet load-bearing for any
 real run.
+
+## Follow-up: shared internal executable resolution
+
+On 2026-10-23 the user reported a blocked `explore.research` discharge in
+another session with Doctrine installed at
+`/home/david/.local/share/doctrine/bin/doctrine`. The research baseline was
+reported current, and making the research directory visible to Git did not
+change the refusal. The user identified child-process PATH resolution as the
+suspected cause; the other session's executable has not been inspected here.
+
+The reported refusal was "no result for it was produced". Keep that symptom
+distinct from a confirmed spawn failure: the current source's `check` function
+returns a result containing the OS error when spawning fails. Reproduction
+must establish the running version and explain this discrepancy.
+
+Current source confirms the architectural inconsistency:
+
+- `install/design-prompts/exploring.toml` supplies literal `doctrine` as the
+  research verifier's executable.
+- `src/commands/design.rs::check` executes the supplied program directly,
+  relying on inherited PATH for that name.
+- `src/boot.rs` separately resolves `std::env::current_exe()` for boot and
+  supports `DOCTRINE_BIN` in external hook/MCP wrappers. Those mechanisms do
+  not resolve the research verifier's executable.
+
+Proposed scope: inventory internal Doctrine self-invocations and route them
+through one shared executable resolver, using the running executable as the
+default authority. Preserve arbitrary project-supplied verifier commands.
+Keep external bootstrap discovery (`DOCTRINE_BIN` / PATH) explicit and
+separate from internal self-invocation. The placeholder option above remains
+a candidate interface; design should decide it and account for changed
+runbook digests and existing discharge records.
+
+Verification should cover an absolute-path parent invocation with Doctrine
+absent from PATH, a competing Doctrine executable earlier on PATH, continued
+execution of arbitrary verifier commands, and useful launch-failure output.
