@@ -31,3 +31,4 @@ just quotient-forms  → ~/.local/state/quotient/forms/doctrine-{read,write}
   bwrap warns about the duplicate `--chdir`.
 
 Retirement: CHR-183.
+- Post-restart: the live `pi_agent` `write` call at the repo root ran with doctrine's cargo (2026-10-24).
