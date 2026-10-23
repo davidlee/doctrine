@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a16aef-899c-7e01-b657-8536e549d4e3"
+recorded_at = "2026-10-23T22:44:05.660901721Z"
+kind = "friction"
+summary = "[execute; SL-286 PHASE-02] pi_agent review (max thinking) failed on an llm-gateway timeout"
+detail = "Run run-20261023T223750304Z-13: after 3 requests the 4th request ended stopReason=error 'The operation timed out.' (thinkingLevel max). final=false, result null. Transient provider error; resumed by continuing the session. The quotient result surfaces only termination=error/causes=[error]; the cause needs events.jsonl."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
