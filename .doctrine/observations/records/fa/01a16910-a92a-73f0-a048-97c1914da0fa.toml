@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a16910-a92a-73f0-a048-97c1914da0fa"
+recorded_at = "2026-10-23T14:01:01.994569709Z"
+kind = "friction"
+summary = "[execute; SL-286] pi write profiles cannot take the repo root and have no cargo"
+detail = "quotient refuses a read-write root of /home/david/dev/doctrine (view-overlaps-protected: <root>/.quotient/profiles, even though that path does not exist). A subdirectory root works, but the child sees only that subtree and cargo is not on its PATH. Consequence: write delegates edit one subtree per call; the orchestrator runs every build/test and relays errors back, and a change spanning src/ and tests/ needs two sessions."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
