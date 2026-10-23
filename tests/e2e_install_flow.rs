@@ -22,7 +22,9 @@ use std::process::Output;
 
 mod common;
 
-use common::{INSTALL_MARKER, doctrine_cmd, doctrine_toml, git, init_repo, tree_digest};
+use common::{
+    INSTALL_MARKER, SAFE_CODEX_HOME, doctrine_cmd, doctrine_toml, git, init_repo, tree_digest,
+};
 
 /// The running binary's version: what a complete install records.
 const B: &str = env!("CARGO_PKG_VERSION");
@@ -501,4 +503,22 @@ fn hint_keeps_a_tracked_path_even_when_gitignore_matches_it() {
     let (add, _) = pathspecs(&hint(&out));
     assert!(add.contains("CLAUDE.md"), "{out}");
     execute(&hint(&out), root);
+}
+
+/// SL-286 PHASE-04 (RV-427 F-3): the shared spawn seam pins `CODEX_HOME` to a
+/// path that never exists, so no test child can read or write the developer's
+/// real codex config. Purely structural — nothing is spawned here; a suite that
+/// needs a real `CODEX_HOME` overrides this with its own `.env` call.
+#[test]
+fn doctrine_cmd_points_codex_home_at_a_nonexistent_path() {
+    let cmd = doctrine_cmd(&common::repo_root());
+    let envs: Vec<(&OsStr, Option<&OsStr>)> = cmd.get_envs().collect();
+    assert!(
+        envs.contains(&(OsStr::new("CODEX_HOME"), Some(OsStr::new(SAFE_CODEX_HOME)))),
+        "CODEX_HOME not pinned: {envs:?}"
+    );
+    assert!(
+        !Path::new(SAFE_CODEX_HOME).exists(),
+        "the safe CODEX_HOME must never be created: {SAFE_CODEX_HOME}"
+    );
 }

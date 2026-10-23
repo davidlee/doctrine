@@ -85,6 +85,12 @@ pub(crate) fn sha256(bytes: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// An absolute path that is *never created* — [`doctrine_cmd`] pins `CODEX_HOME`
+/// here, so no test child can read or write the developer's real codex config
+/// (RV-427 F-3, SL-286). Codex suites that need a real `CODEX_HOME` override it
+/// with `.env` (fixture-wins: a later `env` call overrides this one).
+pub(crate) const SAFE_CODEX_HOME: &str = "/nonexistent/doctrine-tests/codex-home";
+
 /// The built binary, spawned with `cwd` **bound** and the worker-mode env leg
 /// stripped — the single spawn seam for every integration test (IMP-352).
 ///
@@ -110,7 +116,9 @@ pub(crate) fn sha256(bytes: &[u8]) -> String {
 /// [`repo_root`] for the few goldens that read the real tree.
 pub(crate) fn doctrine_cmd(cwd: &std::path::Path) -> std::process::Command {
     let mut cmd = std::process::Command::new(doctrine_bin());
-    cmd.current_dir(cwd).env_remove("DOCTRINE_WORKER");
+    cmd.current_dir(cwd)
+        .env_remove("DOCTRINE_WORKER")
+        .env("CODEX_HOME", SAFE_CODEX_HOME);
     cmd
 }
 
