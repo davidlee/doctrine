@@ -26,6 +26,13 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, bail};
 use serde_json::{Map, Value};
 
+use crate::codex_mcp::{
+    self, CODEX_CONFIG_REL, CODEX_MCP_ENV, CODEX_MCP_SERVE_ARGS, CODEX_MCP_SERVER_KEY,
+    CODEX_MCP_SHELL, CODEX_MCP_SHELL_FLAG, CODEX_MCP_TABLE, CODEX_MCP_WRAPPER,
+};
+#[cfg(test)]
+// The moved vocabulary the boot suites still assert on: test-only in boot now.
+use crate::codex_mcp::{CODEX_MCP_WRAPPER_FORMS, normalise};
 use crate::install::{Change, Touched};
 use crate::install_config::{CLAUDE_SETTINGS_SCOPE_KEY, ClaudeSettingsScope};
 use crate::{adr, dtoml, fsutil, governance, install, memory, policy, root, standard};
@@ -610,40 +617,6 @@ const MCP_REL: &str = ".mcp.json";
 /// client-side alias, so its tools surface as `mcp__doctrine__review_*`.
 const MCP_SERVER_KEY: &str = "doctrine";
 
-/// The project-root codex config file — the codex MCP leg's write target
-/// (SL-271). The project layer is loaded by codex for TRUSTED projects only, so
-/// a written entry is never claimed active. Distinct from [`CODE_HOOKS_REL`]:
-/// codex hooks and MCP servers live in different files.
-const CODEX_CONFIG_REL: &str = ".codex/config.toml";
-
-/// The codex TOML table doctrine registers its MCP server under.
-const CODEX_MCP_TABLE: &str = "mcp_servers";
-
-/// The server key inside [`CODEX_MCP_TABLE`]. Pinned == [`MCP_SERVER_KEY`] (one
-/// server, two harnesses) rather than shared by construction; the agreement test
-/// holds them together (STD-001).
-const CODEX_MCP_SERVER_KEY: &str = "doctrine";
-
-/// The shell that reads `DOCTRINE_BIN` for the codex entry — codex execs
-/// `command` literally (no `${VAR:-default}` interpolation), so the override
-/// must run through a shell (DEC-323). That POSIX-shell dependency is declared
-/// per POL-002 facet 3 (README).
-const CODEX_MCP_SHELL: &str = "sh";
-/// The shell flag carrying the command string.
-const CODEX_MCP_SHELL_FLAG: &str = "-c";
-/// The doctrine serve args shared by both harnesses' entries.
-const CODEX_MCP_SERVE_ARGS: &str = "serve --mcp";
-/// The wrapper line doctrine emits as the codex `args[1]` — the portable env
-/// literal executed through [`CODEX_MCP_SHELL`]. `const` cannot compose, so this
-/// holds its own literal; the agreement test pins it to `PORTABLE_EXEC`.
-const CODEX_MCP_WRAPPER: &str = "exec \"${DOCTRINE_BIN:-doctrine}\" serve --mcp";
-/// Every wrapper line doctrine has ever emitted, newest first (today: one). A
-/// wording change APPENDS its predecessor, so a previously-emitted wrapper stays
-/// ours and refreshes instead of becoming foreign and nagging forever.
-const CODEX_MCP_WRAPPER_FORMS: &[&str] = &[CODEX_MCP_WRAPPER];
-/// The codex env forwarding seam — codex gives an MCP child a FILTERED
-/// environment, so `DOCTRINE_BIN` survives only if whitelisted.
-const CODEX_MCP_ENV: &str = "DOCTRINE_BIN";
 /// The portable doctrine invocation (SL-195, POL-002) — NO host abspath in a
 /// committed file; `DOCTRINE_BIN` overrides when `doctrine` is off PATH. Single
 /// source of the literal (STD-001) across two surfaces:
@@ -2473,13 +2446,6 @@ fn codex_mcp_entry() -> toml_edit::Item {
     toml_edit::Item::Table(entry)
 }
 
-/// Trim a wrapper line and collapse internal whitespace runs to one space — the
-/// canonicalising comparison behind [`CODEX_MCP_WRAPPER_FORMS`] membership, so a
-/// re-spaced variant of an emitted wording still reads as ours.
-fn normalise(line: &str) -> String {
-    line.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
 /// Classify the existing `doctrine` entry under `mcp_servers` against the strict
 /// ownership formula (design sec-5.2). A non-table-like entry is `Malformed`
 /// (doctrine cannot interpret it); anything table-like that doctrine did not emit
@@ -2491,22 +2457,15 @@ fn classify_codex_entry(entry: &toml_edit::Item) -> Result<McpEntryClass, Malfor
     let keys_ok = table
         .iter()
         .all(|(k, _)| matches!(k, "command" | "args" | "env_vars"));
-    let command_ok = table.get("command").and_then(|i| i.as_str()) == Some(CODEX_MCP_SHELL);
+    let wrapper_ok = codex_mcp::is_wrapper_form(table);
     let args = table.get("args").and_then(|i| i.as_array());
-    let args_ok = args.is_some_and(|a| {
-        a.len() == 2
-            && a.get(0).and_then(|v| v.as_str()) == Some(CODEX_MCP_SHELL_FLAG)
-            && a.get(1)
-                .and_then(|v| v.as_str())
-                .is_some_and(|w| CODEX_MCP_WRAPPER_FORMS.contains(&normalise(w).as_str()))
-    });
     let env_absent_or_exact = match table.get("env_vars") {
         None => true,
         Some(item) => item.as_array().is_some_and(|a| {
             a.len() == 1 && a.get(0).and_then(|v| v.as_str()) == Some(CODEX_MCP_ENV)
         }),
     };
-    if !(keys_ok && command_ok && args_ok && env_absent_or_exact) {
+    if !(keys_ok && wrapper_ok && env_absent_or_exact) {
         return Ok(McpEntryClass::Foreign);
     }
     // `owned`; `current` is byte-exact (no normalise) and requires the emitted

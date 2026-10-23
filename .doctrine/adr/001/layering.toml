@@ -94,12 +94,13 @@ authored_status = "engine"  # SL-238: → kinds, meta, entity; the sole per-kind
 review_ledger = "engine"    # SL-268 D4: → kinds, listing, estimate, value (leaf) + entity, relation (engine); RV ledger schema, derivation, transition table, blocker predicates
 relation_query = "command"  # SL-137: pure relation projection+filter engine over &Catalog; imports catalog (cmd) + integrity (now engine, SL-204) — uniformly command via catalog
 
-# ── command (21) ─────────────────────────────────────────────────────────
+# ── command (34) ─────────────────────────────────────────────────────────
 # Import commands + engines + leaves. CLI layer, run_* functions, user-facing verbs.
 adr = "command"             # → engine/leaf + install; ADR entity-kind handler
 backlog = "command"         # → engine/leaf; backlog entity-kind handler + CLI
 boot = "command"            # → engine/leaf + adr, governance, install, memory, policy, standard, worktree
 catalog = "command"         # → engine/leaf + adr, backlog, knowledge, memory, policy, rec, revision, slice, spec, standard; umbrella — sub-classified below
+codex_mcp = "command"       # → engine/leaf only (toml_edit, std): codex user MCP leg's pure half — wrapper recognition + vocabulary (SL-286); never boot/install
 commands = "command"        # → catalog, integrity, map_server, mcp_server, root, corpus, lazyspec; CLI command dispatch (SL-115: cli::Command + dispatch; guard; coverage/map/dep_seq/relation/supersede/inspect/facet/validate shells; serve)
 concept_map = "command"     # → engine/leaf; concept-map entity-kind handler
 corpus = "command"          # → boot, git, install, memory, root; corpus install machinery

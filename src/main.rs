@@ -26,6 +26,7 @@ mod boot;
 mod boundary;
 mod catalog;
 pub mod clock;
+mod codex_mcp;
 mod commands;
 mod comparison;
 mod concept_map;
