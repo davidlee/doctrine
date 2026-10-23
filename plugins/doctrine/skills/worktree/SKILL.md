@@ -159,6 +159,24 @@ skipped `fork`. It reads `.worktreeinclude`, fails closed on a tier-naming
 pattern, and copies only allowlisted gitignored files — **withholding the
 coordination/runtime tier at the copy seam even under a broad `**` pattern.**
 
+### Provision = copy, then regenerate
+
+The copy is only half of it. `fork` and `provision` then **regenerate the derived
+runtime tier** in the fork from the source — skills, agent defs, harness link
+dirs and config, shipped memory — out of the running binary's embedded assets.
+Progress goes to **stderr**; a caller's stdout stays machine-clean. A refusal is
+fatal, never a warning: a fork whose recorded version is newer than the running
+binary stops the whole act, and `--allow-downgrade` (repair only) is the
+deliberate override. A source with no committed `installed-version` was never
+installed — nothing is regenerated and the run prints `derived tier not
+regenerated — doctrine not installed in <source>` at exit 0. Repair a stale or
+conflicted fork from the source root:
+
+```sh
+doctrine worktree provision <fork>                     # copy + regenerate
+doctrine worktree provision <fork> --allow-downgrade   # the fork records a newer version
+```
+
 ### Honest invariant framing (do not overstate)
 
 The copy-seam guarantee holds **because provision is the only copier.**
@@ -248,7 +266,7 @@ check-allowlist`.
 | Worktree dir not ignored | Add to `.gitignore` + commit before `fork` |
 | Sandbox denies fork, `mode=solo` | Work-in-place (no fork) |
 | Sandbox denies fork, `mode=worker` | **Abort** (isolation mandatory) |
-| Adopted a fork that skipped `fork` | `doctrine worktree provision <fork>` from the source root (sole copier) |
+| Adopted a fork that skipped `fork` | `doctrine worktree provision <fork>` from the source root — copies the allowlist, then regenerates the derived tier |
 | Tree dirty / untracked-non-ignored | **Abort** commit-before-spawn |
 | Batch-commit boundary | `doctrine worktree branch-point-check --base <B>` → 1 = re-dispatch |
 | Baseline red in fork | Fix in provisioning; **never hand off** |
@@ -262,6 +280,8 @@ check-allowlist`.
 **Never:**
 - Copy gitignored files into a fork by any path other than `fork` / `provision`
   (the sole copiers — the exclusion guarantee depends on them).
+- Expect the derived tier to arrive by copy: provisioning **regenerates** it from
+  the running binary, and a source that was never installed regenerates nothing.
 - Run a second copier after `fork`, or run `provision` from inside the fork.
 - Imply `check-allowlist` green means the allowlist is complete (it is a smell test).
 - Let a `worker` degrade to work-in-place.
