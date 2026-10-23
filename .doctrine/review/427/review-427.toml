@@ -17,6 +17,11 @@ act = "conclude"
 role = "raiser"
 note = "pi adversarial reviewer (quotient review profile, session f4cb4d01): 20 findings over five rounds, all verified; the last round raised none."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Re-concluded after adding routes to F-1..F-4, F-15 for the lock gate; all 20 findings verified."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-286"
 
@@ -28,6 +33,7 @@ title = "Degraded mapped to Refused withholds the version stamp"
 detail = "install.rs stamp_decision records stamps only when every leg is Done; any Refused prints 'install incomplete: <legs>; version not recorded' and skips the commit hint. Mapping Degraded (e.g. codex not on PATH, normal in the jail) to Refused makes every such install permanently incomplete and unstamped, contradicting DEC-408 'degraded, never failed'. The design's sample line also misquotes the real string. Raised by pi adversarial reviewer (quotient review profile)."
 disposition = "fix-now"
 response = "Verified install.rs stamp_decision / incomplete_line. Degraded now maps to LegOutcome::Done with a disclosure line, so the version stamp records; only project-entry problems and codex add failures are Refused. Sample corrected to the real 'install incomplete: <legs>; version not recorded' format. sec-leg, sec-report, DEC-408 amended."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -44,6 +50,23 @@ act = "verify"
 role = "raiser"
 note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Reopened only to attach a route required by the design lock gate; substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Verified install.rs stamp_decision / incomplete_line. Degraded now maps to LegOutcome::Done with a disclosure line, so the version stamp records; only project-entry problems and codex add failures are Refused. Sample corrected to the real 'install incomplete: <legs>; version not recorded' format. sec-leg, sec-report, DEC-408 amended."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Re-verified unchanged (pi raiser verdict, session f4cb4d01); route added."
+
 [[finding]]
 id = "F-2"
 status = "verified"
@@ -52,6 +75,7 @@ title = "Near-miss doctrine wrappers are never retired and keep shadowing"
 detail = 'The existing ownership predicate (boot.rs keys_ok / env_absent_or_exact) requires keys within {command,args,env_vars} and env_vars exactly ["DOCTRINE_BIN"]. A doctrine wrapper with one added key is Foreign; command = "sh" has no path separator, so it lands in PathShadow: left in place, install incomplete, and the project layer keeps winning, so EVD-032 persists in exactly the repos this slice targets.'
 disposition = "fix-now"
 response = "Verified boot.rs keys_ok / env_absent_or_exact. OwnedWrapper is now shape-first: command sh, args [-c, line in CODEX_MCP_WRAPPER_FORMS], any other keys; extra keys are listed as removed. sec-leg table, DEC-406 amended."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -67,6 +91,23 @@ response = "Verified boot.rs keys_ok / env_absent_or_exact. OwnedWrapper is now 
 act = "verify"
 role = "raiser"
 note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Reopened only to attach a route required by the design lock gate; substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Verified boot.rs keys_ok / env_absent_or_exact. OwnedWrapper is now shape-first: command sh, args [-c, line in CODEX_MCP_WRAPPER_FORMS], any other keys; extra keys are listed as removed. sec-leg table, DEC-406 amended."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Re-verified unchanged (pi raiser verdict, session f4cb4d01); route added."
 
 [[finding]]
 id = "F-3"
@@ -76,6 +117,7 @@ title = "Existing e2e suites would rewrite the developer's real codex config"
 detail = "tests/e2e_install_flow.rs runs install --agent codex ... --yes; tests/common doctrine_cmd sets no HOME/CODEX_HOME. After this slice -y grants consent and the temp repo is outside the exec's root, so the leg would run codex mcp add against ~/.codex/config.toml with target/debug/doctrine. Code impact lists only the two rewritten suites."
 disposition = "fix-now"
 response = "Verified tests/common doctrine_cmd sets no HOME/CODEX_HOME. doctrine_cmd now points CODEX_HOME at a non-existent path, so every default test degrades before any codex call; codex suites override. Added to code impact, risks, verification (a fake codex on PATH must record no call)."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -92,6 +134,23 @@ act = "verify"
 role = "raiser"
 note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
 
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Reopened only to attach a route required by the design lock gate; substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Verified tests/common doctrine_cmd sets no HOME/CODEX_HOME. doctrine_cmd now points CODEX_HOME at a non-existent path, so every default test degrades before any codex call; codex suites override. Added to code impact, risks, verification (a fake codex on PATH must record no call)."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Re-verified unchanged (pi raiser verdict, session f4cb4d01); route added."
+
 [[finding]]
 id = "F-4"
 status = "verified"
@@ -100,6 +159,7 @@ title = "User-config read failures have no plan variant"
 detail = "DEC-408 degrades on an unreadable or unparseable user config, but the plan enumerates only BadCodexHome, NoHome, ExecInProject, entry-level Malformed, NoCodexCli. No variant for EACCES on the file or a whole-document parse error."
 disposition = "fix-now"
 response = "Added Degraded(UserUnreadable) and Degraded(UserUnparseable) to the plan and the matrix. sec-leg step 1, DEC-408 amended."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -115,6 +175,23 @@ response = "Added Degraded(UserUnreadable) and Degraded(UserUnparseable) to the 
 act = "verify"
 role = "raiser"
 note = "pi raiser re-review (session f4cb4d01): verified against current design.md and DEC records."
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Reopened only to attach a route required by the design lock gate; substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Added Degraded(UserUnreadable) and Degraded(UserUnparseable) to the plan and the matrix. sec-leg step 1, DEC-408 amended."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Re-verified unchanged (pi raiser verdict, session f4cb4d01); route added."
 
 [[finding]]
 id = "F-5"
@@ -364,6 +441,7 @@ title = "Same-repository rule refuses the installed binary in a git-managed home
 detail = "Exec at ~/.local/share/doctrine/bin/doctrine and a project under ~ that is not its own repo (marker-rooted) both resolve to ~/.git, so ExecInProjectRepo refuses an installed release binary in exactly the user environment (home is a git checkout). Raised by pi raiser on re-review."
 disposition = "fix-now"
 response = "Fixed by the same restriction: a marker-rooted project under a git-managed ~ is not a checkout top, so only the prefix check applies and the installed binary passes. Main checkout and fork worktrees of the same repo are still refused. Matrix row added."
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -379,6 +457,23 @@ response = "Fixed by the same restriction: a marker-rooted project under a git-m
 act = "verify"
 role = "raiser"
 note = "pi raiser re-review: verified."
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = "Reopened only to attach a route required by the design lock gate; substance unchanged."
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Fixed by the same restriction: a marker-rooted project under a git-managed ~ is not a checkout top, so only the prefix check applies and the installed binary passes. Main checkout and fork worktrees of the same repo are still refused. Matrix row added."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Re-verified unchanged (pi raiser verdict, session f4cb4d01); route added."
 
 [[finding]]
 id = "F-16"

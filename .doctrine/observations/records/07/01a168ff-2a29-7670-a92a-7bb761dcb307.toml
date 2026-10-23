@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a168ff-2a29-7670-a92a-7bb761dcb307"
+recorded_at = "2026-10-23T13:41:55.369252981Z"
+kind = "friction"
+summary = "[design; SL-286] lock gate demanded routes on verified severe findings; reopen/dispose/verify x5 to attach them"
+detail = "review-disposed refused: severe findings carry no route (F-1..F-4, F-15). They were verified, so the only path is raiser reopen, responder re-dispose with --route, raiser verify, then conclude again — 16 extra ledger calls. The route requirement is not surfaced at raise or dispose time."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
