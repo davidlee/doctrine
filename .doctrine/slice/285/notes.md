@@ -72,30 +72,30 @@ jail that stops binding `/` (or the macOS sandbox-exec arm, not probed) would
 need re-checking. VH-1 confirmed by the user 2026-10-23 ("VH-1: confirmed").
 
 ## Harvest
-- audit: RV-426 (7 findings, all verified; brief in review-426.md)
-- follow-ups: ISS-531 (managed gitignore block omits .codex + slice research; next), ISS-532 (boot_harnesses silent skip)
-- residual: tests/common `fresh_inputs` leaves a registered git worktree after its TempDir drops (harmless today)
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-23 · PHASE-02 · fork sl-285 5727bb85b
+fresh-as-of: 2026-10-23 · reconcile (audit RV-426 concluded) · edge c3a2e0d55+ / sl-285 c2b132cc1
 
 ### Produced
 - design locked rev 31 (6fe624a0a, 3b21595c6); plan + phases (78ac815f9)
-- PHASE-01 done on branch sl-285 (.worktrees/SL-285): d7af02edf, 7a17cbce4, a107c0ff2 — gate green
-- PHASE-02 done on sl-285: 5727bb85b — provision seam, six callers, compensation, layering re-tier; gate green
-- minted: ISS-529 — fork rollback misses binding on non-dispatch branch; ISS-530 — clean candidate leaks on ledger-write failure
-- RV-425 concluded; F-1/F-6 routed control (transcribed PHASE-01 EX-4, PHASE-02 EX-3)
-- design deltas for reconcile: § Reconcile carry above
+- PHASE-01 on sl-285: d7af02edf, 7a17cbce4, a107c0ff2
+- PHASE-02 on sl-285: 5727bb85b
+- PHASE-03 on sl-285: 1f71b7994, c3704cec0, 8f160792e, 7dd08bd55 — landed on edge 98b7907cd; gate green on edge
+- RV-426 fix-now tests (F-1..F-3): sl-285 c2b132cc1 — NOT yet landed (land refused: foreign dirt in primary)
+- minted: ISS-529, ISS-530 (PHASE-02 review); ISS-531 (managed gitignore gaps, tagged next); ISS-532 (boot_harnesses silent skip)
+- RV-425 concluded; RV-426 (audit) concluded — reconciliation brief in review-426.md
+- design deltas for reconcile: § Reconcile carry + RV-426 brief
 
 ### Learned
-- mem_01a16847bf3c7d93b0aeb61d27afd338 — pi writable delegates: worktree below root, no toolchain, orchestrator verifies
-- mem_01a1680243ea78e383f785c81fff6e07 — apply_wire dry-run reports no touched paths (now superseded by plan_wire)
+- mem_01a16847bf3c7d93b0aeb61d27afd338 — pi delegation: worktree below root, no toolchain; PHASE-03 calibration of new profiles appended
+- mem_01a1680243ea78e383f785c81fff6e07 — apply_wire dry-run reports no touched paths (superseded by plan_wire)
 - mem_01a1680244397e23b4c63de9a0223fad — linked worktrees read main's install marker; ignored hook files bake the absolute exec
 
 ### Open
-- QUE-229 — answered: keep the re-tier (2026-10-23)
+- QUE-229 — answered: keep the re-tier (integrate at reconcile)
 - DEC-402 — regeneration legs + tracked-file guard
 - DEC-396 — ProvisionMode single entry
 - DEC-397 — creation compensates, repair preserves
 - DEC-393 — harness set from source
-- DEC-399 — downgrade refusal
-- DEC-401 — fatal legs
+- DEC-399 — downgrade refusal (amend per carry: uninstalled source / absent dest stamp)
+- DEC-401 — fatal legs (amend per carry: Refused halts)
+- residual: tests/common `fresh_inputs` leaves a registered git worktree after TempDir drop
