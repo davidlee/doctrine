@@ -660,7 +660,7 @@ pub(crate) fn add_command(bake: &Path) -> String {
 /// The user's answer to the consent question. Consent only matters when the plan
 /// proposes a change; anything but [`Consent::Granted`] there takes the declined
 /// path — no CLI run, no write.
-#[expect(dead_code, reason = "wired in SL-286 PHASE-04")]
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Consent {
     /// The user said yes.
@@ -2362,6 +2362,321 @@ mod tests {
                 current(&config),
                 override_in_effect("./bin/doctrine")
             )
+        );
+    }
+
+    // --- execute: nothing written (design sec-leg § Execute, EX-2..EX-5) ---
+
+    /// The project file's bytes, for the tests that pin "this file was untouched".
+    fn project_bytes(dir: &Path) -> String {
+        fs::read_to_string(dir.join(CODEX_CONFIG_REL)).unwrap()
+    }
+
+    #[test]
+    fn execute_declined_runs_nothing_and_writes_nothing() {
+        let wrapper = wrapper_entry("");
+        let dir = project_dir(&wrapper);
+        let planned = plan_of("model = \"gpt-5\"\n", &wrapper);
+        let bake = planned.bake.clone().unwrap();
+
+        let (outcome, printed, codex) = run(&planned, Consent::Declined, dir.path());
+
+        assert!(
+            codex.calls.borrow().is_empty(),
+            "a no is a no: codex is not run"
+        );
+        assert_eq!(
+            outcome,
+            CodexUserOutcome::Done(vec![]),
+            "nothing was touched"
+        );
+        assert_eq!(printed, format!("{}\n", declined(&bake)));
+        assert_eq!(
+            project_bytes(dir.path()),
+            wrapper,
+            "the wrapper stays so codex keeps the server it has"
+        );
+    }
+
+    #[test]
+    fn execute_not_asked_with_a_proposal_takes_the_declined_path() {
+        let wrapper = wrapper_entry("");
+        let dir = project_dir(&wrapper);
+        let planned = plan_of("model = \"gpt-5\"\n", &wrapper);
+        let bake = planned.bake.clone().unwrap();
+
+        let (outcome, printed, codex) = run(&planned, Consent::NotAsked, dir.path());
+
+        assert!(
+            codex.calls.borrow().is_empty(),
+            "an unasked question is not consent"
+        );
+        assert_eq!(outcome, CodexUserOutcome::Done(vec![]));
+        assert_eq!(printed, format!("{}\n", declined(&bake)));
+        assert_eq!(project_bytes(dir.path()), wrapper);
+    }
+
+    #[test]
+    fn execute_degraded_prints_the_skip_and_completes() {
+        let project_text = "model = \"gpt-5\"\n";
+        let dir = project_dir(project_text);
+        let mut env = env_ok();
+        env.codex_on_path = false;
+        let planned = plan(
+            FileRead::Absent,
+            FileRead::Text(project_text),
+            &facts_ok(),
+            &env,
+        );
+        assert!(planned.degraded.is_some(), "the fixture must be degraded");
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert!(codex.calls.borrow().is_empty(), "a skip runs nothing");
+        assert_eq!(outcome, CodexUserOutcome::Done(vec![]));
+        assert_eq!(
+            printed,
+            format!("{}\n", skipped(&planned).unwrap()),
+            "the skip block is the whole report"
+        );
+        assert_eq!(
+            project_bytes(dir.path()),
+            project_text,
+            "and nothing is written"
+        );
+    }
+
+    #[test]
+    fn execute_refuses_a_path_shadow_without_writing() {
+        let project_text = "[mcp_servers.doctrine]\ncommand = \"doctrine\"\n";
+        let dir = project_dir(project_text);
+        let planned = plan_of("model = \"gpt-5\"\n", project_text);
+        assert_eq!(
+            planned.project,
+            ProjectEntry::PathShadow {
+                command: "doctrine".to_string()
+            },
+            "the fixture must be a shadow"
+        );
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert!(
+            codex.calls.borrow().is_empty(),
+            "a user write would not be what codex runs here"
+        );
+        let CodexUserOutcome::Refused(reason) = outcome else {
+            panic!("expected a refusal, got {outcome:?}");
+        };
+        assert_eq!(reason, path_shadow("doctrine"));
+        assert_eq!(printed, format!("{reason}\n"));
+        assert_eq!(project_bytes(dir.path()), project_text);
+    }
+
+    #[test]
+    fn execute_refuses_a_malformed_project_entry_without_writing() {
+        let project_text = "[mcp_servers.doctrine]\ncommand = \"\"\n";
+        let dir = project_dir(project_text);
+        let planned = plan_of("model = \"gpt-5\"\n", project_text);
+        assert_eq!(planned.project, ProjectEntry::Malformed);
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert!(codex.calls.borrow().is_empty());
+        let CodexUserOutcome::Refused(reason) = outcome else {
+            panic!("expected a refusal, got {outcome:?}");
+        };
+        assert_eq!(reason, project_malformed());
+        assert_eq!(printed, format!("{reason}\n"));
+        assert_eq!(project_bytes(dir.path()), project_text);
+    }
+
+    #[test]
+    fn execute_refuses_an_unreadable_project_file_without_writing() {
+        // The project file is not TOML, so nothing here can be verified.
+        let project_text = "not = [toml\n";
+        let dir = project_dir(project_text);
+        let user = "[mcp_servers.doctrine]\ncommand = \"/old/bin/doctrine\"\nargs = [\"serve\"]\n";
+        let planned = plan_of(user, project_text);
+        assert_eq!(planned.project, ProjectEntry::Unreadable);
+        assert_eq!(planned.degraded, None, "the fixture must reach execute");
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert!(codex.calls.borrow().is_empty());
+        let CodexUserOutcome::Refused(reason) = outcome else {
+            panic!("expected a refusal, got {outcome:?}");
+        };
+        assert_eq!(reason, project_unreadable());
+        assert_eq!(printed, format!("{reason}\n"));
+        assert_eq!(project_bytes(dir.path()), project_text);
+    }
+
+    // --- execute: failures (design sec-leg § Execute, EX-2, RV-427 F-6) ---
+
+    /// The project's `.codex` directory made read-only, so a removal's temp file
+    /// cannot be created while the read still succeeds. Restores the mode on drop,
+    /// so a failing assertion never strands an unremovable tempdir; `took` is false
+    /// when the mode did not bite (a root process ignores it) and the test must
+    /// skip.
+    struct ReadOnlyDir {
+        path: PathBuf,
+        mode: u32,
+        took: bool,
+    }
+
+    impl ReadOnlyDir {
+        fn new(dir: &Path) -> Self {
+            use std::os::unix::fs::PermissionsExt;
+
+            let path = dir.join(Path::new(CODEX_CONFIG_REL).parent().unwrap());
+            let mode = fs::metadata(&path).unwrap().permissions().mode();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o555)).unwrap();
+            let probe = path.join(".probe");
+            let took = fs::write(&probe, b"").is_err();
+            if !took {
+                let _ = fs::remove_file(&probe);
+                let _ = fs::set_permissions(&path, fs::Permissions::from_mode(mode));
+            }
+            Self { path, mode, took }
+        }
+    }
+
+    impl Drop for ReadOnlyDir {
+        fn drop(&mut self) {
+            use std::os::unix::fs::PermissionsExt;
+
+            let _ = fs::set_permissions(&self.path, fs::Permissions::from_mode(self.mode));
+        }
+    }
+
+    #[test]
+    fn execute_add_failure_refuses_with_codex_stderr_and_leaves_the_project_file() {
+        let wrapper = wrapper_entry("");
+        let dir = project_dir(&wrapper);
+        let planned = plan_of("model = \"gpt-5\"\n", &wrapper);
+        let codex = FakeCodex::failing("boom\nline two");
+
+        let (outcome, printed) = run_with(&planned, Consent::Granted, dir.path(), &codex);
+
+        assert_eq!(codex.calls.borrow().as_slice(), [add_args(Path::new(BAKE))]);
+        let CodexUserOutcome::Refused(reason) = outcome else {
+            panic!("a failed add is a refusal, got {outcome:?}");
+        };
+        assert_eq!(reason, add_failed("boom\nline two"));
+        assert_eq!(printed, format!("{reason}\n"));
+        assert!(reason.contains("boom"));
+        assert!(
+            reason.contains("\n  line two"),
+            "the child's stderr is indented beneath its line, got {reason:?}"
+        );
+        assert_eq!(
+            project_bytes(dir.path()),
+            wrapper,
+            "the add failed, so the wrapper was never reached"
+        );
+    }
+
+    #[test]
+    fn execute_removal_failure_after_the_user_write_says_rerun_install() {
+        let wrapper = wrapper_entry("");
+        let dir = project_dir(&wrapper);
+        let planned = plan_of("model = \"gpt-5\"\n", &wrapper);
+        let config = planned.user_config.clone().unwrap();
+
+        let read_only = ReadOnlyDir::new(dir.path());
+        if !read_only.took {
+            return; // root ignores the mode: nothing to prove here
+        }
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert_eq!(codex.calls.borrow().as_slice(), [add_args(Path::new(BAKE))]);
+        assert_eq!(
+            outcome,
+            CodexUserOutcome::Refused(wrapper_still_overrides())
+        );
+        assert!(
+            printed.starts_with(&format!("{}\n", registered(&config, Path::new(BAKE)))),
+            "the user write landed before the removal failed, got {printed:?}"
+        );
+        assert!(
+            printed.ends_with(&format!("{}\n", wrapper_still_overrides())),
+            "a written user entry shadowed by the wrapper is the worse failure, got {printed:?}"
+        );
+        assert!(
+            wrapper_still_overrides().contains("rerun install"),
+            "the remedy is a rerun"
+        );
+        assert!(
+            !printed.contains(text::APP_SERVER),
+            "the leg refused, so no daemon hint: {printed}"
+        );
+        assert_eq!(
+            project_bytes(dir.path()),
+            wrapper,
+            "the removal did not land"
+        );
+    }
+
+    #[test]
+    fn execute_removal_only_failure_names_the_wrapper_not_removed() {
+        let wrapper = wrapper_entry("");
+        let dir = project_dir(&wrapper);
+        let planned = plan_of(&current_user(), &wrapper);
+
+        let read_only = ReadOnlyDir::new(dir.path());
+        if !read_only.took {
+            return; // root ignores the mode: nothing to prove here
+        }
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert!(
+            codex.calls.borrow().is_empty(),
+            "no user write, so codex is not run"
+        );
+        let CodexUserOutcome::Refused(reason) = outcome else {
+            panic!("expected a refusal, got {outcome:?}");
+        };
+        assert!(
+            reason.starts_with(&wrapper_not_removed("")),
+            "the wrapper, not a user entry, is what failed, got {reason:?}"
+        );
+        assert!(reason.contains(text::WRAPPER_NOT_REMOVED));
+        assert!(
+            !reason.contains("user entry written"),
+            "nothing was written to the user config: {reason:?}"
+        );
+        assert_eq!(printed, format!("{reason}\n"));
+        assert_eq!(project_bytes(dir.path()), wrapper);
+    }
+
+    #[test]
+    fn execute_removal_refuses_a_wrapper_changed_since_the_plan() {
+        let wrapper = wrapper_entry("");
+        // The plan saw a wrapper; the file now holds the user's own override.
+        let changed = "[mcp_servers.doctrine]\ncommand = \"/opt/doctrine\"\n";
+        let dir = project_dir(changed);
+        let planned = plan_of("model = \"gpt-5\"\n", &wrapper);
+        assert_eq!(
+            planned.project,
+            ProjectEntry::OwnedWrapper { extra_keys: vec![] },
+            "the fixture must plan a removal"
+        );
+
+        let (outcome, printed, codex) = run(&planned, Consent::Granted, dir.path());
+
+        assert_eq!(codex.calls.borrow().as_slice(), [add_args(Path::new(BAKE))]);
+        assert_eq!(
+            outcome,
+            CodexUserOutcome::Refused(wrapper_still_overrides())
+        );
+        assert!(printed.ends_with(&format!("{}\n", wrapper_still_overrides())));
+        assert_eq!(
+            project_bytes(dir.path()),
+            changed,
+            "nothing is ever removed on a guess"
         );
     }
 
