@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 485
+slug = "rootless-serve-mcp"
+title = "`serve --mcp` outside a doctrine project — no project root, or a root without `.doctrine/` — completes the MCP handshake rootless: `initialize` succeeds with instructions naming the cause, `tools/list` is empty, and `tools/call` returns a JSON-RPC error carrying the same cause; inside a doctrine project behaviour is unchanged."
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

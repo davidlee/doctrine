@@ -159,20 +159,32 @@ doctrine install --agent codex    # or pi / universal: all read .agents/skills f
 ### Host dependencies
 
 `doctrine install` registers the doctrine MCP server with each detected harness.
-The **Codex** registration writes a `[mcp_servers.doctrine]` entry into the
-project's `.codex/config.toml` whose command runs through a POSIX shell:
+The **Codex** registration is user-level: install runs
+`codex mcp add doctrine -- <absolute path of the doctrine on your PATH> serve --mcp`,
+writing `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`), so it applies to
+every project on the machine. Interactive codex starts MCP servers from a
+long-lived daemon whose `PATH` is frozen, so a `PATH`-dependent command fails
+there; an absolute path works, and a machine path does not belong in a file that
+client projects commit.
 
-```toml
-[mcp_servers.doctrine]
-command = "sh"
-args = ["-c", 'exec "${DOCTRINE_BIN:-doctrine}" serve --mcp']
-env_vars = ["DOCTRINE_BIN"]
-```
+Two things follow:
 
-Codex execs the command string literally and does not expand `${VAR:-default}`
-itself, so a POSIX `sh` must be on `PATH` (present on every Linux and macOS
-system); the `sh -c` layer is what reads `DOCTRINE_BIN`. The Claude `.mcp.json`
-entry needs no shell — Claude expands the literal itself.
+- install asks a separate question before changing that user entry (default **No**,
+  asked only when the entry would change), and `-y` grants it; declining changes
+  nothing in either codex config;
+- `codex mcp add` replaces the whole entry, so the prompt lists any keys the
+  write would drop.
+
+An old doctrine-written project-level `[mcp_servers.doctrine]` entry is removed
+under the same consent, because codex prefers the project layer. A project entry
+whose `command` contains a path separator — or a `url` transport — is a deliberate
+override: left untouched and reported. A `PATH`-dependent foreign project entry is
+warned about and leaves install incomplete. Codex has a per-folder trust prompt
+before it loads project config; the user-level entry does not depend on it.
+
+The `codex` CLI is a declared dependency of the codex harness: with no `codex` on
+`PATH`, install prints the `codex mcp add` line to run yourself. A codex session
+already running keeps its old MCP config until restarted.
 
 ## Post-Install Setup 
 

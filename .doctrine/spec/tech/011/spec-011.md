@@ -27,8 +27,9 @@ fixed marker on any miss; write only on content change; wire the `@`-import and
 the Claude hook set through `boot install`, into the scope-selected settings file
 and sweeping the abandoned sibling; merge the codex hook registry into
 `.codex/hooks.json` with the memory-surface limit and timeout on each handler;
-register the doctrine MCP server edit-preservingly per harness (Claude
-`.mcp.json`, codex `.codex/config.toml`), owning only a shape doctrine emitted;
+register the doctrine MCP server per harness (Claude `.mcp.json`
+edit-preservingly, owning only a shape doctrine emitted; codex in the user config
+through `codex mcp add`, with consent);
 plan and install pi's generated extensions in the runtime tier and register them
 through `.pi/settings.json`, one report leg per file; and run
 `boot --check` as a disk-scoped sentry.
@@ -134,19 +135,32 @@ the spec does not set is left alone. Codex runs a new or changed hook only after
 the operator trusts it in `/hooks`; writing the file does not activate it, so
 every wired or refreshed outcome prints that manual step naming all three hooks.
 
-Both arms also **register the doctrine MCP server**, each in its own harness's
-file and behind the same pure-plan / imperative-apply posture: Claude merges
-`mcpServers.doctrine` into the project `.mcp.json`, and codex writes
-`[mcp_servers.doctrine]` into the project `.codex/config.toml` by a narrow-path,
-edit-preserving `toml_edit` mutation that keeps unrelated keys, tables and
-comments. Each arm owns only a shape doctrine has emitted — for codex the
-portable `sh -c` wrapper line in the emitted-forms set, with `env_vars` absent
-or exactly the emitted whitelist — refreshes a stale owned entry, preserves
-every foreign key and server, and prints a manual-paste snippet rather than
-clobbering a file or entry it cannot interpret. The codex entry names no host
-absolute path (POL-002). Neither leg's report claims the harness has activated
-the server: a `wrote` line is a statement about the file, never about a live
-entry (POL-003 facet 3).
+Both arms also **register the doctrine MCP server**, behind the same pure-plan /
+imperative-apply posture. Claude merges `mcpServers.doctrine` into the project
+`.mcp.json`, owning only a shape doctrine has emitted, refreshing a stale owned
+entry, preserving every foreign key and server, and printing a manual-paste
+snippet rather than clobbering a file or entry it cannot interpret.
+
+Codex registers at **user level**: interactive codex spawns MCP servers from a
+daemon whose `PATH` is frozen at start (EVD-032), so only an absolute command is
+reliable. An explicit `install` or `boot install` — never worktree regeneration
+(DEC-411) — runs `codex mcp add doctrine -- <absolute path of the doctrine on
+PATH> serve --mcp` after a consent prompt (default No; asked only when the entry
+would change; `-y` grants it) that lists the keys the whole-table replacement
+drops (EVD-033). The absolute path lands only in the user config, never in a file
+client repos commit (POL-002, DEC-410). With consent, doctrine's own project-level
+`sh -c` wrapper is removed, since codex prefers the project layer; a project entry
+whose `command` contains a path separator, or a non-empty `url`, is an override
+left untouched and reported, and a PATH-dependent foreign entry is warned and
+holds install incomplete (DEC-406). No codex CLI, a bad `CODEX_HOME`/`HOME` or an
+unreadable user config degrades to printing the cause and the command to run
+(DEC-408). Because that entry starts `serve --mcp` in every folder, the server
+runs rootless outside a doctrine project: an empty tool list and a disclosed cause
+(DEC-405).
+
+Neither leg's report claims the harness has activated the server: a `wrote` line
+is a statement about the file, never about a live entry (POL-003 facet 3); codex's
+report adds the daemon-restart hint after any write (DEC-407).
 
 The arms are disjoint: the codex arm writes only its hooks, its MCP entry and
 the `AGENTS.md` import, and writes no pi file. The **pi arm** plans and installs

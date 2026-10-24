@@ -95,3 +95,38 @@ gate. A refactor that moves an asserted literal should re-run `verify-vt`.
 - F-3: SPEC-011 → REV add requirement: rootless `serve --mcp` completes the
   handshake with no tools and a disclosed cause (DEC-405).
 - F-5: `doctrine supersede` DEC-323 and DEC-332 by DEC-406; DEC-325 by DEC-407.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+
+- design.md: DEC-412/413/414 folded into sec-leg, sec-execute, sec-report,
+  sec-code-impact (F-2); daemon hint follows every write (F-9); empty or
+  non-string `url` is Malformed (F-10); codex_mcp leaf-only row (F-11); ASM-014
+  invalidated by EVD-034 throughout (F-12); both rootless notice variants and
+  `worktree provision` wording (F-13); code-impact rows for root.rs, catalog,
+  e2e_worktree_provision added and the serve.rs row dropped (F-6, F-7 mirror).
+  Out-of-band edit on the locked run (mem.pattern.reconcile.edit-design-out-of-band).
+- Selector registry: `slice selector add 286 --intent design-target` src/root.rs,
+  src/catalog/mod.rs, tests/e2e_worktree_provision.rs; `slice selector rm 286
+  src/commands/serve.rs` (F-6, F-7). Conformance now: undelivered 0, conformant
+  17; undeclared are only the `.doctrine/` records F-8 aligned.
+- README.md codex paragraph rewritten: user-level entry and scope, consent and
+  `-y`, override slot, per-folder trust prompt, codex CLI dependency, `sh` removed
+  (F-4).
+
+### REVs completed
+
+- REV-076 (`reconcile-sl-286`): done — REQ-484 rewritten to user-level
+  registration; REQ-485 introduced as SPEC-011 FR-014 (rootless `serve --mcp`);
+  SPEC-011 prose (scope summary + MCP registration paragraph) updated. All three
+  rows landed by hand (F-3). Narrative in revision-076.md.
+
+### Supersessions
+
+- DEC-406 supersedes DEC-323 and DEC-332; DEC-407 supersedes DEC-325; all three
+  set `superseded` (F-5).
+
+### Withdrawn / tolerated
+
+- F-8 aligned (bookkeeping paths; foreign IMP-407 commit). None tolerated.

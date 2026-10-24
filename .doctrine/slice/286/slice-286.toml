@@ -51,10 +51,6 @@ selector = "src/mcp_server/tools.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/commands/serve.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "tests/e2e_codex_install.rs"
 intent = "design-target"
 
@@ -76,6 +72,18 @@ intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_install_flow.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/root.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_worktree_provision.rs"
 intent = "design-target"
 
 [[relation]]
