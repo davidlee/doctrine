@@ -23,7 +23,8 @@ use std::process::Output;
 mod common;
 
 use common::{
-    INSTALL_MARKER, SAFE_CODEX_HOME, doctrine_cmd, doctrine_toml, git, init_repo, tree_digest,
+    CODEX_MCP_SKIPPED, INSTALL_MARKER, SAFE_CODEX_HOME, doctrine_cmd, doctrine_toml, git,
+    init_repo, tree_digest,
 };
 
 /// The running binary's version: what a complete install records.
@@ -38,10 +39,6 @@ const DETAILS: &str = "Project root:";
 const NOTHING: &str = "Nothing to commit.";
 const HINT: &str = "Next:";
 const HARNESS_QUESTION: &str = "No agent harness found here. Set up for which?";
-/// SL-286 PHASE-04: codex's MCP registration is user-level, so the install run
-/// reports the degraded leg rather than writing a project wrapper. It degrades
-/// because every child runs under `SAFE_CODEX_HOME`.
-const CODEX_MCP_SKIPPED: &str = "codex: user MCP registration skipped";
 
 /// `doctrine <args…> -p <root>` from `root`, with `input` on stdin.
 fn install_with_stdin(root: &Path, args: &[&str], input: &str) -> Output {

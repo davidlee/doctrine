@@ -8,7 +8,7 @@
 //! one included) survives byte identical, an absent one stays absent, and a dry
 //! run writes nothing. Both runs do carry the user-MCP leg (SL-286 T7), which
 //! degrades under the suite's never-existing `CODEX_HOME` and says so
-//! (`MCP_SKIPPED`).
+//! (`common::CODEX_MCP_SKIPPED`).
 //!
 //! Hooks are unchanged (`VT-4`'s hook half): `.codex/hooks.json` is written, a
 //! second run refreshes nothing, and the activation notice reads the project
@@ -16,7 +16,9 @@
 //!
 //! Where the leg can PROPOSE (`common::ProposingEnv`), the tests also pin what it
 //! would do: exactly one `codex mcp add` argv carrying the baked `PATH` entry, and
-//! the owned project wrapper removed beside a foreign server left alone.
+//! the owned project wrapper removed beside a foreign server left alone. Such an
+//! env is laid out BESIDE the project (`<tmp>/scratch`, project `<tmp>/project`),
+//! never inside the tree being installed — the fixture env is not project state.
 
 #![allow(
     clippy::expect_used,
@@ -32,10 +34,10 @@ mod common;
 
 const CONFIG_REL: &str = ".codex/config.toml";
 const HOOKS_REL: &str = ".codex/hooks.json";
-/// The degraded user-MCP line, printed because `common::doctrine_cmd` pins
-/// `CODEX_HOME` to a path that never exists (`common::SAFE_CODEX_HOME`). The
-/// cause is pinned in `src/codex_mcp.rs`; here the header is what matters.
-const MCP_SKIPPED: &str = "codex: user MCP registration skipped";
+/// Why the leg degrades under the pinned `CODEX_HOME` — mirrors
+/// `src/codex_mcp.rs`'s `CAUSE_BAD_CODEX_HOME`, the clause
+/// [`common::CODEX_MCP_SKIPPED`] leaves out.
+const CAUSE_BAD_CODEX_HOME: &str = "CODEX_HOME is not an existing absolute directory";
 
 /// Run `doctrine install --agent <agent>` rooted at `dir`, asserting success;
 /// return stdout. `--skill code-review` keeps the install small and offline.
@@ -113,12 +115,16 @@ fn project_server(root: &Path, key: &str) -> Option<toml::Value> {
 /// What the user leg did: one `codex mcp add` carrying the baked `PATH` entry,
 /// the owned project wrapper gone, every foreign server as it was.
 fn assert_user_leg_wired(env: &common::ProposingEnv, root: &Path, before_other: &toml::Value) {
+    // Element by element: the bake is one argument, not a string that happens to
+    // contain spaces, and the separator is its own.
+    let bake = env.bin.join("doctrine").display().to_string();
+    let argv: Vec<String> = ["mcp", "add", "doctrine", "--", &bake, "serve", "--mcp"]
+        .iter()
+        .map(|word| (*word).to_string())
+        .collect();
     assert_eq!(
         env.calls(),
-        vec![format!(
-            "mcp add doctrine -- {} serve --mcp",
-            env.bin.join("doctrine").display()
-        )],
+        vec![argv],
         "exactly one `codex mcp add`, baking the `PATH` entry rather than its target"
     );
     assert_eq!(
@@ -137,7 +143,7 @@ fn assert_user_leg_wired(env: &common::ProposingEnv, root: &Path, before_other: 
 /// The degraded MCP line's text, if the run printed one.
 fn skipped_line(out: &str) -> Option<String> {
     out.lines()
-        .find(|line| line.contains(MCP_SKIPPED))
+        .find(|line| line.contains(common::CODEX_MCP_SKIPPED))
         .map(str::to_string)
 }
 
@@ -291,9 +297,11 @@ fn boot_install_runs_the_user_leg_and_degrades_under_the_safe_codex_home() {
 #[test]
 fn boot_install_dry_run_shows_the_consent_block_and_runs_nothing() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path();
+    let project = dir.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    let root = project.as_path();
     // The environment in which the user-MCP leg proposes rather than degrades.
-    let env = common::ProposingEnv::new(root);
+    let env = common::ProposingEnv::new(&dir.path().join("scratch"));
 
     let out = env
         .doctrine(root)
@@ -325,9 +333,11 @@ fn boot_install_dry_run_shows_the_consent_block_and_runs_nothing() {
 #[test]
 fn install_yes_records_the_mcp_add_argv_and_removes_the_wrapper() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path();
+    let project = dir.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    let root = project.as_path();
     let before_other = seed_wrapped_project_config(root);
-    let env = common::ProposingEnv::new(root);
+    let env = common::ProposingEnv::new(&dir.path().join("scratch"));
 
     let out = env
         .doctrine(root)
@@ -356,9 +366,11 @@ fn install_yes_records_the_mcp_add_argv_and_removes_the_wrapper() {
 #[test]
 fn boot_install_yes_wires_the_user_leg_as_install_does() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path();
+    let project = dir.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    let root = project.as_path();
     let before_other = seed_wrapped_project_config(root);
-    let env = common::ProposingEnv::new(root);
+    let env = common::ProposingEnv::new(&dir.path().join("scratch"));
 
     let out = env
         .doctrine(root)
@@ -400,10 +412,12 @@ fn assert_leg_stood_down(env: &common::ProposingEnv, root: &Path, before: &[u8])
 #[test]
 fn interactive_decline_calls_no_codex_and_changes_neither_config() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path();
+    let project = dir.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    let root = project.as_path();
     seed_wrapped_project_config(root);
     let before = fs::read(root.join(CONFIG_REL)).unwrap();
-    let env = common::ProposingEnv::new(root);
+    let env = common::ProposingEnv::new(&dir.path().join("scratch"));
 
     // Two questions, in source order: the run's `Proceed? [y/N/d]`, then the
     // codex consent block's `Write user config? [y/N]` (the user write is
@@ -433,10 +447,12 @@ fn interactive_decline_calls_no_codex_and_changes_neither_config() {
 #[test]
 fn dry_run_calls_no_codex_and_writes_neither_config() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path();
+    let project = dir.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    let root = project.as_path();
     seed_wrapped_project_config(root);
     let before = fs::read(root.join(CONFIG_REL)).unwrap();
-    let env = common::ProposingEnv::new(root);
+    let env = common::ProposingEnv::new(&dir.path().join("scratch"));
 
     // `--dry-run` is non-interactive by construction (`is_interactive`), so no
     // `--yes` is needed for it to proceed; it discloses the block instead.
@@ -478,9 +494,11 @@ fn dry_run_calls_no_codex_and_writes_neither_config() {
 #[test]
 fn the_default_environment_never_invokes_codex() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path();
+    let project = dir.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    let root = project.as_path();
     seed_wrapped_project_config(root);
-    let env = common::ProposingEnv::new(root);
+    let env = common::ProposingEnv::new(&dir.path().join("scratch"));
 
     // Deliberately NOT `env.doctrine`: that spawn seam removes the `CODEX_HOME`
     // pin. Only `HOME`/`PATH` are taken from the fixture env.
@@ -506,8 +524,8 @@ fn the_default_environment_never_invokes_codex() {
         String::from_utf8_lossy(&out.stderr),
     );
     assert!(
-        skipped_line(&stdout).is_some(),
-        "the leg degrades under the pinned CODEX_HOME: {stdout}"
+        skipped_line(&stdout).is_some_and(|line| line.contains(CAUSE_BAD_CODEX_HOME)),
+        "the leg degrades for the PIN's reason, not some other one: {stdout}"
     );
     assert!(
         env.calls().is_empty(),
@@ -692,16 +710,19 @@ fn fork_regeneration_leaves_the_user_config_alone_and_calls_no_codex() {
         .arg(&source)
         .output()
         .expect("spawn doctrine");
-    assert!(
-        out.status.success(),
-        "provision failed: {}\n{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr),
-    );
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(out.status.success(), "provision failed: {stdout}\n{stderr}",);
     assert!(
         fork.join(HOOKS_REL).is_file(),
         "regeneration reached the fork's install legs — else nothing here was exercised"
     );
+    for (stream, text) in [("stdout", &stdout), ("stderr", &stderr)] {
+        assert!(
+            !text.contains("codex mcp add"),
+            "regeneration discloses no MCP plan on {stream}: {text}"
+        );
+    }
     assert_eq!(
         fs::read(env.user_config()).unwrap(),
         before,

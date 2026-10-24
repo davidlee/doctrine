@@ -26,6 +26,12 @@ pub(crate) use kind_dirs::{REVIEW_DIR, SLICE_DIR};
 /// integration tests can't import from a binary-only crate).
 pub(crate) const DOCTRINE_TOML: &str = ".doctrine/doctrine.toml";
 
+/// The degraded user-MCP line's text: the codex leg runs but degrades, because
+/// the child's `CODEX_HOME` is pinned to [`SAFE_CODEX_HOME`]. Mirrors
+/// `src/codex_mcp.rs`'s `text::PREFIX` + `text::SKIPPED` — the header half a test
+/// asserts on; the cause clause differs per degradation.
+pub(crate) const CODEX_MCP_SKIPPED: &str = "codex: user MCP registration skipped";
+
 /// The local install marker, relative to the project root — mirrors
 /// `install::INSTALL_MARKER_REL` (SL-282).
 pub(crate) const INSTALL_MARKER: &str = ".doctrine/state/install.toml";
@@ -167,11 +173,17 @@ impl ProposingEnv {
 
         let argv_log = root.join("codex-argv");
         let codex = bin.join("codex");
+        // One line per call, each argv element followed by `\x1f`: the unit
+        // separator cannot occur in a path or a flag, so the boundary between
+        // two elements carries no join ambiguity (a space-joined log could not
+        // tell one argument with a space from two arguments). The log path is
+        // single-quoted so no character in it reaches the shell.
         std::fs::write(
             &codex,
             format!(
-                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> {}\n",
-                argv_log.display()
+                "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\037' \"$a\"; done >> '{}'\nprintf '\\n' >> '{}'\n",
+                argv_log.display(),
+                argv_log.display(),
             ),
         )
         .expect("write fake codex");
@@ -195,13 +207,18 @@ impl ProposingEnv {
         cmd
     }
 
-    /// Every `codex` invocation seen so far, one argv line each; empty when the
-    /// fake was never run (the log does not exist).
-    pub(crate) fn calls(&self) -> Vec<String> {
+    /// Every `codex` invocation seen so far, one argv per call — each element
+    /// intact, so a value with a space in it stays one value; empty when the fake
+    /// was never run (the log does not exist).
+    pub(crate) fn calls(&self) -> Vec<Vec<String>> {
         let Ok(log) = std::fs::read_to_string(&self.argv_log) else {
             return Vec::new();
         };
-        log.lines().map(str::to_string).collect()
+        log.lines()
+            // `split_terminator` drops only the trailing separator the writer
+            // always emits, so an empty element would still be one.
+            .map(|line| line.split_terminator('\x1f').map(str::to_string).collect())
+            .collect()
     }
 
     /// The user-level config the propose leg would edit: `home/.codex/config.toml`.
