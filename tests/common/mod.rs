@@ -572,6 +572,26 @@ pub(crate) fn installed_source(dir: &std::path::Path) -> std::path::PathBuf {
     std::fs::canonicalize(dir).expect("canonicalize installed source")
 }
 
+/// Add a linked sibling worktree of `source` at `fork`, on branch `feat`.
+///
+/// Sibling is meant literally: `worktree provision` verifies `<fork>` sits beside
+/// the source (VT-6) and refuses anything else, so the caller owns that layout.
+/// One shape, because every provision fixture needs a worktree git itself made —
+/// a directory standing in for one is not a fork.
+pub(crate) fn add_sibling_worktree(source: &std::path::Path, fork: &std::path::Path) {
+    git(
+        source,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "feat",
+            fork.to_str().expect("utf8 fork path"),
+        ],
+    );
+}
+
 /// A detached worktree of `src`'s HEAD: the fork's **tracked** inputs and nothing
 /// else — no derived tier, no copied allowlisted file.
 ///

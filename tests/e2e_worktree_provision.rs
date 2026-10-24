@@ -19,52 +19,22 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-/// Run `git -C <dir> <args>`, asserting success.
-fn git(dir: &Path, args: &[&str]) {
-    let out = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(args)
-        .output()
-        .expect("spawn git");
-    assert!(
-        out.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
 
 /// A source repo with a tracked base commit. Returns the canonical source root.
 fn init_source(dir: &Path) -> PathBuf {
     fs::create_dir_all(dir).unwrap();
-    git(dir, &["init", "-q", "-b", "main"]);
-    git(dir, &["config", "user.email", "t@example.com"]);
-    git(dir, &["config", "user.name", "Test"]);
+    common::git(dir, &["init", "-q", "-b", "main"]);
+    common::git(dir, &["config", "user.email", "t@example.com"]);
+    common::git(dir, &["config", "user.name", "Test"]);
     // Ignore by extension so each file is enumerated individually (a fully
     // ignored *directory* would collapse in `ls-files`).
     fs::write(dir.join(".gitignore"), "*.txt\n*.md\n.doctrine/\n").unwrap();
-    git(dir, &["add", "."]);
-    git(dir, &["commit", "-q", "-m", "base"]);
+    common::git(dir, &["add", "."]);
+    common::git(dir, &["commit", "-q", "-m", "base"]);
     fs::canonicalize(dir).unwrap()
-}
-
-/// Add a linked sibling worktree at `fork`, branch `feat`.
-fn add_worktree(source: &Path, fork: &Path) {
-    git(
-        source,
-        &[
-            "worktree",
-            "add",
-            "-q",
-            "-b",
-            "feat",
-            fork.to_str().unwrap(),
-        ],
-    );
 }
 
 /// `worktree provision <fork> -p <source>` plus any extra `flags` (e.g.
@@ -97,7 +67,7 @@ fn provision_copies_allowlisted_files_and_withholds_the_tier() {
     let tmp = tempfile::tempdir().unwrap();
     let source = init_source(&tmp.path().join("src"));
     let fork = tmp.path().join("fork");
-    add_worktree(&source, &fork);
+    common::add_sibling_worktree(&source, &fork);
 
     // Ignored (untracked) candidate files under an allowlisted dir.
     fs::create_dir_all(source.join("artifacts")).unwrap();
@@ -146,7 +116,7 @@ fn provision_refuses_a_downgrade_and_keeps_the_fork() {
     // so its own tracked stamp is what the downgrade check reads.
     common::commit_stamp(&source, "999.0.0");
     let fork = tmp.path().join("fork");
-    add_worktree(&source, &fork);
+    common::add_sibling_worktree(&source, &fork);
 
     let out = provision(&source, &fork);
     assert!(
@@ -189,7 +159,7 @@ fn provision_fails_closed_on_a_tier_naming_allowlist() {
     let tmp = tempfile::tempdir().unwrap();
     let source = init_source(&tmp.path().join("src"));
     let fork = tmp.path().join("fork");
-    add_worktree(&source, &fork);
+    common::add_sibling_worktree(&source, &fork);
 
     fs::create_dir_all(source.join("artifacts")).unwrap();
     fs::write(source.join("artifacts/keep.txt"), "keep").unwrap();
@@ -211,7 +181,7 @@ fn provision_with_absent_allowlist_copies_nothing() {
     let tmp = tempfile::tempdir().unwrap();
     let source = init_source(&tmp.path().join("src"));
     let fork = tmp.path().join("fork");
-    add_worktree(&source, &fork);
+    common::add_sibling_worktree(&source, &fork);
 
     fs::create_dir_all(source.join("artifacts")).unwrap();
     fs::write(source.join("artifacts/keep.txt"), "keep").unwrap();
@@ -296,7 +266,7 @@ fn provision_from_installed_source_twice_converges_and_keeps_a_user_file_under_a
     let tmp = tempfile::tempdir().unwrap();
     let source = common::installed_source(&tmp.path().join("src"));
     let fork = tmp.path().join("fork");
-    add_worktree(&source, &fork);
+    common::add_sibling_worktree(&source, &fork);
     let tier = derived_tier();
 
     // Run 1: the derived tier is materialised and linked in the fork.

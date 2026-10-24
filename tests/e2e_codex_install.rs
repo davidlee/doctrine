@@ -630,3 +630,87 @@ fn claude_only_run_prints_the_invocation_once_and_no_codex_line() {
         "a Claude-only run writes no codex config"
     );
 }
+
+/// The `PATH` a `worktree provision` child needs: the fixture's `bin` first, then
+/// every directory this test process's own `PATH` finds `git` in, in order.
+///
+/// `bin` leads so its fake `codex` and `doctrine` link shadow any real ones that
+/// share a directory with git — else a leaking leg could reach a real codex, or
+/// the env could stop proposing and the test pass vacuously.
+///
+/// `worktree provision` shells out to git, and [`common::ProposingEnv`] narrows
+/// `PATH` to its fake-codex `bin` alone — so git has to be put back. Every entry,
+/// not just the first: a `git` shim (this workspace installs a guard wrapper
+/// ahead of the real git) resolves the real one by skipping its own directory, so
+/// it needs the later entries too. Nothing is hardcoded; the list comes from this
+/// process.
+fn provision_path(env: &common::ProposingEnv) -> String {
+    let path = std::env::var_os("PATH").expect("this process has a PATH");
+    let dirs: Vec<std::path::PathBuf> = std::env::split_paths(&path)
+        .filter(|dir| dir.join("git").is_file())
+        .collect();
+    assert!(!dirs.is_empty(), "git on this process's PATH");
+    std::env::join_paths(std::iter::once(&env.bin).chain(&dirs))
+        .expect("join the provision PATH")
+        .into_string()
+        .expect("utf8 provision PATH")
+}
+
+/// DEC-411 (EX-3): the codex user leg runs only from an explicit `install` /
+/// `boot install` — never from fork regeneration. `worktree provision` is the one
+/// caller of `install::regenerate`, so it is the surface that could leak.
+///
+/// The stale seed is what keeps this non-vacuous: an explicit install would
+/// PROPOSE to replace that entry, so a leaking leg would either run
+/// `codex mcp add` or rewrite the file. Both are asserted absent here, rather
+/// than inferred from a plan that had nothing to do.
+#[test]
+fn fork_regeneration_leaves_the_user_config_alone_and_calls_no_codex() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = common::installed_source(&dir.path().join("src"));
+    let fork = dir.path().join("fork");
+    common::add_sibling_worktree(&source, &fork);
+
+    // An environment of its own — the fake codex and the doctrine link live in
+    // this scratch dir, beside the source and the fork, never inside them.
+    let env = common::ProposingEnv::new(&dir.path().join("scratch"));
+    fs::create_dir_all(env.user_config().parent().unwrap()).unwrap();
+    fs::write(
+        env.user_config(),
+        "[mcp_servers.doctrine]\ncommand = \"/stale/doctrine\"\nargs = [\"serve\", \"--mcp\"]\n",
+    )
+    .unwrap();
+    let before = fs::read(env.user_config()).unwrap();
+
+    let path = provision_path(&env);
+    let out = env
+        .doctrine(&source)
+        .env("PATH", &path)
+        .args(["worktree", "provision"])
+        .arg(&fork)
+        .arg("-p")
+        .arg(&source)
+        .output()
+        .expect("spawn doctrine");
+    assert!(
+        out.status.success(),
+        "provision failed: {}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(
+        fork.join(HOOKS_REL).is_file(),
+        "regeneration reached the fork's install legs — else nothing here was exercised"
+    );
+    assert_eq!(
+        fs::read(env.user_config()).unwrap(),
+        before,
+        "regeneration leaves the user config byte identical: {}",
+        String::from_utf8_lossy(&fs::read(env.user_config()).unwrap()),
+    );
+    assert!(
+        env.calls().is_empty(),
+        "regeneration never runs codex: {:?}",
+        env.calls()
+    );
+}
