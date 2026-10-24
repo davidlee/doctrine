@@ -6,7 +6,7 @@
 //! boot leg of `install` writes a project wrapper, so these tests assert its
 //! ABSENCE rather than its shape — an existing `.codex/config.toml` (a non-UTF-8
 //! one included) survives byte identical, an absent one stays absent, and a dry
-//! run writes nothing. `doctrine install` still runs the user-MCP leg, which
+//! run writes nothing. Both runs do carry the user-MCP leg (SL-286 T7), which
 //! degrades under the suite's never-existing `CODEX_HOME` and says so
 //! (`MCP_SKIPPED`).
 //!
@@ -212,9 +212,74 @@ fn codex_dry_run_writes_nothing() {
         "no dry-run line says 'wrote': {out}"
     );
     assert!(
-        skipped_line(&out).is_none() && !out.contains("MCP server registration"),
-        "boot install has no codex MCP leg, so it renders no MCP line: {out}"
+        skipped_line(&out).is_none() && !out.contains("Codex user MCP (not asked"),
+        "a degraded plan proposes nothing, so the dry run discloses no MCP block: {out}"
     );
+}
+
+#[test]
+fn boot_install_runs_the_user_leg_and_degrades_under_the_safe_codex_home() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    let out = boot_install(root, "codex", false);
+    assert!(
+        skipped_line(&out).is_some(),
+        "boot install runs the user leg, which degrades under the test CODEX_HOME: {out}"
+    );
+    assert_hooks_written(root);
+}
+
+#[test]
+fn boot_install_dry_run_shows_the_consent_block_and_runs_nothing() {
+    use std::os::unix::fs::{PermissionsExt as _, symlink};
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    // A proposing environment for the child: a HOME with no user config, and a
+    // PATH holding `doctrine` (symlinked to the running binary, so the plan's
+    // exec/PATH comparison matches) plus a fake `codex` that records its argv.
+    let home = root.join("home");
+    let bin = root.join("bin");
+    fs::create_dir_all(&home).unwrap();
+    fs::create_dir_all(&bin).unwrap();
+    symlink(common::doctrine_bin(), bin.join("doctrine")).unwrap();
+    let argv_log = root.join("codex-argv");
+    let codex = bin.join("codex");
+    fs::write(
+        &codex,
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> {}\n",
+            argv_log.display()
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&codex, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let out = common::doctrine_cmd(root)
+        .args(["boot", "install", "--agent", "codex", "-y", "--dry-run"])
+        .arg("-p")
+        .arg(root)
+        .env_remove("CODEX_HOME")
+        .env("HOME", &home)
+        .env("PATH", &bin)
+        .output()
+        .expect("spawn doctrine");
+    let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
+    assert!(
+        out.status.success(),
+        "boot install --dry-run failed: {}\n{stdout}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(
+        stdout.contains("Codex user MCP (not asked under --dry-run):"),
+        "the dry run discloses the block it would ask: {stdout}"
+    );
+    assert!(
+        stdout.contains("codex mcp add doctrine --"),
+        "the block names the command it would run: {stdout}"
+    );
+    assert!(!argv_log.exists(), "nothing is executed under --dry-run");
 }
 
 #[test]
@@ -231,8 +296,8 @@ fn codex_notice_fires_only_on_a_hook_write() {
         "the hook write fires the notice: {out}"
     );
     assert!(
-        !out.contains("MCP server registration") && skipped_line(&out).is_none(),
-        "boot install writes no MCP registration, so it reports none: {out}"
+        !out.contains("MCP server registration") && skipped_line(&out).is_some(),
+        "the user leg degrades under the test CODEX_HOME, and no project registration is reported: {out}"
     );
 }
 
@@ -252,8 +317,8 @@ fn codex_hook_clean_run_ignores_a_project_mcp_entry() {
         "a hook-clean run prints no activation notice: {out}"
     );
     assert!(
-        !out.contains("MCP server registration") && skipped_line(&out).is_none(),
-        "boot install has no codex MCP leg: {out}"
+        !out.contains("MCP server registration") && skipped_line(&out).is_some(),
+        "the degraded user leg says so, and the project entry is not reported: {out}"
     );
     assert_eq!(
         fs::read(root.join(CONFIG_REL)).unwrap(),

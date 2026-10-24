@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, bail};
 use serde_json::{Map, Value};
 
-use crate::codex_mcp::CODEX_CONFIG_REL;
+use crate::codex_mcp::{self, CODEX_CONFIG_REL};
 #[cfg(test)]
 // The moved vocabulary the boot suites still assert on: test-only in boot now.
 use crate::codex_mcp::{
@@ -2902,6 +2902,12 @@ fn install_surface_extension(
 /// `doctrine boot install` — resolve harnesses, union + dedup their import
 /// targets, prepend the `@`-import **once**, then refresh each harness, isolating
 /// a single harness's failure (it is printed; the others still run — A9/§5.5).
+///
+/// A codex run also carries the user-level MCP leg (SL-286): the plan is read
+/// once up front, consent is asked beside the wire prompt — never under dry run —
+/// so both answers land before anything is written, and the leg runs after the
+/// project wiring. A refusal has already been printed by `execute`, and boot
+/// install keeps no stamp to withhold, so it stays a success (R9).
 pub(crate) fn run_install(
     path: Option<PathBuf>,
     agents: &[String],
@@ -2911,6 +2917,11 @@ pub(crate) fn run_install(
     let root = root::find(path, &root::default_markers())?;
     let exec = resolve_exec()?;
     let harnesses = resolve_harnesses(agents, &root)?;
+    // Boot install is always a project install, so codex is the only applicability
+    // question there is (EX-2).
+    let codex = harnesses
+        .contains(&Harness::Codex)
+        .then(|| codex_mcp::read_plan(&root, &exec, &|key| std::env::var_os(key)));
 
     if !yes && !dry_run {
         let label: Vec<&str> = harnesses.iter().map(harness_label).collect();
@@ -2924,7 +2935,45 @@ pub(crate) fn run_install(
             return Ok(());
         }
     }
-    wire(&root, &exec, &harnesses, dry_run)
+    let consent = match (&codex, dry_run) {
+        (Some(plan), false) => codex_mcp::ask_consent(plan, yes, install::prompt_confirm)?,
+        _ => codex_mcp::Consent::NotAsked,
+    };
+    wire(&root, &exec, &harnesses, dry_run)?;
+    match &codex {
+        Some(plan) => codex_user_leg(&root, plan, consent, dry_run),
+        None => Ok(()),
+    }
+}
+
+/// The codex user-level MCP leg, after `wire`: a dry run only discloses the
+/// consent block (nothing is asked, nothing runs); otherwise it registers. The
+/// outcome is the leg's own report — boot install keeps no stamp, so only an
+/// error stops it (R9).
+fn codex_user_leg(
+    root: &Path,
+    plan: &codex_mcp::CodexUserPlan,
+    consent: codex_mcp::Consent,
+    dry_run: bool,
+) -> anyhow::Result<()> {
+    let mut stdout = io::stdout();
+    if dry_run {
+        if let Some(text) = codex_mcp::preview(plan) {
+            writeln!(stdout)?;
+            for line in text.lines() {
+                writeln!(stdout, "{line}")?;
+            }
+        }
+        return Ok(());
+    }
+    codex_mcp::execute(
+        plan,
+        consent,
+        &root.join(CODEX_CONFIG_REL),
+        &codex_mcp::ProcessCodex::new(),
+        &mut stdout,
+    )?;
+    Ok(())
 }
 
 /// Report ONE spec's hook-merge outcome. Lifted out of [`wire`] unchanged when
