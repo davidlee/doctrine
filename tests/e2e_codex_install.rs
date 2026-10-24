@@ -13,6 +13,10 @@
 //! Hooks are unchanged (`VT-4`'s hook half): `.codex/hooks.json` is written, a
 //! second run refreshes nothing, and the activation notice reads the project
 //! file's `[features] hooks` key.
+//!
+//! Where the leg can PROPOSE (`common::ProposingEnv`), the tests also pin what it
+//! would do: exactly one `codex mcp add` argv carrying the baked `PATH` entry, and
+//! the owned project wrapper removed beside a foreign server left alone.
 
 #![allow(
     clippy::expect_used,
@@ -74,6 +78,60 @@ fn boot_install(dir: &Path, agent: &str, dry_run: bool) -> String {
         String::from_utf8_lossy(&out.stderr),
     );
     String::from_utf8(out.stdout).expect("utf8 stdout")
+}
+
+/// The wrapper line `src/codex_mcp.rs` emits as the codex `args[1]`, copied here
+/// as a literal: integration tests compile against the binary, never its private
+/// items. Byte-identical on purpose — the fixture's whole job is a wrapper the
+/// classifier recognises as doctrine's own.
+const CODEX_MCP_WRAPPER: &str = "exec \"${DOCTRINE_BIN:-doctrine}\" serve --mcp";
+
+/// Seed the project config with doctrine's owned wrapper and a foreign server the
+/// write must not touch; return the foreign table as the caller's `before`.
+fn seed_wrapped_project_config(root: &Path) -> toml::Value {
+    fs::create_dir_all(root.join(".codex")).unwrap();
+    fs::write(
+        root.join(CONFIG_REL),
+        format!(
+            "[mcp_servers.doctrine]\ncommand = \"sh\"\nargs = [\"-c\", '{CODEX_MCP_WRAPPER}']\n\
+             \n[mcp_servers.other]\ncommand = \"/usr/bin/other\"\n"
+        ),
+    )
+    .unwrap();
+    project_server(root, "other").expect("the seeded foreign server parses")
+}
+
+/// One `[mcp_servers.<key>]` table from the project config, if present.
+fn project_server(root: &Path, key: &str) -> Option<toml::Value> {
+    let text = fs::read_to_string(root.join(CONFIG_REL)).unwrap();
+    let doc: toml::Value = toml::from_str(&text).unwrap();
+    doc.get("mcp_servers")
+        .and_then(|servers| servers.get(key))
+        .cloned()
+}
+
+/// What the user leg did: one `codex mcp add` carrying the baked `PATH` entry,
+/// the owned project wrapper gone, every foreign server as it was.
+fn assert_user_leg_wired(env: &common::ProposingEnv, root: &Path, before_other: &toml::Value) {
+    assert_eq!(
+        env.calls(),
+        vec![format!(
+            "mcp add doctrine -- {} serve --mcp",
+            env.bin.join("doctrine").display()
+        )],
+        "exactly one `codex mcp add`, baking the `PATH` entry rather than its target"
+    );
+    assert_eq!(
+        project_server(root, "doctrine"),
+        None,
+        "the owned project wrapper is removed with the user write: {}",
+        fs::read_to_string(root.join(CONFIG_REL)).unwrap(),
+    );
+    assert_eq!(
+        project_server(root, "other").as_ref(),
+        Some(before_other),
+        "a foreign server is left untouched"
+    );
 }
 
 /// The degraded MCP line's text, if the run printed one.
@@ -261,6 +319,200 @@ fn boot_install_dry_run_shows_the_consent_block_and_runs_nothing() {
     assert!(
         env.calls().is_empty(),
         "nothing is executed under --dry-run"
+    );
+}
+
+#[test]
+fn install_yes_records_the_mcp_add_argv_and_removes_the_wrapper() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let before_other = seed_wrapped_project_config(root);
+    let env = common::ProposingEnv::new(root);
+
+    let out = env
+        .doctrine(root)
+        .args([
+            "install",
+            "--agent",
+            "codex",
+            "--skill",
+            "code-review",
+            "--yes",
+        ])
+        .arg("-p")
+        .arg(root)
+        .output()
+        .expect("spawn doctrine");
+    assert!(
+        out.status.success(),
+        "install failed: {}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert_user_leg_wired(&env, root, &before_other);
+    assert_hooks_written(root);
+}
+
+#[test]
+fn boot_install_yes_wires_the_user_leg_as_install_does() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let before_other = seed_wrapped_project_config(root);
+    let env = common::ProposingEnv::new(root);
+
+    let out = env
+        .doctrine(root)
+        .args(["boot", "install", "--agent", "codex", "-y"])
+        .arg("-p")
+        .arg(root)
+        .output()
+        .expect("spawn doctrine");
+    assert!(
+        out.status.success(),
+        "boot install failed: {}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert_user_leg_wired(&env, root, &before_other);
+    assert_hooks_written(root);
+}
+
+/// Nothing happened: codex was never run, the project config is byte identical,
+/// and the user config was never created.
+fn assert_leg_stood_down(env: &common::ProposingEnv, root: &Path, before: &[u8]) {
+    assert!(
+        env.calls().is_empty(),
+        "no `codex mcp add`: {:?}",
+        env.calls()
+    );
+    assert_eq!(
+        fs::read(root.join(CONFIG_REL)).unwrap(),
+        before,
+        "the owned project wrapper stays — no consent, no removal"
+    );
+    assert!(
+        !env.user_config().exists(),
+        "the user config is codex's to write, and codex never ran: {}",
+        env.user_config().display()
+    );
+}
+
+#[test]
+fn interactive_decline_calls_no_codex_and_changes_neither_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    seed_wrapped_project_config(root);
+    let before = fs::read(root.join(CONFIG_REL)).unwrap();
+    let env = common::ProposingEnv::new(root);
+
+    // Two questions, in source order: the run's `Proceed? [y/N/d]`, then the
+    // codex consent block's `Write user config? [y/N]` (the user write is
+    // pending, so that is the ask — `src/codex_mcp.rs::consent_block`).
+    let mut cmd = env.doctrine(root);
+    cmd.args(["install", "--agent", "codex", "--skill", "code-review"])
+        .arg("-p")
+        .arg(root);
+    let out = common::output_with_stdin(cmd, "y\nn\n");
+    assert!(
+        out.status.success(),
+        "a declined consent is not a failure: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
+    assert!(
+        stdout.contains("Write user config? [y/N]"),
+        "the codex consent was the second question: {stdout}"
+    );
+    assert!(
+        stdout.contains("codex: user MCP registration declined; nothing changed"),
+        "the decline is reported: {stdout}"
+    );
+    assert_leg_stood_down(&env, root, &before);
+}
+
+#[test]
+fn dry_run_calls_no_codex_and_writes_neither_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    seed_wrapped_project_config(root);
+    let before = fs::read(root.join(CONFIG_REL)).unwrap();
+    let env = common::ProposingEnv::new(root);
+
+    // `--dry-run` is non-interactive by construction (`is_interactive`), so no
+    // `--yes` is needed for it to proceed; it discloses the block instead.
+    let out = env
+        .doctrine(root)
+        .args([
+            "install",
+            "--agent",
+            "codex",
+            "--skill",
+            "code-review",
+            "--dry-run",
+        ])
+        .arg("-p")
+        .arg(root)
+        .output()
+        .expect("spawn doctrine");
+    assert!(
+        out.status.success(),
+        "dry run failed: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
+    assert!(
+        stdout.contains("Codex user MCP (not asked under --dry-run):"),
+        "the dry run discloses the block rather than asking it: {stdout}"
+    );
+    assert_leg_stood_down(&env, root, &before);
+}
+
+/// EX-5 — the shared spawn seam is what keeps codex out of every other suite.
+///
+/// [`common::doctrine_cmd`] pins `CODEX_HOME` to a path that never exists, so the
+/// user leg degrades instead of proposing REGARDLESS of the environment around
+/// it: here the fake `codex` and the `doctrine` link of a
+/// [`common::ProposingEnv`] are all in place, and codex still never runs.
+/// `install_yes_records_the_mcp_add_argv_and_removes_the_wrapper` is this test's
+/// positive control — the same env minus the pin calls codex exactly once.
+#[test]
+fn the_default_environment_never_invokes_codex() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    seed_wrapped_project_config(root);
+    let env = common::ProposingEnv::new(root);
+
+    // Deliberately NOT `env.doctrine`: that spawn seam removes the `CODEX_HOME`
+    // pin. Only `HOME`/`PATH` are taken from the fixture env.
+    let out = common::doctrine_cmd(root)
+        .env("HOME", &env.home)
+        .env("PATH", &env.bin)
+        .args([
+            "install",
+            "--agent",
+            "codex",
+            "--skill",
+            "code-review",
+            "--yes",
+        ])
+        .arg("-p")
+        .arg(root)
+        .output()
+        .expect("spawn doctrine");
+    let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
+    assert!(
+        out.status.success(),
+        "install failed: {}\n{stdout}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(
+        skipped_line(&stdout).is_some(),
+        "the leg degrades under the pinned CODEX_HOME: {stdout}"
+    );
+    assert!(
+        env.calls().is_empty(),
+        "the CODEX_HOME pin keeps codex from being run: {:?}",
+        env.calls()
     );
 }
 
