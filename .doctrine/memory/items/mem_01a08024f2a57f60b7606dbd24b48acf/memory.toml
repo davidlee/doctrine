@@ -7,7 +7,7 @@ status = "active"
 title = "A VT keyword must be a literal the mandated file will actually contain"
 summary = "verify-vt matches keywords as raw-byte substrings, so a mandate naming a value the suite composes from enums can never pass — name the composed source instead"
 created = "2026-09-08"
-updated = "2026-09-08"
+updated = "2026-10-24"
 
 [scope]
 paths = []

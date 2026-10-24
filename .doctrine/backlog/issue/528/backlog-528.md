@@ -53,3 +53,13 @@ Same shape likely applies to the Claude `.mcp.json` arm and the pi settings
 fallback: check every `refused_wiring` contributor's summary wording.
 
 Found during SL-284 close (VH-1 `doctrine install`).
+
+## Update — SL-286 (2026-10-24)
+
+Partially resolved by DEC-406. An absolute-path project override is now reported
+and no longer holds install incomplete. The case above (bare `command =
+"doctrine"`) still holds install incomplete, by design: it is PATH-dependent, and
+interactive codex's frozen-PATH daemon breaks it (EVD-032). It is now named
+`path shadow` in the leg report with the reason, and the closing line names the
+leg (`codex user MCP`). Option 1 (cause in the closing summary itself) remains
+open, as does the same check for the Claude and pi arms.

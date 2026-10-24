@@ -1,7 +1,7 @@
 id = 286
 slug = "codex-mcp-user-level"
 title = "Codex MCP registers at user level with an absolute path"
-status = "reconcile"
+status = "done"
 created = "2026-10-23"
 updated = "2026-10-24"
 tags = []

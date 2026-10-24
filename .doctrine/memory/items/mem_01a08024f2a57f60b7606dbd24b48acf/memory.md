@@ -41,3 +41,14 @@ mandate named a row that does not exist.
 - Mid-phase `verify-vt` output is separately untrustworthy (`ISS-449`): it
   prints "keyword present" for keywords it never checked on `UNATTRIBUTABLE`
   rows, so read it only after the phase flips `completed`.
+
+## It can also regress later, under a green gate
+
+A later DRY refactor that moves the asserted literal out of the mandated file
+(e.g. into `tests/common`) fails the VT keyword check while every test still
+passes — `doctrine check gate` does not run `slice verify-vt`. SL-286: PHASE-05's
+review fixes moved PHASE-04 VT-3's literal; the phase close and handover both
+reported all-pass, and only the audit's re-run caught it (RV-428 F-1). Re-run
+`doctrine slice verify-vt <slice>` after any refactor that moves asserted text,
+and at audit always re-run it rather than trust a handover. Cheapest fix that
+keeps the shared constant: name the text in the assertion message.

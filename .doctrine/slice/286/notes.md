@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-24 · audit concluded (RV-428) · 08e6f1b74+
+fresh-as-of: 2026-10-24 · close · 84213d245+
 
 ### Produced
 
@@ -53,7 +53,7 @@ fresh-as-of: 2026-10-24 · audit concluded (RV-428) · 08e6f1b74+
 
 ### Learned
 
-- `doctrine check gate` does not run `slice verify-vt`: a refactor that moves an
+- (memory mem_01a08024f2a57f60b7606dbd24b48acf appended) `doctrine check gate` does not run `slice verify-vt`: a refactor that moves an
   asserted literal can fail a VT keyword check under a green gate (RV-428 F-1).
 
 - mem.pattern.delegation.pi-writable-in-worktree — calibration appended
@@ -69,8 +69,9 @@ fresh-as-of: 2026-10-24 · audit concluded (RV-428) · 08e6f1b74+
 
 ### Open
 
-- RV-428 Reconciliation Brief — the reconcile worklist (design.md folds,
-  selector add/rm, README, REQ-484 REV + rootless requirement, supersessions).
+- Reconciled (84213d245): design.md folds, selectors, README, REV-076 (REQ-484
+  rewritten, REQ-485 introduced), DEC-323/332 → DEC-406, DEC-325 → DEC-407.
+  The DEC-412..414 and reconcile items below are now landed.
 
 - DEC-412 — PHASE-02 design deltas (FileRead, destination split, blocking
   project entries, degraded/removal-only text); reconcile folds into design.md
@@ -81,7 +82,8 @@ fresh-as-of: 2026-10-24 · audit concluded (RV-428) · 08e6f1b74+
 - DEC-414 — PHASE-04 wiring deltas (one gather in codex_mcp, exec before the
   plan, consent seam, dry-run heading, leg mapping, boot install Ok on Refused,
   relative HOME → NoHome); reconcile folds into design.md.
-- RSK-234 · IDE-069 · ISS-528 (partially resolved by DEC-406) · ISS-533.
+- RSK-234 · IDE-069 · ISS-528 (partially resolved by DEC-406) · ISS-533 ·
+  IMP-497 (live seam re-verified by VH-1; post-write `codex mcp get` assertion not done).
 - Reconcile: REV for REQ-484 (SPEC-011) + rootless-serve requirement;
   supersede DEC-323, DEC-332 → DEC-406 and DEC-325 → DEC-407; README rewrite.
 
