@@ -232,37 +232,16 @@ fn boot_install_runs_the_user_leg_and_degrades_under_the_safe_codex_home() {
 
 #[test]
 fn boot_install_dry_run_shows_the_consent_block_and_runs_nothing() {
-    use std::os::unix::fs::PermissionsExt as _;
-
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
-    // A proposing environment for the child: a HOME with no user config, and a
-    // PATH holding `doctrine` (symlinked to the running binary, so the plan's
-    // exec/PATH comparison matches) plus a fake `codex` that records its argv.
-    let home = root.join("home");
-    let bin = root.join("bin");
-    fs::create_dir_all(&home).unwrap();
-    fs::create_dir_all(&bin).unwrap();
-    common::link_doctrine_into(&bin);
-    let argv_log = root.join("codex-argv");
-    let codex = bin.join("codex");
-    fs::write(
-        &codex,
-        format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> {}\n",
-            argv_log.display()
-        ),
-    )
-    .unwrap();
-    fs::set_permissions(&codex, fs::Permissions::from_mode(0o755)).unwrap();
+    // The environment in which the user-MCP leg proposes rather than degrades.
+    let env = common::ProposingEnv::new(root);
 
-    let out = common::doctrine_cmd(root)
+    let out = env
+        .doctrine(root)
         .args(["boot", "install", "--agent", "codex", "-y", "--dry-run"])
         .arg("-p")
         .arg(root)
-        .env_remove("CODEX_HOME")
-        .env("HOME", &home)
-        .env("PATH", &bin)
         .output()
         .expect("spawn doctrine");
     let stdout = String::from_utf8(out.stdout).expect("utf8 stdout");
@@ -279,7 +258,10 @@ fn boot_install_dry_run_shows_the_consent_block_and_runs_nothing() {
         stdout.contains("codex mcp add doctrine --"),
         "the block names the command it would run: {stdout}"
     );
-    assert!(!argv_log.exists(), "nothing is executed under --dry-run");
+    assert!(
+        env.calls().is_empty(),
+        "nothing is executed under --dry-run"
+    );
 }
 
 #[test]

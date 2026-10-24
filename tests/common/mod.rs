@@ -132,6 +132,84 @@ pub(crate) fn doctrine_cmd(cwd: &std::path::Path) -> std::process::Command {
     cmd
 }
 
+/// The one environment in which the codex user-MCP install leg **proposes**
+/// (SL-286):
+///
+/// * the running executable canonicalises to the `doctrine` entry on `PATH`
+///   ([`link_doctrine_into`]), which the bake rule compares;
+/// * a fake `codex` sits on `PATH` and appends each invocation's argv
+///   (space-joined, one line per call) to its private log — so a test can assert
+///   what WOULD run without running it;
+/// * `HOME` is an absolute scratch path and `CODEX_HOME` is **unset**, so the leg
+///   reads and writes a fixture user config rather than degrading under
+///   [`SAFE_CODEX_HOME`].
+///
+/// Any leg missing one of those degrades instead of proposing, so a test that
+/// wants the propose path must take every input from here.
+#[cfg(unix)]
+pub(crate) struct ProposingEnv {
+    pub(crate) home: std::path::PathBuf,
+    pub(crate) bin: std::path::PathBuf,
+    argv_log: std::path::PathBuf,
+}
+
+#[cfg(unix)]
+impl ProposingEnv {
+    /// Lay out `<root>/home` and `<root>/bin` under an existing scratch root.
+    pub(crate) fn new(root: &std::path::Path) -> Self {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let home = root.join("home");
+        let bin = root.join("bin");
+        std::fs::create_dir_all(&home).expect("create fixture HOME");
+        std::fs::create_dir_all(&bin).expect("create fixture PATH dir");
+        link_doctrine_into(&bin);
+
+        let argv_log = root.join("codex-argv");
+        let codex = bin.join("codex");
+        std::fs::write(
+            &codex,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> {}\n",
+                argv_log.display()
+            ),
+        )
+        .expect("write fake codex");
+        std::fs::set_permissions(&codex, std::fs::Permissions::from_mode(0o755))
+            .expect("make fake codex executable");
+
+        Self {
+            home,
+            bin,
+            argv_log,
+        }
+    }
+
+    /// The spawn seam ([`doctrine_cmd`]) with this environment's `HOME`/`PATH`
+    /// bound and `CODEX_HOME` removed — a later `env` call still overrides.
+    pub(crate) fn doctrine(&self, cwd: &std::path::Path) -> std::process::Command {
+        let mut cmd = doctrine_cmd(cwd);
+        cmd.env_remove("CODEX_HOME")
+            .env("HOME", &self.home)
+            .env("PATH", &self.bin);
+        cmd
+    }
+
+    /// Every `codex` invocation seen so far, one argv line each; empty when the
+    /// fake was never run (the log does not exist).
+    pub(crate) fn calls(&self) -> Vec<String> {
+        let Ok(log) = std::fs::read_to_string(&self.argv_log) else {
+            return Vec::new();
+        };
+        log.lines().map(str::to_string).collect()
+    }
+
+    /// The user-level config the propose leg would edit: `home/.codex/config.toml`.
+    pub(crate) fn user_config(&self) -> std::path::PathBuf {
+        self.home.join(".codex/config.toml")
+    }
+}
+
 /// Run `cmd` with `input` piped to its stdin (then closed); output captured.
 pub(crate) fn output_with_stdin(
     mut cmd: std::process::Command,
