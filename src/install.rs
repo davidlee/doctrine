@@ -234,13 +234,26 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
         return Ok(());
     }
 
+    // The user-level MCP question rides the install prompt, so it is asked once
+    // the run is confirmed and held until the leg that uses it (R8).
+    let codex_consent = match &plan.codex_user_mcp {
+        Some(codex) => crate::codex_mcp::ask_consent(codex, args.yes, prompt_confirm)?,
+        None => crate::codex_mcp::Consent::NotAsked,
+    };
+
     let base = execute_plan(&plan.base)?;
     seed_authoring_memories(root, &manifest)?;
     stdout_line("Done.")?;
 
     // ── Stage 2: forward steps ──
     let mut outcomes = vec![(Leg::Base, LegOutcome::Done(base))];
-    outcomes.extend(run_forward_steps(&plan, &exec, args, &manifest)?);
+    outcomes.extend(run_forward_steps(
+        &plan,
+        &exec,
+        args,
+        &manifest,
+        codex_consent,
+    )?);
     // Last: the block reflects what is now on disk, whatever the steps did.
     if plan.write_gitignore {
         let gitignore = write_gitignore_block(root, &manifest, &[], None)?;
@@ -292,6 +305,18 @@ fn print_details(
     let planned = print_ownership_plan(plan, args, manifest, preview.ownership())?;
     if plan.write_gitignore {
         write_gitignore_block(&plan.base.project_root, manifest, &planned, Some(preview))?;
+    }
+    // Dry runs only: the real run asks the same question at the prompt.
+    if preview == Preview::DryRun
+        && let Some(text) = plan
+            .codex_user_mcp
+            .as_ref()
+            .and_then(crate::codex_mcp::preview)
+    {
+        stdout_line("")?;
+        for line in text.lines() {
+            stdout_line(line)?;
+        }
     }
     Ok(())
 }
@@ -1072,6 +1097,7 @@ fn run_forward_steps(
     exec: &Path,
     args: &InstallArgs<'_>,
     manifest: &Manifest,
+    codex_consent: crate::codex_mcp::Consent,
 ) -> anyhow::Result<Vec<(Leg, LegOutcome)>> {
     let root = plan.base.project_root.as_path();
     let registry = &manifest.harness;
@@ -1090,6 +1116,21 @@ fn run_forward_steps(
     let boot = leg_outcome(wire_boot_leg(root, exec, &plan.boot, &mut io::stdout()));
     outcomes.push((Leg::BootWiring, boot));
 
+    // 3. User MCP — codex's own file, through the CLI that owns it (R8).
+    if let Some(codex) = plan.codex_user_mcp.as_ref() {
+        let outcome = leg_outcome(
+            crate::codex_mcp::execute(
+                codex,
+                codex_consent,
+                &root.join(crate::codex_mcp::CODEX_CONFIG_REL),
+                &crate::codex_mcp::ProcessCodex::new(),
+                &mut io::stdout(),
+            )
+            .map(|outcome| codex_leg_outcome(root, outcome)),
+        );
+        outcomes.push((Leg::CodexUserMcp, outcome));
+    }
+
     // Legacy starter removal (SL-282): the retired starter leg's unedited copies
     // go, so the framework text applies again. Placement is EARLY, not last: it
     // MUST run before the convergence below, because its worker-def bake
@@ -1105,7 +1146,7 @@ fn run_forward_steps(
     )?;
     outcomes.push((Leg::LegacyStarters, starters));
 
-    // 3. One convergence covers every harness (SL-281 D3) — none, nothing converges.
+    // 4. One convergence covers every harness (SL-281 D3) — none, nothing converges.
     // Convergence reports per action, not per path: no touched paths.
     // Discovery is pre-leg, not a leg: its failure aborts the run (unchanged), so
     // it stays outside `converge_leg` and its `Err` propagates.
@@ -1465,6 +1506,23 @@ impl LegOutcome {
     }
 }
 
+/// The user MCP leg's outcome as the ledger entry it contributes. The only path
+/// it reports is the project's `.codex/config.toml`, which loses doctrine's old
+/// wrapper but stays, so it is a change; the user file is codex's write, outside
+/// the repo, and never a commit-hint path. A refusal keeps the text `execute`
+/// already printed.
+fn codex_leg_outcome(root: &Path, outcome: crate::codex_mcp::CodexUserOutcome) -> LegOutcome {
+    match outcome {
+        crate::codex_mcp::CodexUserOutcome::Done(paths) => LegOutcome::Done(
+            paths
+                .iter()
+                .map(|path| Touched::under(root, path, Change::Changed))
+                .collect(),
+        ),
+        crate::codex_mcp::CodexUserOutcome::Refused(reason) => LegOutcome::Refused(reason),
+    }
+}
+
 /// The install legs, in run order. `name` is the label `install incomplete`
 /// prints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1473,6 +1531,7 @@ enum Leg {
     Base,
     MemorySync,
     BootWiring,
+    CodexUserMcp,
     LegacyStarters,
     Convergence,
     Gitignore,
@@ -1485,6 +1544,7 @@ impl Leg {
             Self::Base => "base",
             Self::MemorySync => "memory sync",
             Self::BootWiring => "boot wiring",
+            Self::CodexUserMcp => "codex user MCP",
             Self::LegacyStarters => "legacy starters",
             Self::Convergence => "convergence",
             Self::Gitignore => "gitignore",
@@ -7206,7 +7266,14 @@ mod tests {
                 "{harness}: preview links only memory skills"
             );
 
-            run_forward_steps(&plan, Path::new("doctrine"), &args, &manifest).unwrap();
+            run_forward_steps(
+                &plan,
+                Path::new("doctrine"),
+                &args,
+                &manifest,
+                crate::codex_mcp::Consent::NotAsked,
+            )
+            .unwrap();
             let live: BTreeSet<PathBuf> = fs::read_dir(&site)
                 .unwrap()
                 .map(|entry| entry.unwrap().path())
@@ -7462,6 +7529,54 @@ mod tests {
             "install incomplete: boot wiring, gitignore; version not recorded"
         );
         assert_eq!(touched(&outcomes), vec![&touched_at("x")]);
+    }
+
+    #[test]
+    fn codex_user_mcp_is_named_in_the_incomplete_line() {
+        assert_eq!(
+            incomplete_line(&[Leg::CodexUserMcp]),
+            "install incomplete: codex user MCP; version not recorded"
+        );
+    }
+
+    #[test]
+    fn codex_leg_outcome_reports_the_project_file_as_changed_under_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let project_file = root.join(crate::codex_mcp::CODEX_CONFIG_REL);
+        assert_eq!(
+            codex_leg_outcome(
+                root,
+                crate::codex_mcp::CodexUserOutcome::Done(vec![project_file])
+            ),
+            LegOutcome::Done(vec![touched_at(crate::codex_mcp::CODEX_CONFIG_REL)])
+        );
+        assert_eq!(
+            codex_leg_outcome(root, crate::codex_mcp::CodexUserOutcome::Done(vec![])),
+            LegOutcome::Done(vec![])
+        );
+        assert_eq!(
+            codex_leg_outcome(
+                root,
+                crate::codex_mcp::CodexUserOutcome::Refused("x".into())
+            ),
+            LegOutcome::Refused("x".into())
+        );
+    }
+
+    #[test]
+    fn a_refused_codex_leg_withholds_the_version_stamp_and_a_degraded_one_does_not() {
+        let refused = vec![(Leg::CodexUserMcp, LegOutcome::Refused("codex: no".into()))];
+        assert_eq!(incomplete_legs(&refused), vec![Leg::CodexUserMcp]);
+        assert_eq!(
+            stamp_decision(&refused, true),
+            StampDecision::Incomplete(vec![Leg::CodexUserMcp])
+        );
+
+        // A degraded leg finishes with nothing touched: no write, nothing withheld.
+        let degraded = vec![(Leg::CodexUserMcp, LegOutcome::Done(vec![]))];
+        assert!(incomplete_legs(&degraded).is_empty());
+        assert_eq!(stamp_decision(&degraded, true), StampDecision::Write);
     }
 
     #[test]

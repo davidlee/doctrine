@@ -68,11 +68,9 @@ pub(crate) const CODEX_CLI: &str = "codex";
 /// The codex subcommand that registers an MCP server: `codex mcp add <key> --
 /// <command>`. Kept as tokens rather than one string so the shell can build the
 /// argv it actually runs (PHASE-03) from the same pieces the prompt shows.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) const CODEX_MCP_ADD: &[&str] = &["mcp", "add"];
 
 /// Ends the `mcp add` flags: everything after it is the argv codex records.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) const CODEX_ARGV_SEPARATOR: &str = "--";
 /// The wrapper line doctrine emits as the codex `args[1]` — the portable env
 /// literal executed through [`CODEX_MCP_SHELL`]. `const` cannot compose, so this
@@ -427,7 +425,6 @@ pub(crate) fn classify_project(read: FileRead<'_>) -> ProjectEntry {
 /// `mcp_servers` table goes with its last server (it renders through its child, so
 /// it would otherwise surface as a header the user never wrote); an explicit one
 /// stays. An emptied document is still a valid `Some("")`.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn remove_wrapper(text: &str) -> Option<String> {
     if !matches!(
         classify_project(FileRead::Text(text)),
@@ -624,7 +621,6 @@ pub(crate) fn plan(
 /// The argv that registers doctrine's user-level MCP server: the `mcp add`
 /// subcommand, the server key, the argv separator, then the baked command. One
 /// source for both what the consent prompt shows and what the runner executes.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 fn add_args(bake: &Path) -> Vec<String> {
     let mut args: Vec<String> = CODEX_MCP_ADD.iter().copied().map(str::to_string).collect();
     args.push(CODEX_MCP_SERVER_KEY.to_string());
@@ -638,7 +634,6 @@ fn add_args(bake: &Path) -> Vec<String> {
 /// invocation that registers doctrine's user-level MCP server. Composed from the
 /// same tokens the shell runs ([`CODEX_CLI`], [`CODEX_MCP_ADD`] …), so the prompt
 /// cannot drift from the command.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn add_command(bake: &Path) -> String {
     invocation(CODEX_CLI, &add_args(bake))
 }
@@ -646,7 +641,6 @@ pub(crate) fn add_command(bake: &Path) -> String {
 /// The user's answer to the consent question. Consent only matters when the plan
 /// proposes a change; anything but [`Consent::Granted`] there takes the declined
 /// path — no CLI run, no write.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Consent {
     /// The user said yes.
@@ -660,7 +654,6 @@ pub(crate) enum Consent {
 /// What the user leg did: the paths it wrote. The project file only — the user's
 /// own config is written by codex, not here. The install leg maps this to its
 /// outcome in PHASE-04.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CodexUserOutcome {
     /// Finished; the paths it touched (empty when it touched none).
@@ -671,7 +664,6 @@ pub(crate) enum CodexUserOutcome {
 
 /// Why `codex mcp add` did not land: codex's own diagnostic, trimmed, or the
 /// spawn error text when the process could not be started at all.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CodexFailure {
     pub(crate) stderr: String,
@@ -679,20 +671,17 @@ pub(crate) struct CodexFailure {
 
 /// The one effect the user leg has on codex — registering the server. A trait so
 /// the leg is testable without a codex install.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) trait CodexCli {
     /// Register the baked command, or report why codex refused.
     fn mcp_add(&self, bake: &Path) -> Result<(), CodexFailure>;
 }
 
 /// The real codex CLI, run as a child process on [`CODEX_CLI`].
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) struct ProcessCodex {
     program: OsString,
 }
 
 impl ProcessCodex {
-    #[expect(dead_code, reason = "wired in SL-286 PHASE-04")]
     pub(crate) fn new() -> Self {
         Self {
             program: OsString::from(CODEX_CLI),
@@ -803,7 +792,6 @@ pub(crate) fn read_plan(
 /// `project_config` is the project's `.codex/config.toml`, re-read here: the file
 /// may have changed since the plan, so the wrapper is recognised again at write
 /// time ([`remove_wrapper`]) rather than trusted from the plan.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn execute(
     plan: &CodexUserPlan,
     consent: Consent,
@@ -946,7 +934,6 @@ fn emit(out: &mut dyn Write, block: &str) -> anyhow::Result<()> {
 /// scope; a removal-only plan shows just the wrapper it takes away, and asks a
 /// different question — the user is not writing their config, so pretending
 /// otherwise would overstate the change.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn consent_block(plan: &CodexUserPlan) -> Option<String> {
     if !plan.proposes_change() {
         return None;
@@ -1017,7 +1004,6 @@ pub(crate) fn consent_block(plan: &CodexUserPlan) -> Option<String> {
 /// plain yes is the only grant. Callers pass `install::prompt_confirm`, which
 /// prints the prompt, so the block appears exactly once; dry-run callers never
 /// call this at all, they show [`preview`].
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn ask_consent(
     plan: &CodexUserPlan,
     yes: bool,
@@ -1039,7 +1025,6 @@ pub(crate) fn ask_consent(
 /// What a dry run shows in place of the question: the same consent block under a
 /// heading that says it is not being asked, so `--dry-run` discloses exactly what
 /// a real run would ask and changes nothing. `None` when nothing is proposed.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn preview(plan: &CodexUserPlan) -> Option<String> {
     Some(format!(
         "{}\n{}",
@@ -1067,7 +1052,6 @@ const REPORT_LABEL_COLUMN: usize = 8;
 
 /// What a write of the user entry states: the file, and the command codex now
 /// holds (POL-003 — what was written, never that codex has loaded it).
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn registered(config: &Path, bake: &Path) -> String {
     [
         format!("{} {} {}", text::PREFIX, text::REGISTERED, config.display()),
@@ -1078,7 +1062,6 @@ pub(crate) fn registered(config: &Path, bake: &Path) -> String {
 
 /// What a replacement states: the old invocation, the new one, and every key the
 /// write removed — the same list the consent prompt named.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn replaced(config: &Path, bake: &Path, old: &str, dropped: &[String]) -> String {
     let mut lines = vec![
         format!("{} {} {}", text::PREFIX, text::REPLACED, config.display()),
@@ -1101,7 +1084,6 @@ fn serve_command(bake: &Path) -> String {
 }
 
 /// doctrine's old project wrapper is gone.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn wrapper_removed() -> String {
     format!(
         "{} {} {CODEX_CONFIG_REL}",
@@ -1112,21 +1094,18 @@ pub(crate) fn wrapper_removed() -> String {
 
 /// A running codex keeps the config it started with — the reason the user may see
 /// nothing change until they restart it.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn app_server_restart() -> String {
     format!("{} {}", text::PREFIX, text::APP_SERVER)
 }
 
 /// The user entry was written but the project file still wins here: codex reads
 /// the project layer over the user one, so the fix is another install.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn wrapper_still_overrides() -> String {
     format!("{} {}", text::PREFIX, text::WRAPPER_STILL_OVERRIDES)
 }
 
 /// An explicit project entry: disclosed, never touched, and the reason the user's
 /// config may not be the one codex uses in this repo.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn override_in_effect(target: &str) -> String {
     format!(
         "{} {} {target} ({CODEX_CONFIG_REL}) {}",
@@ -1138,14 +1117,12 @@ pub(crate) fn override_in_effect(target: &str) -> String {
 
 /// The user entry is already exactly the one doctrine would write: one line, and
 /// nothing is touched in either layer.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn current(config: &Path) -> String {
     format!("{} {} {}", text::PREFIX, text::CURRENT, config.display())
 }
 
 /// `codex` refused the registration: its own diagnostic is the report, indented so
 /// a multi-line stderr reads as one block beneath the line that caused it.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn add_failed(stderr: &str) -> String {
     format!(
         "{} {} {}",
@@ -1158,7 +1135,6 @@ pub(crate) fn add_failed(stderr: &str) -> String {
 /// The wrapper was there when the plan was made, but the write-time removal did
 /// not land: the file could not be read, no longer holds a wrapper doctrine owns,
 /// or could not be written.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn wrapper_not_removed(err: &str) -> String {
     format!(
         "{} {} {CODEX_CONFIG_REL}: {err}",
@@ -1169,7 +1145,6 @@ pub(crate) fn wrapper_not_removed(err: &str) -> String {
 
 /// The project entry is there but uninterpretable, so it shadows the user entry
 /// here and doctrine will not guess at it.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn project_malformed() -> String {
     format!(
         "{} {CODEX_CONFIG_REL} {}; {}",
@@ -1181,7 +1156,6 @@ pub(crate) fn project_malformed() -> String {
 
 /// The project file could not be read or parsed, so nothing here can be verified —
 /// the remedy is a fix and a rerun, never a write over a file doctrine cannot see.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn project_unreadable() -> String {
     format!(
         "{} {CODEX_CONFIG_REL} {}",
@@ -1198,7 +1172,6 @@ fn indent_after_the_first(stderr: &str) -> String {
 
 /// A bare-name project command: it shadows the user entry here and depends on the
 /// codex daemon's `PATH` (EVD-032), which doctrine can neither see nor fix.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn path_shadow(command: &str) -> String {
     format!(
         "{} {CODEX_CONFIG_REL} {} \"{command}\"{}\n  {}",
@@ -1213,7 +1186,6 @@ pub(crate) fn path_shadow(command: &str) -> String {
 /// skip line only when there is a cause, so the message is built here where the
 /// cause is known. The `run:` line appears only when a bake resolved: without one
 /// there is no command to offer.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn skipped(plan: &CodexUserPlan) -> Option<String> {
     let cause = cause(plan.degraded.as_ref()?, plan.user_config.as_deref());
     let mut lines = vec![format!("{} {} {cause}", text::PREFIX, text::SKIPPED)];
@@ -1264,7 +1236,6 @@ fn file_cause(user_config: Option<&Path>, reason: &str) -> String {
 
 /// The user said no: nothing changed, the risk is named (EVD-032), and the exact
 /// command stands in for a rerun.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn declined(bake: &Path) -> String {
     [
         format!("{} {}", text::PREFIX, text::DECLINED),
@@ -1277,7 +1248,6 @@ pub(crate) fn declined(bake: &Path) -> String {
 /// The consent register: every fixed sentence of the prompt and the report, so a
 /// rewording is a one-line diff here rather than a literal buried in a composer
 /// (STD-001).
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 mod text {
     pub(super) const HEADER_WRITE: &str =
         "Codex: register doctrine's MCP server in your user config?";
