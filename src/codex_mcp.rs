@@ -2,9 +2,14 @@
 //! The codex user MCP leg (SL-286) — what doctrine installs into a *user's*
 //! `$CODEX_HOME/config.toml`, as opposed to the project-scoped entry `boot`
 //! owns. Command tier: it may reach leaf and engine modules, never `boot` or
-//! `install` (the dependency runs `boot` → here), and every fact about the
-//! machine — where codex lives, what `$CODEX_HOME` is, whether a CLI is on
-//! `PATH` — arrives as a supplied input rather than being read here.
+//! `install` (the dependency runs `boot` → here).
+//!
+//! The *planner* — [`plan`] and its helpers — reads nothing: every fact about the
+//! machine (where codex lives, what `$CODEX_HOME` is, whether a CLI is on `PATH`)
+//! arrives as a supplied input. The leg's thin shell is the two IO halves beside
+//! it: [`read_plan`] gathers those facts (the environment through an injected
+//! lookup, the files and `PATH` from disk), and [`execute`] runs codex and edits
+//! the project file.
 //!
 //! This phase carries the shared vocabulary: the codex config/table/server
 //! constants, the wrapper-line normaliser, and [`is_wrapper_form`] — the single
@@ -748,6 +753,66 @@ impl CodexCli for ProcessCodex {
     }
 }
 
+/// Read a config file into `text`, one of [`FileRead`]'s three states: a missing
+/// file is `Absent` (the write creates it), anything else that fails is
+/// `Unreadable` (a permission error must not read as a fresh install). `text` is
+/// the caller's own buffer because [`FileRead::Text`] borrows it.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+fn read_config<'a>(path: &Path, text: &'a mut String) -> FileRead<'a> {
+    match fs::read_to_string(path) {
+        Ok(read) => {
+            *text = read;
+            FileRead::Text(text.as_str())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => FileRead::Absent,
+        Err(_) => FileRead::Unreadable,
+    }
+}
+
+/// Gather the machine facts [`plan`] takes as input — the leg's other shell half,
+/// beside [`execute`]. The environment is read only through `env` (callers pass
+/// `std::env::var_os`, tests pass a map: no global env mutation); `PATH`, the two
+/// config files, and the canonical paths [`bake`] compares come from disk. `exec`
+/// is the running binary. A `$CODEX_HOME` failure is passed on as `Absent` — the
+/// degradation is [`destination`]'s to derive, once, from the same facts.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn read_plan(
+    project_root: &Path,
+    exec: &Path,
+    env: &dyn Fn(&str) -> Option<OsString>,
+) -> CodexUserPlan {
+    let path = env("PATH");
+    let on_path = |name: &str| {
+        path.as_deref()
+            .and_then(|value| crate::fsutil::find_on_path(name, value))
+    };
+    let codex_home = env("CODEX_HOME");
+    let codex_env = CodexEnv {
+        codex_home_exists: codex_home
+            .as_deref()
+            .is_some_and(|dir| Path::new(dir).is_dir()),
+        codex_home,
+        home: env("HOME").map(PathBuf::from),
+        codex_on_path: on_path(CODEX_CLI).is_some(),
+    };
+    let path_doctrine = on_path("doctrine");
+    let facts = BakeFacts {
+        exec: fs::canonicalize(exec).ok(),
+        path_doctrine_canonical: path_doctrine
+            .as_ref()
+            .and_then(|entry| fs::canonicalize(entry).ok()),
+        path_doctrine,
+    };
+    let mut user_text = String::new();
+    let mut project_text = String::new();
+    let user = match destination(&codex_env) {
+        Ok(config) => read_config(&config, &mut user_text),
+        Err(_) => FileRead::Absent,
+    };
+    let project = read_config(&project_root.join(CODEX_CONFIG_REL), &mut project_text);
+    plan(user, project, &facts, &codex_env)
+}
+
 /// The thin imperative half of the leg (design sec-leg § Execute): run the one
 /// effect, edit the one file, and say what happened. Every step's order and
 /// every report line is design-pinned, so this function is a transcription of the
@@ -1264,6 +1329,7 @@ mod tests {
     use super::*;
 
     use std::cell::RefCell;
+    use std::collections::HashMap;
 
     /// Parse an entry body as the `[server]` table and ask whether it is a
     /// wrapper form. Single-quoted TOML literals keep the `$`/`"` of a wrapper
@@ -2161,6 +2227,166 @@ mod tests {
             "[mcp_servers.doctrine]\ncommand = \"doctrine\"\n",
         );
         assert_eq!(consent_block(&planned), None);
+    }
+
+    // --- read_plan (the shell half, design sec-leg § Plan) ---
+
+    /// `read_plan`'s environment seam as a map, so no test mutates the process
+    /// environment and the two runs cannot see each other's variables.
+    fn lookup<'a>(map: &'a HashMap<&str, OsString>) -> impl Fn(&str) -> Option<OsString> + 'a {
+        move |key| map.get(key).cloned()
+    }
+
+    /// The running binary for these tests: nothing is there, so the bake facts
+    /// degrade — the destination and project class are what they assert.
+    const NO_EXEC: &str = "/nonexistent/doctrine-tests/doctrine";
+
+    #[test]
+    fn read_plan_reads_the_user_file_under_home_when_codex_home_is_unset() {
+        let home = tempfile::tempdir().unwrap();
+        fs::create_dir_all(home.path().join(".codex")).unwrap();
+        fs::write(
+            home.path().join(CODEX_CONFIG_REL),
+            "[mcp_servers.doctrine]\ncommand = \"/opt/doctrine\"\n",
+        )
+        .unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let env = HashMap::from([("HOME", OsString::from(home.path()))]);
+
+        let planned = read_plan(project.path(), Path::new(NO_EXEC), &lookup(&env));
+
+        assert_eq!(
+            planned.user_config,
+            Some(home.path().join(CODEX_CONFIG_REL)),
+            "CODEX_HOME unset, so $HOME is the anchor"
+        );
+    }
+
+    #[test]
+    fn read_plan_degrades_a_codex_home_that_does_not_exist() {
+        let tmp = tempfile::tempdir().unwrap();
+        let missing = tmp.path().join("missing");
+        let env = HashMap::from([("CODEX_HOME", missing.into_os_string())]);
+
+        let planned = read_plan(tmp.path(), Path::new(NO_EXEC), &lookup(&env));
+
+        assert_eq!(planned.degraded, Some(Degraded::BadCodexHome));
+    }
+
+    #[test]
+    fn read_plan_classifies_the_project_file() {
+        let project = project_dir("[mcp_servers.doctrine]\ncommand = \"./bin/doctrine\"\n");
+        let env: HashMap<&str, OsString> = HashMap::new();
+
+        let planned = read_plan(project.path(), Path::new(NO_EXEC), &lookup(&env));
+
+        assert_eq!(
+            planned.project,
+            ProjectEntry::Override {
+                target: "./bin/doctrine".to_string()
+            },
+            "a path command is the user's explicit choice"
+        );
+    }
+
+    /// An executable file — `find_on_path` requires the mode bits, so writing
+    /// bytes alone would not be found.
+    fn write_exec(path: &Path) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::write(path, b"fake-exe").unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    /// The `bin/` layout `bake` has to tell apart: `real-doctrine` (the running
+    /// binary), a `doctrine` symlink to it (the path to bake — never its target),
+    /// and an executable `codex`. The root doubles as `$HOME` and the project
+    /// root, so `PATH` is the one variable that has to be set.
+    struct PathBin {
+        root: tempfile::TempDir,
+        real: PathBuf,
+    }
+
+    impl PathBin {
+        fn new() -> Self {
+            let root = tempfile::tempdir().unwrap();
+            let bin = root.path().join("bin");
+            fs::create_dir_all(&bin).unwrap();
+            let real = bin.join("real-doctrine");
+            write_exec(&real);
+            std::os::unix::fs::symlink("real-doctrine", bin.join("doctrine")).unwrap();
+            write_exec(&bin.join(CODEX_CLI));
+            Self { root, real }
+        }
+
+        /// The `doctrine` entry on `PATH`, as codex would exec it.
+        fn link(&self) -> PathBuf {
+            self.root.path().join("bin").join("doctrine")
+        }
+
+        fn env(&self) -> HashMap<&'static str, OsString> {
+            HashMap::from([
+                ("PATH", self.root.path().join("bin").into_os_string()),
+                ("HOME", self.root.path().as_os_str().to_owned()),
+            ])
+        }
+    }
+
+    #[test]
+    fn read_plan_bakes_the_path_entry_not_its_symlink_target() {
+        let bin = PathBin::new();
+
+        let planned = read_plan(bin.root.path(), &bin.real, &lookup(&bin.env()));
+
+        assert_eq!(
+            planned.bake,
+            Some(bin.link()),
+            "the entry the user's shell runs, not the file it resolves to"
+        );
+        assert_eq!(planned.degraded, None);
+        assert_eq!(planned.user, Some(UserEntry::Add));
+    }
+
+    #[test]
+    fn read_plan_degrades_a_running_binary_that_is_not_the_path_doctrine() {
+        let bin = PathBin::new();
+        let other = bin.root.path().join("other-doctrine");
+        write_exec(&other);
+
+        let planned = read_plan(bin.root.path(), &other, &lookup(&bin.env()));
+
+        match planned.degraded {
+            Some(Degraded::ExecNotOnPath { on_path, .. }) => {
+                assert_eq!(
+                    on_path,
+                    Some(bin.link()),
+                    "the report names the entry it found"
+                )
+            }
+            other => panic!("expected ExecNotOnPath, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_plan_marks_an_unreadable_user_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let bin = PathBin::new();
+        let user_file = bin.root.path().join(CODEX_CONFIG_REL);
+        fs::create_dir_all(user_file.parent().unwrap()).unwrap();
+        fs::write(&user_file, "model = \"gpt-5\"\n").unwrap();
+        fs::set_permissions(&user_file, fs::Permissions::from_mode(0o000)).unwrap();
+        if fs::read_to_string(&user_file).is_ok() {
+            eprintln!("skipped: root can read a 0o000 file");
+            return;
+        }
+
+        let planned = read_plan(bin.root.path(), &bin.real, &lookup(&bin.env()));
+
+        assert_eq!(
+            planned.degraded,
+            Some(Degraded::UserUnreadable),
+            "a permission error must not read as a fresh install"
+        );
     }
 
     // --- execute (design sec-leg § Execute) ---
