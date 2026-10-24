@@ -232,7 +232,7 @@ fn boot_install_runs_the_user_leg_and_degrades_under_the_safe_codex_home() {
 
 #[test]
 fn boot_install_dry_run_shows_the_consent_block_and_runs_nothing() {
-    use std::os::unix::fs::{PermissionsExt as _, symlink};
+    use std::os::unix::fs::PermissionsExt as _;
 
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
@@ -243,7 +243,7 @@ fn boot_install_dry_run_shows_the_consent_block_and_runs_nothing() {
     let bin = root.join("bin");
     fs::create_dir_all(&home).unwrap();
     fs::create_dir_all(&bin).unwrap();
-    symlink(common::doctrine_bin(), bin.join("doctrine")).unwrap();
+    common::link_doctrine_into(&bin);
     let argv_log = root.join("codex-argv");
     let codex = bin.join("codex");
     fs::write(

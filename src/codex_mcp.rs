@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! The codex user MCP leg (SL-286) — what doctrine installs into a *user's*
-//! `$CODEX_HOME/config.toml`, as opposed to the project-scoped entry `boot`
-//! owns. Command tier: it may reach leaf and engine modules, never `boot` or
-//! `install` (the dependency runs `boot` → here).
+//! The codex user MCP leg (SL-286) — doctrine's MCP registration in a *user's*
+//! `$CODEX_HOME/config.toml`, and the retirement of the project-level wrapper
+//! doctrine used to write into `.codex/config.toml`. Run only by an explicit
+//! `install` or `boot install` (DEC-411). Command tier: it may reach leaf and
+//! engine modules, never `boot` or `install` (the dependency runs both → here).
 //!
 //! The *planner* — [`plan`] and its helpers — reads nothing: every fact about the
 //! machine (where codex lives, what `$CODEX_HOME` is, whether a CLI is on `PATH`)
@@ -11,11 +12,9 @@
 //! lookup, the files and `PATH` from disk), and [`execute`] runs codex and edits
 //! the project file.
 //!
-//! This phase carries the shared vocabulary: the codex config/table/server
-//! constants, the wrapper-line normaliser, and [`is_wrapper_form`] — the single
-//! recognition rule for "an entry whose command and args are a wrapper line
-//! doctrine emitted", used by [`crate::boot`]'s project-entry classifier until
-//! the user-entry planner takes it over.
+//! [`is_wrapper_form`] is the single recognition rule for "an entry whose
+//! command and args are a wrapper line doctrine emitted"; both the project-entry
+//! classifier and the user-entry planner ask it.
 
 use std::ffi::OsString;
 use std::fs;

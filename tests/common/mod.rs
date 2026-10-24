@@ -91,6 +91,16 @@ pub(crate) fn sha256(bytes: &[u8]) -> String {
 /// with `.env` (fixture-wins: a later `env` call overrides this one).
 pub(crate) const SAFE_CODEX_HOME: &str = "/nonexistent/doctrine-tests/codex-home";
 
+/// Put the binary under test on a fake `PATH` directory as `doctrine` — a
+/// symlink, so the running binary and the `PATH` entry canonicalise to the same
+/// file, which the codex user MCP bake rule requires (SL-286 DEC-404). Lives
+/// here because this module is the one place that names the binary's path.
+#[cfg(unix)]
+pub(crate) fn link_doctrine_into(bin_dir: &std::path::Path) {
+    std::os::unix::fs::symlink(doctrine_bin(), bin_dir.join("doctrine"))
+        .expect("link doctrine onto the fake PATH");
+}
+
 /// The built binary, spawned with `cwd` **bound** and the worker-mode env leg
 /// stripped — the single spawn seam for every integration test (IMP-352).
 ///
