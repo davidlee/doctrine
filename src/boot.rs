@@ -3660,7 +3660,8 @@ pub(crate) enum BootCommand {
         #[arg(long)]
         dry_run: bool,
 
-        /// Skip the confirmation prompt.
+        /// Skip the confirmation prompt; also consents to registering doctrine's
+        /// MCP server in your user codex config.
         #[arg(short = 'y', long)]
         yes: bool,
     },

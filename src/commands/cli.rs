@@ -115,7 +115,8 @@ pub(crate) enum Command {
         #[arg(long)]
         dry_run: bool,
 
-        /// Skip the confirmation prompt.
+        /// Skip the confirmation prompt; also consents to registering doctrine's
+        /// MCP server in your user codex config.
         #[arg(short = 'y', long)]
         yes: bool,
 
@@ -1978,6 +1979,39 @@ mod tests {
             .filter(|s| !s.is_hide_set() && s.get_name() != "help")
             .map(|s| s.get_name().to_string())
             .collect()
+    }
+
+    /// SL-286 PHASE-04 T9 — the `-y` help on both install surfaces must state
+    /// that it also consents to registering doctrine's MCP server in the user
+    /// codex config.
+    #[test]
+    fn yes_flag_help_mentions_codex_mcp_consent() {
+        fn yes_help(cmd: &clap::Command) -> String {
+            cmd.get_arguments()
+                .find(|a| a.get_id() == "yes")
+                .and_then(|a| a.get_help())
+                .map(|h| h.to_string())
+                .unwrap_or_default()
+        }
+
+        let cmd = <crate::Cli as CommandFactory>::command();
+        let install = cmd
+            .find_subcommand("install")
+            .expect("install subcommand");
+        let boot_install = cmd
+            .find_subcommand("boot")
+            .and_then(|b| b.find_subcommand("install"))
+            .expect("boot install subcommand");
+
+        for (label, help) in [
+            ("install", yes_help(install)),
+            ("boot install", yes_help(boot_install)),
+        ] {
+            assert!(
+                help.contains("user codex config"),
+                "{label} --yes help should mention codex MCP consent, got: {help:?}"
+            );
+        }
     }
 
     /// VT-1 / EX-2 — the FAMILIES ⟷ clap-tree drift guard (design §9). Three
