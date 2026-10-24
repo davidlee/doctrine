@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a16b8b-0abc-7863-9d84-ae180bc9f823"
+recorded_at = "2026-10-24T01:33:56.796848287Z"
+kind = "friction"
+summary = "audit SL-286: handover claimed verify-vt all PASS; PHASE-04 VT-3 was failing"
+detail = "9f802dc6a moved the VT-3 keyword literal into tests/common; gate stays green because it does not run verify-vt, so the PHASE-05 close and handover reported all-pass. Caught only by re-running verify-vt at audit (RV-428 F-1)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

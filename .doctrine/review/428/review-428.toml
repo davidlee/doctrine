@@ -1,0 +1,362 @@
+id    = 428
+slug  = "sl-286-audit"
+title = "SL-286 audit"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Conformance self-audit of SL-286 on edge at 08e6f1b74 (code through 9f802dc6a): slice conformance algebra (all undeclared/undelivered leads dispositioned), doctrine check gate re-run (green), slice verify-vt re-run (PHASE-04 VT-3 regression found and fixed; all PASS), codex_mcp + install/boot wiring against design sec-leg/execute/report net of DEC-412/413/414, rootless serve (DEC-405), ADR-001 layering, README/REQ-484/DEC supersession debts from scope §4. First-pass reads by pi, spot-checked.
+"""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-286"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "PHASE-04 VT-3 should pass verify-vt; it fails (keyword moved to tests/common)"
+detail = """
+Expected: `doctrine slice verify-vt 286` all PASS (handover and Harvest claim so).
+Observed: PHASE-04 VT-3 FAIL — keyword `user MCP registration skipped` absent from tests/e2e_install_flow.rs. 9f802dc6a (PHASE-05 review fixes) moved the `CODEX_MCP_SKIPPED` literal into tests/common/mod.rs:33 ("one shared skipped-line constant"). The behaviour is still asserted (tests/e2e_install_flow.rs:395, gate green); only the VT keyword evidence regressed. plan.toml criteria are immutable, so the evidence must come back to the test file."""
+disposition = "fix-now"
+response = "Fixed in audit: the assertion message at tests/e2e_install_flow.rs:396 now names `user MCP registration skipped`, restoring the keyword without undoing the shared constant (DRY kept). `doctrine slice verify-vt 286` re-run: all VT PASS incl. PHASE-04 VT-3. Committed with the audit."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed in audit: the assertion message at tests/e2e_install_flow.rs:396 now names `user MCP registration skipped`, restoring the keyword without undoing the shared constant (DRY kept). `doctrine slice verify-vt 286` re-run: all VT PASS incl. PHASE-04 VT-3. Committed with the audit."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "design.md should carry DEC-412/413/414 deltas; it predates them"
+detail = """
+Expected: the locked design describes the shipped leg.
+Observed: DEC-412 (PHASE-02 plan deltas: FileRead, destination split, blocking project entries, degraded/removal-only text), DEC-413 (PHASE-03 execute deltas: project path param, write-time re-check, opt-in symlink write-through, report lines) and DEC-414 (PHASE-04 wiring: read_plan gather in codex_mcp, exec before plan, consent seam, dry-run heading, leg mapping, boot install Ok on Refused, relative HOME → NoHome) are accepted but not folded into design.md sec-leg / sec-execute / sec-report / sec-code-impact. Each DEC's consequences field names reconcile as the writer. PHASE-04 sheet "Reconcile drift" (non-absolute HOME, two `codex` overview bullets) is covered by DEC-414 / design-literal."""
+disposition = "design-wrong"
+response = "Accepted deltas; the design is the stale artefact. Reconciliation Brief § Per-slice: fold DEC-412, DEC-413, DEC-414 into design.md sec-leg / sec-execute / sec-report / sec-code-impact. DEC-412 also names PHASE-02 EX-4 — plan criteria are immutable, so that half stays recorded in DEC-412, not edited."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Accepted deltas; the design is the stale artefact. Reconciliation Brief § Per-slice: fold DEC-412, DEC-413, DEC-414 into design.md sec-leg / sec-execute / sec-report / sec-code-impact. DEC-412 also names PHASE-02 EX-4 — plan criteria are immutable, so that half stays recorded in DEC-412, not edited."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "REQ-484 should describe user-level registration; it describes the retired project wrapper"
+detail = """
+Expected (slice scope §4): REQ-484 (SPEC-011) revised through a Revision; a requirement for rootless `serve --mcp` (DEC-405) added.
+Observed: `doctrine show REQ-484` still reads "boot install registers ... `[mcp_servers.doctrine]` into the project `.codex/config.toml` — a portable `sh -c` entry carrying no host absolute path ...". No requirement governs rootless serve. Implementation (src/codex_mcp.rs, src/mcp_server/) contradicts the requirement as written."""
+disposition = "design-wrong"
+response = "Governance lags the shipped behaviour by plan (scope §4). Reconciliation Brief § Governance/spec: REV modifying REQ-484 to user-level registration per DEC-406/407/408/411, and REV adding a rootless serve --mcp requirement (DEC-405) to SPEC-011."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Governance lags the shipped behaviour by plan (scope §4). Reconciliation Brief § Governance/spec: REV modifying REQ-484 to user-level registration per DEC-406/407/408/411, and REV adding a rootless serve --mcp requirement (DEC-405) to SPEC-011."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "README should document the user-level codex entry; it documents the sh wrapper"
+detail = """
+Expected (slice scope §4, DEC-409): README drops the `sh` dependency and documents the user-level entry and scope, the consent prompt and that `-y` grants it, the project-level override slot, codex's per-folder trust prompt, and the codex CLI as a declared dependency.
+Observed: README.md:159-176 says the codex registration writes `[mcp_servers.doctrine]` into the project `.codex/config.toml`, shows the `sh -c` TOML snippet, and declares POSIX `sh` as a dependency. None of the five required topics is present. install/ and .agents/skills carry no stale codex-MCP text (pi recon, spot-checked by grep)."""
+disposition = "fix-now"
+response = "Scope §4 assigns the README rewrite to reconcile, inside this slice. Reconciliation Brief § Per-slice lists the five topics and the sh removal; reconcile edits README.md:159-176 before close."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Scope §4 assigns the README rewrite to reconcile, inside this slice. Reconciliation Brief § Per-slice lists the five topics and the sh removal; reconcile edits README.md:159-176 before close."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "DEC-323/332/325 should be superseded; all still accepted"
+detail = """
+Expected (slice scope §4): DEC-406 supersedes DEC-323 and DEC-332; DEC-407 supersedes DEC-325.
+Observed: `doctrine show` reports DEC-323, DEC-332, DEC-325 all `accepted`, no supersede relation recorded."""
+disposition = "design-wrong"
+response = "Reconciliation Brief § Governance/spec: `doctrine supersede` DEC-323 and DEC-332 by DEC-406; DEC-325 by DEC-407."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Reconciliation Brief § Governance/spec: `doctrine supersede` DEC-323 and DEC-332 by DEC-406; DEC-325 by DEC-407."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Conformance: root.rs, catalog/mod.rs, e2e_worktree_provision.rs edited but undeclared"
+detail = """
+Expected: every edited source path matches a design-target selector.
+Observed (`doctrine slice conformance 286`, undeclared cell): src/root.rs and src/catalog/mod.rs (d81d63eaf, PHASE-01: root::find_opt, root::DOCTRINE_DIR, is_doctrine_project, adopted by catalog scan) and tests/e2e_worktree_provision.rs (20811d8be, PHASE-05 T5: fork regeneration never runs the codex leg — DEC-411 evidence). All in-scope and intended; the design's code-impact table and selector registry omit them."""
+disposition = "design-wrong"
+response = "Edits are intended and in scope. Reconciliation Brief § Per-slice: `doctrine slice selector add 286` design-target for src/root.rs, src/catalog/mod.rs, tests/e2e_worktree_provision.rs (load-bearing — conformance reads the registry); mirror as code-impact rows in design.md."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Edits are intended and in scope. Reconciliation Brief § Per-slice: `doctrine slice selector add 286` design-target for src/root.rs, src/catalog/mod.rs, tests/e2e_worktree_provision.rs (load-bearing — conformance reads the registry); mirror as code-impact rows in design.md."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "Conformance: src/commands/serve.rs declared but undelivered (no-op row)"
+detail = """
+Expected: design-target selectors name files the slice changes.
+Observed: src/commands/serve.rs is undelivered. design.md code-impact row says "unchanged signature; passes through" — serve.rs already threads Option&lt;PathBuf&gt; (serve.rs:15-17, 29-31). The selector is spurious, not dropped work."""
+disposition = "design-wrong"
+response = "Reconciliation Brief § Per-slice: `doctrine slice selector rm 286 src/commands/serve.rs`; drop or mark the no-op row in design.md code-impact."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Reconciliation Brief § Per-slice: `doctrine slice selector rm 286 src/commands/serve.rs`; drop or mark the no-op row in design.md code-impact."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "nit"
+title = "Conformance: undeclared .doctrine/ authored records incl. foreign 4aea4ff19"
+detail = """
+Observed undeclared: .doctrine/backlog/improvement/407/backlog-407.md (foreign commit 4aea4ff19, doc(IMP-407), landed on edge between PHASE-02 commits), ISS-533 mint (3 paths), two observation records, slice-286 notes.md and slice-286.toml.
+Question: is any of this scope creep or a missed design update?"""
+disposition = "aligned"
+response = "No creep. Authored doctrine records (notes, slice toml, observations, the ISS-533 mint) are lifecycle bookkeeping, never design targets. 4aea4ff19 is an IMP-407 doc-only commit by another session landing on the shared edge branch inside the PHASE-02 range; it touches no SL-286 code and belongs to IMP-407. No action."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "aligned"
+response = "No creep. Authored doctrine records (notes, slice toml, observations, the ISS-533 mint) are lifecycle bookkeeping, never design targets. 4aea4ff19 is an IMP-407 doc-only commit by another session landing on the shared edge branch inside the PHASE-02 range; it touches no SL-286 code and belongs to IMP-407. No action."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "Daemon hint after removal-only success: design scopes it to user writes"
+detail = """
+Expected (design.md:142): "Every user write is followed by the daemon hint".
+Observed: src/codex_mcp.rs:884 emits the hint when `wrote_user || !touched.is_empty()` — also after a removal-only success (project wrapper removed, no user write), pinned by execute_removal_only_removes_the_wrapper_without_calling_codex. Not covered by DEC-413 (item 6 covers the removal-only *failure*, no hint). Code rationale: removing the project entry changes the effective config, so a running daemon is stale either way."""
+disposition = "design-wrong"
+response = """Code is right: removing the project entry changes codex's effective config, so a running daemon is stale exactly as after a user write. Reconciliation Brief § Per-slice: design.md:142 → "every write (user entry or project retirement) is followed by the daemon hint"."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = """Code is right: removing the project entry changes codex's effective config, so a running daemon is stale exactly as after a user write. Reconciliation Brief § Per-slice: design.md:142 → "every write (user entry or project retirement) is followed by the daemon hint"."""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "Empty project `url` classifies Malformed; design table says url → Override"
+detail = """
+Expected (design.md:81 project table): "`command` contains `/`, or a `url` transport → Override (untouched; reported; not incomplete)"; Malformed = "empty command, wrong types, not a table".
+Observed: src/codex_mcp.rs:394-400 sends `url = ""` (and non-string url) to Malformed, which holds install incomplete; pinned by classify_project_malformed_when_url_is_empty. An empty string is not a transport, so Malformed is the coherent reading (parallel to empty command), but the design table does not say so and no DEC records it."""
+disposition = "design-wrong"
+response = "Code reading is coherent (empty url ≅ empty command). Reconciliation Brief § Per-slice: design.md project table — Override needs a non-empty string url; an empty or non-string url is Malformed."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Code reading is coherent (empty url ≅ empty command). Reconciliation Brief § Per-slice: design.md project table — Override needs a non-empty string url; an empty or non-string url is Malformed."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "codex_mcp dependencies: design says → boot; code and layering.toml say leaf only"
+detail = """
+Expected (design.md:7 code-impact row): `codex_mcp = "command"` (→ boot for resolve_exec/Harness, fsutil, dtoml).
+Observed: src/codex_mcp.rs imports std, toml_edit, crate::fsutil only — no boot, no commands (ADR-001 holds; callers pass exec, per plan.md § Sequencing). .doctrine/adr/001/layering.toml:103 comment also stale the other way: it called the module "pure half — wrapper recognition + vocabulary", but it now holds execute, ProcessCodex and read_plan."""
+disposition = "design-wrong"
+response = 'Code honours ADR-001 more tightly than the design. layering.toml:103 comment fixed in audit (now: leaf only — fsutil, toml_edit, std; pure plan + execute shell + read_plan gather). Reconciliation Brief § Per-slice: design.md:7 code-impact row drops "→ boot for resolve_exec/Harness".'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = 'Code honours ADR-001 more tightly than the design. layering.toml:103 comment fixed in audit (now: leaf only — fsutil, toml_edit, std; pure plan + execute shell + read_plan gather). Reconciliation Brief § Per-slice: design.md:7 code-impact row drops "→ boot for resolve_exec/Harness".'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "minor"
+title = "design.md should record ASM-014 invalidated (EVD-034); it leaves it open"
+detail = """
+Expected: design reflects VH-2's outcome.
+Observed: design.md:197, 296, 311, 371 cite ASM-014 ("where codex shows the rootless instructions") as open. EVD-034 (VH-2, 2026-10-24) shows codex never displays MCP initialize instructions; ASM-014 is `invalidated`. DEC-405 holds — the empty tool list is the only signal the user sees."""
+disposition = "design-wrong"
+response = 'Reconciliation Brief § Per-slice: design.md cites EVD-034; ASM-014 rows read "invalidated — codex never shows MCP instructions; empty tool list is the only signal (DEC-405 holds)".'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = 'Reconciliation Brief § Per-slice: design.md cites EVD-034; ASM-014 rows read "invalidated — codex never shows MCP instructions; empty tool list is the only signal (DEC-405 holds)".'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "nit"
+title = 'Wording: rootless notice text and "install regeneration of a fork"'
+detail = 'Observed: (a) design renders the rootless notice as one string "(no project root, or no .doctrine/ under &lt;root&gt;)"; src/mcp_server/protocol.rs:102-107 emits two exclusive variants, "(no project root)" / "(no .doctrine/ under &lt;path&gt;)" — more precise, same semantics. (b) design.md:355 sec-verification says "`install` regeneration of a fork"; the surface is `worktree provision` → `install::regenerate` (PHASE-05 sheet R2). No behaviour drift.'
+disposition = "design-wrong"
+response = "Reconciliation Brief § Per-slice: design rootless notice shows both variants; design.md:355 names `worktree provision` (→ install::regenerate)."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "design-wrong"
+response = "Reconciliation Brief § Per-slice: design rootless notice shows both variants; design.md:355 names `worktree provision` (→ install::regenerate)."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "Disposition checked; brief entry / fix present."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

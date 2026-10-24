@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-24 · audit (PHASE-05 done) · 40bbf4e5d
+fresh-as-of: 2026-10-24 · audit concluded (RV-428) · 08e6f1b74+
 
 ### Produced
 
@@ -47,8 +47,14 @@ fresh-as-of: 2026-10-24 · audit (PHASE-05 done) · 40bbf4e5d
   holds — the empty tool list is the only signal).
 - Minted: ISS-533 — MCP server replies to JSON-RPC notifications (pre-existing).
 - Design-time decisions DEC-403..DEC-411; EVD-033; RV-427 (concluded).
+- Audit: RV-428 (reconciliation, concluded, 13 findings verified; brief in
+  review-428.md). Fixed in audit: PHASE-04 VT-3 keyword regression (from
+  9f802dc6a), stale codex_mcp comment in ADR-001 layering.toml.
 
 ### Learned
+
+- `doctrine check gate` does not run `slice verify-vt`: a refactor that moves an
+  asserted literal can fail a VT keyword check under a green gate (RV-428 F-1).
 
 - mem.pattern.delegation.pi-writable-in-worktree — calibration appended
   (subtree write roots, judgement no-answer turns, transcript budget);
@@ -62,6 +68,9 @@ fresh-as-of: 2026-10-24 · audit (PHASE-05 done) · 40bbf4e5d
   effective entry (ASM-015 invalidated).
 
 ### Open
+
+- RV-428 Reconciliation Brief — the reconcile worklist (design.md folds,
+  selector add/rm, README, REQ-484 REV + rootless requirement, supersessions).
 
 - DEC-412 — PHASE-02 design deltas (FileRead, destination split, blocking
   project entries, degraded/removal-only text); reconcile folds into design.md

@@ -393,7 +393,7 @@ fn codex_links_are_listed_and_user_mcp_degrades_under_the_safe_codex_home() {
     assert!(!out.contains("written by npx"), "{out}");
     assert!(
         out.lines().any(|line| line.contains(CODEX_MCP_SKIPPED)),
-        "the user MCP leg runs and says it skipped under CODEX_HOME={SAFE_CODEX_HOME}: {out}"
+        "the user MCP leg reports `user MCP registration skipped` under CODEX_HOME={SAFE_CODEX_HOME}: {out}"
     );
     assert!(
         !root.join("skills-lock.json").exists(),
