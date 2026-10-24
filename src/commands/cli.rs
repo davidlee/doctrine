@@ -1995,9 +1995,7 @@ mod tests {
         }
 
         let cmd = <crate::Cli as CommandFactory>::command();
-        let install = cmd
-            .find_subcommand("install")
-            .expect("install subcommand");
+        let install = cmd.find_subcommand("install").expect("install subcommand");
         let boot_install = cmd
             .find_subcommand("boot")
             .and_then(|b| b.find_subcommand("install"))
