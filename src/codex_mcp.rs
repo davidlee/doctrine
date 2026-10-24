@@ -1030,6 +1030,45 @@ pub(crate) fn consent_block(plan: &CodexUserPlan) -> Option<String> {
     Some(lines.join("\n"))
 }
 
+/// The consent question, asked once (design sec-leg § Consent, DEC-413). The policy
+/// lives here; the prompt itself is the caller's. No block ([`consent_block`] is
+/// `None`) means nothing to approve, so nothing is put to the user; `yes` is the
+/// user's own prior answer (`-y`), so the question is not repeated. Otherwise the
+/// block goes to `ask` with a trailing space — it ends on its own ask line — and a
+/// plain yes is the only grant. Callers pass `install::prompt_confirm`, which
+/// prints the prompt, so the block appears exactly once; dry-run callers never
+/// call this at all, they show [`preview`].
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn ask_consent(
+    plan: &CodexUserPlan,
+    yes: bool,
+    ask: impl FnOnce(&str) -> anyhow::Result<bool>,
+) -> anyhow::Result<Consent> {
+    let Some(block) = consent_block(plan) else {
+        return Ok(Consent::NotAsked);
+    };
+    if yes {
+        return Ok(Consent::Granted);
+    }
+    Ok(if ask(&format!("{block} "))? {
+        Consent::Granted
+    } else {
+        Consent::Declined
+    })
+}
+
+/// What a dry run shows in place of the question: the same consent block under a
+/// heading that says it is not being asked, so `--dry-run` discloses exactly what
+/// a real run would ask and changes nothing. `None` when nothing is proposed.
+#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
+pub(crate) fn preview(plan: &CodexUserPlan) -> Option<String> {
+    Some(format!(
+        "{}\n{}",
+        text::PREVIEW_HEADING,
+        consent_block(plan)?
+    ))
+}
+
 /// One labelled line of a text block: two spaces, the label in a fixed
 /// column, then the value — the alignment the design's examples show. The two
 /// text blocks use different widths ([`CONSENT_LABEL_COLUMN`] fits "replaces",
@@ -1270,6 +1309,8 @@ mod text {
         "Codex asks you to trust each new folder before doctrine connects there.";
     pub(super) const ASK_WRITE: &str = "Write user config? [y/N]";
     pub(super) const ASK_REMOVE: &str = "Remove it? [y/N]";
+    /// Heads the dry-run copy of the consent block: shown, not asked.
+    pub(super) const PREVIEW_HEADING: &str = "Codex user MCP (not asked under --dry-run):";
     /// Precedes the command a skip or a decline offers to run.
     pub(super) const RUN_LEAD: &str = "  run: ";
     pub(super) const REGISTER_LATER_LEAD: &str = "  to register later: ";
@@ -3129,6 +3170,80 @@ Remove it? [y/N]"
     #[test]
     fn consent_block_is_absent_when_the_plan_proposes_no_change() {
         assert_eq!(consent_block(&plan_of(&current_user(), "")), None);
+    }
+
+    // --- ask_consent / preview (R4, R5) ---
+
+    /// A prompt the plan must not reach: nothing to approve, or `-y` already
+    /// answered it.
+    fn never_ask(_: &str) -> anyhow::Result<bool> {
+        panic!("this plan's consent question is not the caller's to put")
+    }
+
+    #[test]
+    fn ask_consent_is_not_asked_without_a_proposal() {
+        let planned = plan_of(&current_user(), "");
+        assert_eq!(
+            ask_consent(&planned, false, never_ask).unwrap(),
+            Consent::NotAsked
+        );
+    }
+
+    #[test]
+    fn ask_consent_grants_under_yes_without_asking() {
+        let planned = plan_of("model = \"gpt-5\"\n", "");
+        assert_eq!(
+            ask_consent(&planned, true, never_ask).unwrap(),
+            Consent::Granted,
+            "-y is the user's consent, not a reason to ask again"
+        );
+    }
+
+    #[test]
+    fn ask_consent_passes_the_block_and_maps_the_answer() {
+        let planned = plan_of("model = \"gpt-5\"\n", "");
+        let block = consent_block(&planned).unwrap();
+        let asked: RefCell<Vec<String>> = RefCell::new(Vec::new());
+        let answering = |granted: bool| {
+            let asked = &asked;
+            move |prompt: &str| {
+                asked.borrow_mut().push(prompt.to_string());
+                Ok(granted)
+            }
+        };
+
+        let yes = ask_consent(&planned, false, answering(true)).unwrap();
+        let no = ask_consent(&planned, false, answering(false)).unwrap();
+
+        assert_eq!(yes, Consent::Granted);
+        assert_eq!(no, Consent::Declined, "a plain no is the only decline");
+        let asked = asked.into_inner();
+        assert_eq!(asked.len(), 2, "one prompt per run");
+        assert_eq!(
+            asked[0],
+            format!("{block} "),
+            "the block ends on its ask line, so the answer reads on the same line"
+        );
+        assert_eq!(asked[1], asked[0], "a decline answers the same question");
+    }
+
+    #[test]
+    fn preview_heads_the_consent_block() {
+        let planned = plan_of("model = \"gpt-5\"\n", "");
+        let block = consent_block(&planned).unwrap();
+
+        assert_eq!(
+            preview(&planned),
+            Some(format!(
+                "Codex user MCP (not asked under --dry-run):\n{block}"
+            )),
+            "the same block, disclosed rather than asked"
+        );
+        assert_eq!(
+            preview(&plan_of(&current_user(), "")),
+            None,
+            "nothing proposed, nothing to preview"
+        );
     }
 
     // --- report lines (design sec-report) ---
