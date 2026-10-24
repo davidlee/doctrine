@@ -3408,11 +3408,6 @@ fn apply_wire_to(
                     }
                     McpOutcome::Applicable(RefreshOutcome::None) | McpOutcome::NotApplicable => {}
                 }
-                // The trust caveat prints once per arm — only when the activation
-                // notice (which already carries the trust step) did not print it
-                // (design sec-5.4). A Wired report is a statement about the file,
-                // never about activation. Codex's MCP registration is user-level
-                // (SL-286), so only the hook-carrying notice above remains.
                 // Append-system symlink leg (PHASE-02): pi creates a symlink so
                 // the boot snapshot is ingested as append-only context. Claude
                 // carries NotApplicable and stays silent.

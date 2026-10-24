@@ -126,7 +126,8 @@ pub(crate) const CODEX_CONFIG_FILE: &str = "config.toml";
 pub(crate) enum Degraded {
     /// `$CODEX_HOME` is set but empty, relative, or names nothing on disk.
     BadCodexHome,
-    /// `$CODEX_HOME` is unset and `$HOME` is too — no anchor for the user file.
+    /// `$CODEX_HOME` is unset and `$HOME` is unset, empty or relative — no
+    /// absolute anchor for the user file.
     NoHome,
     /// The destination exists but could not be read.
     UserUnreadable,
@@ -184,7 +185,10 @@ pub(crate) struct BakeFacts {
 /// variable names an existing absolute directory, else `$HOME/.codex/config.toml`.
 /// A `$CODEX_HOME` that is empty, relative, or absent on disk is refused rather
 /// than silently falling back to `$HOME` — codex would not read the file we wrote
-/// there, and a *wrong* write is worse than none.
+/// there, and a *wrong* write is worse than none. The same holds for the `$HOME`
+/// anchor: unset, empty or relative is [`Degraded::NoHome`], because a relative
+/// anchor resolves against the CWD — inside a project that is the *project* file,
+/// read as the user entry.
 pub(crate) fn destination(env: &CodexEnv) -> Result<PathBuf, Degraded> {
     match &env.codex_home {
         Some(dir) => {
@@ -195,11 +199,11 @@ pub(crate) fn destination(env: &CodexEnv) -> Result<PathBuf, Degraded> {
             }
             Ok(dir.join(CODEX_CONFIG_FILE))
         }
-        None => env
-            .home
-            .as_ref()
-            .map(|home| home.join(CODEX_CONFIG_REL))
-            .ok_or(Degraded::NoHome),
+        None => match env.home.as_ref() {
+            // Empty is not absolute either — both spell no usable anchor.
+            Some(home) if home.is_absolute() => Ok(home.join(CODEX_CONFIG_REL)),
+            _ => Err(Degraded::NoHome),
+        },
     }
 }
 
@@ -1296,7 +1300,7 @@ which may fail (EVD-032). Use an absolute path, or remove it.";
     pub(super) const NOT_ON_PATH: &str = "is not on PATH";
     pub(super) const CAUSE_BAD_CODEX_HOME: &str =
         "CODEX_HOME is not an existing absolute directory";
-    pub(super) const CAUSE_NO_HOME: &str = "HOME is not set";
+    pub(super) const CAUSE_NO_HOME: &str = "HOME is unset or not an absolute path";
     pub(super) const CAUSE_UNREADABLE: &str = "could not be read";
     pub(super) const CAUSE_UNPARSEABLE: &str = "is not valid TOML";
     pub(super) const CAUSE_MALFORMED: &str = "has a doctrine entry doctrine cannot interpret";
@@ -1417,6 +1421,24 @@ mod tests {
         assert_eq!(
             destination(&codex_env(None, false, None)),
             Err(Degraded::NoHome)
+        );
+    }
+
+    #[test]
+    fn destination_refuses_an_empty_home() {
+        assert_eq!(
+            destination(&codex_env(None, false, Some(""))),
+            Err(Degraded::NoHome),
+            "an empty HOME names no directory"
+        );
+    }
+
+    #[test]
+    fn destination_refuses_a_relative_home() {
+        assert_eq!(
+            destination(&codex_env(None, false, Some("rel/home"))),
+            Err(Degraded::NoHome),
+            "a relative HOME resolves against the CWD — the project's own .codex file"
         );
     }
 
@@ -3332,7 +3354,7 @@ codex: a running codex app-server keeps its old config until restarted"
         );
         assert_eq!(
             skipped_cause(&planned),
-            "codex: user MCP registration skipped — HOME is not set"
+            "codex: user MCP registration skipped — HOME is unset or not an absolute path"
         );
     }
 

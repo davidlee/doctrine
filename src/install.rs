@@ -1089,8 +1089,8 @@ fn leg_outcome(result: anyhow::Result<LegOutcome>) -> LegOutcome {
     }
 }
 
-/// Run the forward steps: memory sync → boot wire → legacy starters →
-/// convergence. The install's one prompt already covered them all. Partial failure is non-fatal — errors are printed, the next step proceeds, and each leg's
+/// Run the forward steps: memory sync → boot wire → codex user MCP → legacy
+/// starters → convergence. The install's one prompt already covered them all. Partial failure is non-fatal — errors are printed, the next step proceeds, and each leg's
 /// outcome is returned (SL-282: a caught failure must block the stamps).
 fn run_forward_steps(
     plan: &InstallPlan,
@@ -1116,7 +1116,7 @@ fn run_forward_steps(
     let boot = leg_outcome(wire_boot_leg(root, exec, &plan.boot, &mut io::stdout()));
     outcomes.push((Leg::BootWiring, boot));
 
-    // 3. User MCP — codex's own file, through the CLI that owns it (R8).
+    // 3. Codex user MCP — codex's own file, through the CLI that owns it (R8).
     if let Some(codex) = plan.codex_user_mcp.as_ref() {
         let outcome = leg_outcome(
             crate::codex_mcp::execute(
@@ -1131,7 +1131,7 @@ fn run_forward_steps(
         outcomes.push((Leg::CodexUserMcp, outcome));
     }
 
-    // Legacy starter removal (SL-282): the retired starter leg's unedited copies
+    // 4. Legacy starter removal (SL-282): the retired starter leg's unedited copies
     // go, so the framework text applies again. Placement is EARLY, not last: it
     // MUST run before the convergence below, because its worker-def bake
     // resolves the worker role body from the *disk* hymn corpus — the corpus
@@ -1146,7 +1146,7 @@ fn run_forward_steps(
     )?;
     outcomes.push((Leg::LegacyStarters, starters));
 
-    // 4. One convergence covers every harness (SL-281 D3) — none, nothing converges.
+    // 5. One convergence covers every harness (SL-281 D3) — none, nothing converges.
     // Convergence reports per action, not per path: no touched paths.
     // Discovery is pre-leg, not a leg: its failure aborts the run (unchanged), so
     // it stays outside `converge_leg` and its `Err` propagates.
