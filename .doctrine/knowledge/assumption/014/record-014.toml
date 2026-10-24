@@ -5,9 +5,9 @@ id = 14
 slug = "codex-surfaces-mcp-instructions"
 title = "Codex surfaces MCP initialize instructions to the user"
 record_kind = "assumption"
-status = "held"
+status = "invalidated"
 created = "2026-10-23"
-updated = "2026-10-23"
+updated = "2026-10-24"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
@@ -17,8 +17,8 @@ basis = "design-inference"
 validation_plan = "VH at SL-286 verification: run interactive codex in a non-doctrine directory and check where (if anywhere) the instructions text appears. If hidden, DEC-405 still holds; the empty tool list is the only signal."
 validated_by    = ""
 validated_on    = ""
-invalidated_by  = ""
-invalidated_on  = ""
+invalidated_by = "user observation, SL-286 PHASE-05 VH-2 (EVD-034)"
+invalidated_on = "2026-10-24"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

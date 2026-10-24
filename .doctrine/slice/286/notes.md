@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-24 · PHASE-04 · 224fb8fc1
+fresh-as-of: 2026-10-24 · PHASE-05 · 9f802dc6a
 
 ### Produced
 
@@ -39,11 +39,12 @@ fresh-as-of: 2026-10-24 · PHASE-04 · 224fb8fc1
   red; real-binary smoke with a fake codex confirmed dry-run / -y / decline.
   Per-phase pi `review`: F1 (relative HOME read the project file as the user
   entry) fixed; F2/F3 comments fixed; F4, F5 rejected; F6 already fixed.
-- PHASE-05 (in progress) — codex e2e under `tests/common::ProposingEnv`
+- PHASE-05 done — codex e2e under `tests/common::ProposingEnv`
   (44abc2777..9f802dc6a); gate green at 9f802dc6a; VT-1 PASS; T5 negative
-  control red. VH-1 PASS (user report, 2026-10-24): interactive codex
-  connected to doctrine after `doctrine install`, daemon PATH lacking
-  doctrine — no EVD-032 recurrence. VH-2 pending.
+  control red. Per-phase pi review: F1–F4, F6 fixed (9f802dc6a), F5 rejected.
+  VH-1 PASS (user report 2026-10-24): no EVD-032 recurrence. VH-2 → EVD-034:
+  codex never shows the rootless instructions; ASM-014 invalidated (DEC-405
+  holds — the empty tool list is the only signal).
 - Minted: ISS-533 — MCP server replies to JSON-RPC notifications (pre-existing).
 - Design-time decisions DEC-403..DEC-411; EVD-033; RV-427 (concluded).
 
@@ -55,6 +56,7 @@ fresh-as-of: 2026-10-24 · PHASE-04 · 224fb8fc1
   PHASE-03 update: ceiling on function+tests runs, shared-seam ruling check.
   PHASE-04 update: review ceiling recovery, gate-only convention suites,
   retirement + retarget in one commit.
+- EVD-034 — codex hides MCP initialize instructions (ASM-014 invalidated).
 - EVD-033 — `codex mcp add` replaces the whole table; `mcp get` shows the
   effective entry (ASM-015 invalidated).
 
@@ -69,7 +71,6 @@ fresh-as-of: 2026-10-24 · PHASE-04 · 224fb8fc1
 - DEC-414 — PHASE-04 wiring deltas (one gather in codex_mcp, exec before the
   plan, consent seam, dry-run heading, leg mapping, boot install Ok on Refused,
   relative HOME → NoHome); reconcile folds into design.md.
-- ASM-014 — where codex shows the rootless instructions (VH in PHASE-05).
 - RSK-234 · IDE-069 · ISS-528 (partially resolved by DEC-406) · ISS-533.
 - Reconcile: REV for REQ-484 (SPEC-011) + rootless-serve requirement;
   supersede DEC-323, DEC-332 → DEC-406 and DEC-325 → DEC-407; README rewrite.

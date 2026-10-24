@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 34
+slug = "codex-hides-mcp-instructions"
+title = "Codex does not show MCP initialize instructions"
+record_kind = "evidence"
+status = "captured"
+created = "2026-10-24"
+updated = "2026-10-24"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = 'SL-286 PHASE-05 VH-2 (user observation 2026-10-24; codex interactive TUI; doctrine registered at user level): started codex in /tmp/rootless (no .git; no .doctrine/) and again after git init (no .doctrine/). In neither case did the rootless initialize instructions ("no doctrine project here") appear at startup or in /mcp. /mcp listed "doctrine: connected (0 tools)" identically in both. The empty tool list is the only user-visible signal.'
+provenance = "experiment"
+confidence = "high"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "disputes"
+target = "ASM-014"
