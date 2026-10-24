@@ -205,14 +205,22 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     let manifest = load_manifest()?;
     let project_root =
         detect_project_root(project_path, &manifest).context("Could not find project root")?;
+    let exec = crate::boot::resolve_exec()?;
     let mut harnesses = resolve_install_harnesses(args.agents, &project_root, &manifest.harness)?;
     if harnesses.names.is_empty() && is_interactive(args) {
         harnesses = ask_harnesses(&manifest.harness)?;
     }
-    let plan = InstallPlan::build(&manifest, &project_root, args, binary_version()?, harnesses)?;
+    let plan = InstallPlan::build(
+        &manifest,
+        &project_root,
+        args,
+        binary_version()?,
+        harnesses,
+        || crate::codex_mcp::read_plan(&project_root, &exec, &|key| std::env::var_os(key)),
+    )?;
     let root = plan.base.project_root.as_path();
 
-    for line in render_overview(&plan) {
+    for line in render_overview(&plan, args.yes) {
         stdout_line(&line)?;
     }
     if args.dry_run {
@@ -231,7 +239,6 @@ pub(crate) fn run(project_path: Option<PathBuf>, args: &InstallArgs<'_>) -> anyh
     stdout_line("Done.")?;
 
     // ── Stage 2: forward steps ──
-    let exec = crate::boot::resolve_exec()?;
     let mut outcomes = vec![(Leg::Base, LegOutcome::Done(base))];
     outcomes.extend(run_forward_steps(&plan, &exec, args, &manifest)?);
     // Last: the block reflects what is now on disk, whatever the steps did.
@@ -385,6 +392,9 @@ struct InstallPlan {
     /// on a project install whose tracked stamp is absent (a stamped repo's
     /// identical copy is a deliberate `prompt customise`, RV-421 F-16).
     legacy_starters: Vec<StarterCopy>,
+    /// The codex user MCP leg's plan; only for a project install with the codex
+    /// harness (RV-427 F-10). Regenerate never builds it (DEC-411).
+    codex_user_mcp: Option<crate::codex_mcp::CodexUserPlan>,
 }
 
 impl InstallPlan {
@@ -394,6 +404,7 @@ impl InstallPlan {
         args: &InstallArgs<'_>,
         binary: semver::Version,
         harnesses: HarnessChoice,
+        codex: impl FnOnce() -> crate::codex_mcp::CodexUserPlan,
     ) -> anyhow::Result<Self> {
         let base = build_plan(manifest, project_root);
         let boot = boot_harnesses(&harnesses.names, project_root, &manifest.harness);
@@ -413,6 +424,8 @@ impl InstallPlan {
         } else {
             Vec::new()
         };
+        let codex_user_mcp =
+            (is_project_install && boot.contains(&crate::boot::Harness::Codex)).then(codex);
         Ok(Self {
             base,
             harnesses: harnesses.names,
@@ -427,6 +440,7 @@ impl InstallPlan {
             tracked,
             currency,
             legacy_starters,
+            codex_user_mcp,
         })
     }
 
@@ -478,12 +492,16 @@ const BULLET_CREATE_DOCTRINE: &str =
 const BULLET_ADD_CONFIG: &str = "add missing config files (tracked)";
 const BULLET_BOOT: &str = "add a short section so your agent loads doctrine each session";
 const BULLET_HARNESSES: &str = "install skills and agent definitions (generated, ignored)";
+const BULLET_CODEX_LABEL: &str = "codex";
+const BULLET_CODEX_MCP: &str = "register doctrine's MCP server in your user codex config";
+const BULLET_CODEX_ASKS: &str = " (asks first)";
+const BULLET_CODEX_YES: &str = " (-y: consenting)";
 
 /// PURE. The first screen: who the install is for, one bullet per part with
 /// work to do, and the downgrade warning last.
-fn render_overview(plan: &InstallPlan) -> Vec<String> {
+fn render_overview(plan: &InstallPlan, yes: bool) -> Vec<String> {
     let mut lines = vec![overview_header(&plan.harnesses, &plan.harness_origin)];
-    let bullets = overview_bullets(plan);
+    let bullets = overview_bullets(plan, yes);
     let width = bullets
         .iter()
         .map(|(l, _)| l.chars().count())
@@ -521,7 +539,7 @@ fn overview_header(names: &[String], origin: &HarnessOrigin) -> String {
 }
 
 /// PURE. `(label, text)` per part with work to do, in run order.
-fn overview_bullets(plan: &InstallPlan) -> Vec<(String, String)> {
+fn overview_bullets(plan: &InstallPlan, yes: bool) -> Vec<(String, String)> {
     let mut bullets = Vec::new();
     if plan.gitignore_changes {
         bullets.push((GITIGNORE.to_string(), BULLET_GITIGNORE.to_string()));
@@ -542,6 +560,21 @@ fn overview_bullets(plan: &InstallPlan) -> Vec<(String, String)> {
             .map(|p| p.display().to_string())
             .collect();
         bullets.push((files.join(", "), BULLET_BOOT.to_string()));
+    }
+    if plan
+        .codex_user_mcp
+        .as_ref()
+        .is_some_and(crate::codex_mcp::CodexUserPlan::proposes_change)
+    {
+        let suffix = if yes {
+            BULLET_CODEX_YES
+        } else {
+            BULLET_CODEX_ASKS
+        };
+        bullets.push((
+            BULLET_CODEX_LABEL.to_string(),
+            format!("{BULLET_CODEX_MCP}{suffix}"),
+        ));
     }
     if !plan.harnesses.is_empty() {
         bullets.push((plan.harnesses.join(", "), BULLET_HARNESSES.to_string()));
@@ -7050,8 +7083,77 @@ mod tests {
             args,
             semver::Version::new(1, 2, 3),
             harnesses,
+            || codex_plan(Some(crate::codex_mcp::UserEntry::Current)),
         )
         .unwrap()
+    }
+
+    /// A codex user plan carrying `user` against a resolved user config and
+    /// bake, with nothing in the project file and no degradation.
+    fn codex_plan(user: Option<crate::codex_mcp::UserEntry>) -> crate::codex_mcp::CodexUserPlan {
+        crate::codex_mcp::CodexUserPlan {
+            user_config: Some(PathBuf::from("/home/u/.codex/config.toml")),
+            bake: Some(PathBuf::from("/usr/bin/doctrine")),
+            user,
+            project: crate::codex_mcp::ProjectEntry::Absent,
+            degraded: None,
+        }
+    }
+
+    #[test]
+    fn codex_user_mcp_plan_is_built_only_for_a_project_install_with_codex() {
+        let manifest = load_manifest().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("AGENTS.md"), "x").unwrap();
+        let claude = strings(&["claude"]);
+        let attempt = |args: &InstallArgs<'_>, codex: fn() -> crate::codex_mcp::CodexUserPlan| {
+            let harnesses =
+                resolve_install_harnesses(args.agents, dir.path(), &manifest.harness).unwrap();
+            InstallPlan::build(
+                &manifest,
+                dir.path(),
+                args,
+                semver::Version::new(1, 2, 3),
+                harnesses,
+                codex,
+            )
+            .unwrap()
+        };
+        let gather = || panic!("the codex facts are gathered only when they are used");
+        for args in [
+            InstallArgs {
+                global: true,
+                ..project_args()
+            },
+            InstallArgs {
+                only_memory: true,
+                ..project_args()
+            },
+            InstallArgs {
+                agents: &claude,
+                ..project_args()
+            },
+        ] {
+            let plan = attempt(&args, gather);
+            assert!(
+                plan.codex_user_mcp.is_none(),
+                "global: {}, only_memory: {} — no codex user plan",
+                args.global,
+                args.only_memory
+            );
+        }
+
+        let project = attempt(&project_args(), || {
+            codex_plan(Some(crate::codex_mcp::UserEntry::Add))
+        });
+        assert!(
+            project.is_project_install,
+            "the project install wires codex"
+        );
+        assert_eq!(
+            project.codex_user_mcp.map(|p| p.user),
+            Some(Some(crate::codex_mcp::UserEntry::Add))
+        );
     }
 
     #[test]
@@ -7587,6 +7689,7 @@ mod tests {
             tracked: StampRead::Absent,
             currency: None,
             legacy_starters: Vec::new(),
+            codex_user_mcp: None,
         }
     }
 
@@ -7601,11 +7704,46 @@ mod tests {
     }
 
     #[test]
+    fn overview_lists_the_codex_bullet_only_when_a_change_is_proposed() {
+        let mut plan = overview_plan();
+        plan.codex_user_mcp = Some(codex_plan(Some(crate::codex_mcp::UserEntry::Current)));
+        let lines = render_overview(&plan, false);
+        assert!(
+            !lines.iter().any(|l| l.contains(BULLET_CODEX_MCP)),
+            "{lines:?}"
+        );
+
+        plan.codex_user_mcp = Some(codex_plan(Some(crate::codex_mcp::UserEntry::Add)));
+        let lines = render_overview(&plan, false);
+        let boot = lines.iter().position(|l| l.contains(BULLET_BOOT)).unwrap();
+        let codex = lines
+            .iter()
+            .position(|l| l.contains(BULLET_CODEX_MCP))
+            .expect("the codex bullet follows the boot bullet");
+        assert_eq!(codex, boot + 1, "{lines:?}");
+        assert!(lines[codex].starts_with("  • codex "), "{lines:?}");
+        assert!(lines[codex].ends_with(BULLET_CODEX_ASKS), "{lines:?}");
+    }
+
+    #[test]
+    fn overview_codex_bullet_says_consenting_under_yes() {
+        let mut plan = overview_plan();
+        plan.codex_user_mcp = Some(codex_plan(Some(crate::codex_mcp::UserEntry::Add)));
+        let lines = render_overview(&plan, true);
+        let codex = lines
+            .iter()
+            .find(|l| l.contains(BULLET_CODEX_MCP))
+            .expect("the codex bullet is listed");
+        assert!(codex.ends_with(BULLET_CODEX_YES), "{codex}");
+        assert!(!codex.contains(BULLET_CODEX_ASKS), "{codex}");
+    }
+
+    #[test]
     fn a_fresh_install_overview_names_every_part_in_order() {
         let mut plan = overview_plan();
         plan.legacy_starters = starters(7);
         assert_eq!(
-            render_overview(&plan),
+            render_overview(&plan, false),
             vec![
                 "Doctrine will set this project up for: claude, codex   (found .claude/, AGENTS.md; choose others with --agent)",
                 "",
@@ -7627,7 +7765,7 @@ mod tests {
         plan.boot_imports = Vec::new();
         plan.legacy_starters = starters(1);
         plan.tracked = StampRead::Version(plan.binary.clone());
-        let labels: Vec<String> = render_overview(&plan)
+        let labels: Vec<String> = render_overview(&plan, false)
             .iter()
             .filter_map(|l| l.strip_prefix("  • ").map(str::to_string))
             .collect();
@@ -7643,7 +7781,7 @@ mod tests {
         plan.legacy_starters = Vec::new();
         plan.harnesses = Vec::new();
         assert_eq!(
-            render_overview(&plan),
+            render_overview(&plan, false),
             vec![OVERVIEW_NO_HARNESS],
             "nothing to do: the header alone"
         );
@@ -7659,7 +7797,7 @@ mod tests {
             source: crate::install_state::MarkerSource::Checkout,
             binary: plan.binary.clone(),
         });
-        let lines = render_overview(&plan);
+        let lines = render_overview(&plan, false);
         assert!(
             !lines.iter().any(|l| l.contains("doctrine.toml")),
             "{lines:?}"

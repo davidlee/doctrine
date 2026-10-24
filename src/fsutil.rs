@@ -486,7 +486,6 @@ pub(crate) fn relative_path(from: &Path, to: &Path) -> PathBuf {
 /// the candidate is returned **un-canonicalised**: the caller gets the path it
 /// would have executed, not the resolved target (SL-286 DEC-404 / RSK-234).
 /// Directories and non-executable files never match.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn find_on_path(name: &str, path_value: &std::ffi::OsStr) -> Option<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
 

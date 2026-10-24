@@ -63,7 +63,6 @@ pub(crate) const CODEX_MCP_SERVE_ARGS: &str = "serve --mcp";
 
 /// The codex CLI binary name — looked up on `PATH` to honour a write, and shown
 /// in the consent text as the command the user will run.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) const CODEX_CLI: &str = "codex";
 
 /// The codex subcommand that registers an MCP server: `codex mcp add <key> --
@@ -126,7 +125,6 @@ pub(crate) const CODEX_CONFIG_FILE: &str = "config.toml";
 /// constructor in the test build (`NoCodexCli` is built by [`plan`]), so only the
 /// non-test build — where nothing calls the planner yet — can report it unused.
 /// It lapses when PHASE-04 wires the planner into install.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Degraded {
     /// `$CODEX_HOME` is set but empty, relative, or names nothing on disk.
@@ -156,7 +154,6 @@ pub(crate) enum Degraded {
 
 /// Env facts the shell gathers (never read here): the leg is pure, so every
 /// environment question arrives as a supplied value.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CodexEnv {
     /// `$CODEX_HOME` as set — `None` means unset (empty is a distinct, bad value).
@@ -176,7 +173,6 @@ pub(crate) struct CodexEnv {
 /// Bake facts the shell gathers, already canonicalised where the field says so:
 /// deciding whether the running binary *is* the `PATH` entry is a comparison of
 /// canonical paths, and that resolution is IO the pure layer must not do.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BakeFacts {
     /// Canonical path of the running binary; `None` = unresolved.
@@ -192,7 +188,6 @@ pub(crate) struct BakeFacts {
 /// A `$CODEX_HOME` that is empty, relative, or absent on disk is refused rather
 /// than silently falling back to `$HOME` — codex would not read the file we wrote
 /// there, and a *wrong* write is worse than none.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn destination(env: &CodexEnv) -> Result<PathBuf, Degraded> {
     match &env.codex_home {
         Some(dir) => {
@@ -216,7 +211,6 @@ pub(crate) fn destination(env: &CodexEnv) -> Result<PathBuf, Degraded> {
 /// that entry keeps working (`Ok(path_doctrine)`, never the canonical target).
 /// A different file means the running binary is not what `doctrine` on `PATH`
 /// runs — a dev build, typically — and baking either path would be a lie.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn bake(facts: &BakeFacts) -> Result<PathBuf, Degraded> {
     let Some(exec) = &facts.exec else {
         return Err(Degraded::ExecUnresolved);
@@ -234,7 +228,6 @@ pub(crate) fn bake(facts: &BakeFacts) -> Result<PathBuf, Degraded> {
 /// (create the file) and "unreadable" (refuse, and say why) are different
 /// answers, and collapsing them would let a permission error look like a fresh
 /// install — the defect ISS-495 records on the Claude read.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FileRead<'a> {
     Absent,
@@ -246,7 +239,6 @@ pub(crate) enum FileRead<'a> {
 /// write. `Replace` carries what the planner cannot derive once the table is
 /// gone: the old invocation, as the report shows it, and every key being dropped
 /// — the consent text has to name what the user loses.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UserEntry {
     /// No entry to overwrite.
@@ -271,7 +263,6 @@ pub(crate) enum UserEntry {
 /// `UserMalformed`: guessing would mean overwriting a server doctrine does not
 /// understand. Every other key survives a `Current` and is named in `dropped`
 /// when replacing.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn classify_user(read: FileRead<'_>, bake: &Path) -> Result<UserEntry, Degraded> {
     let text = match read {
         FileRead::Absent => return Ok(UserEntry::Add),
@@ -320,7 +311,6 @@ pub(crate) fn classify_user(read: FileRead<'_>, bake: &Path) -> Result<UserEntry
 /// one); `NotATable` is "something of ours is there but unreadable as a server"
 /// (`Malformed` in both). Interpreting the table stays with each caller: the two
 /// layers disagree about *what* an entry means, not about where it lives.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 enum EntryLookup<'d> {
     NoEntry,
     NotATable,
@@ -330,7 +320,6 @@ enum EntryLookup<'d> {
 /// Locate `[mcp_servers.doctrine]` in a parsed config file. Parsing itself stays
 /// with the caller, because a parse failure means different things per layer
 /// ([`Degraded::UserUnparseable`] vs [`ProjectEntry::Unreadable`]).
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 fn doctrine_entry(doc: &toml_edit::DocumentMut) -> EntryLookup<'_> {
     let Some(servers) = doc.get(CODEX_MCP_TABLE) else {
         return EntryLookup::NoEntry;
@@ -352,7 +341,6 @@ fn doctrine_entry(doc: &toml_edit::DocumentMut) -> EntryLookup<'_> {
 /// doctrine, and the codex CLI itself may all have written, so the planner has to
 /// say which of them it is looking at before advising anything (design sec-leg
 /// § Plan step 4). Only an owned wrapper is doctrine's to remove.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProjectEntry {
     /// No entry, or no project file.
@@ -377,7 +365,6 @@ pub(crate) enum ProjectEntry {
 /// comes *before* the command checks because a wrapper's `command` is the bare
 /// name `sh`: asking [`is_wrapper_form`] first is what keeps doctrine's own old
 /// entry from being read as a `PATH` shadow of something else.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn classify_project(read: FileRead<'_>) -> ProjectEntry {
     let text = match read {
         FileRead::Absent => return ProjectEntry::Absent,
@@ -539,7 +526,6 @@ fn walk_dropped(path: &str, item: &toml_edit::Item, nested: bool) -> Vec<String>
 /// anything — the one cause that stops the leg. Partial facts are kept: a
 /// degradation at a later step still leaves the report able to name the file and
 /// the command the earlier steps resolved.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CodexUserPlan {
     /// The user config file, when [`destination`] resolved it.
@@ -558,7 +544,6 @@ impl CodexUserPlan {
     /// Whether the user config still needs a write (`Add` or `Replace`). The
     /// question the planner asks twice — once for `proposes_change`, once for
     /// the codex-CLI requirement — so it is asked one way.
-    #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
     fn user_write_pending(&self) -> bool {
         matches!(self.user, Some(UserEntry::Add | UserEntry::Replace { .. }))
     }
@@ -566,7 +551,6 @@ impl CodexUserPlan {
     /// Whether the project entry blocks the execute step: a `PATH` shadow, an
     /// uninterpretable entry, or an unreadable project file all mean the user
     /// write would not be what codex runs here, so execute writes nothing.
-    #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
     pub(crate) fn project_blocks(&self) -> bool {
         matches!(
             self.project,
@@ -580,7 +564,6 @@ impl CodexUserPlan {
     /// `Malformed` or an `Unreadable` project entry means execute writes nothing
     /// here (design § Execute), so nothing is proposed and no consent is asked;
     /// an `Override`, a `Current` or no entry at all blocks nothing.
-    #[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
     pub(crate) fn proposes_change(&self) -> bool {
         self.degraded.is_none()
             && !self.project_blocks()
@@ -592,7 +575,6 @@ impl CodexUserPlan {
 /// Resolve the user leg step by step — destination, bake, entry — stopping at
 /// the first failure but returning what earlier steps already resolved, so the
 /// report can still name the file or the command it got to.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 fn resolve_user(
     user: FileRead<'_>,
     facts: &BakeFacts,
@@ -619,7 +601,6 @@ fn resolve_user(
 /// is read regardless, since its class is what the report discloses. The codex
 /// CLI is required only for a pending user write — reconciling an owned wrapper
 /// in doctrine's own project file needs no CLI.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn plan(
     user: FileRead<'_>,
     project: FileRead<'_>,
@@ -757,7 +738,6 @@ impl CodexCli for ProcessCodex {
 /// file is `Absent` (the write creates it), anything else that fails is
 /// `Unreadable` (a permission error must not read as a fresh install). `text` is
 /// the caller's own buffer because [`FileRead::Text`] borrows it.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 fn read_config<'a>(path: &Path, text: &'a mut String) -> FileRead<'a> {
     match fs::read_to_string(path) {
         Ok(read) => {
@@ -775,7 +755,6 @@ fn read_config<'a>(path: &Path, text: &'a mut String) -> FileRead<'a> {
 /// config files, and the canonical paths [`bake`] compares come from disk. `exec`
 /// is the running binary. A `$CODEX_HOME` failure is passed on as `Absent` — the
 /// degradation is [`destination`]'s to derive, once, from the same facts.
-#[cfg_attr(not(test), expect(dead_code, reason = "wired in SL-286 PHASE-04"))]
 pub(crate) fn read_plan(
     project_root: &Path,
     exec: &Path,
