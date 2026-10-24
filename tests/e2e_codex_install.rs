@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! SL-271 PHASE-02 — the codex MCP registration leg, end-to-end over the built binary.
+//! SL-271 PHASE-02, retargeted by SL-286 PHASE-04 (EX-7) — the codex install legs,
+//! end-to-end over the built binary.
 //!
-//! `VT-4`: a project with `[features] hooks = true` and a comment gains the emitted
-//! `[mcp_servers.doctrine]` entry (asserted by PARSED value, never bytes) with keys
-//! and comment intact and a second run a no-op; a project with no
-//! `.codex/config.toml` gets the file and parent directory; a non-UTF-8 file is
-//! unchanged with the fallback line; a foreign entry's repeat output is stable; no
-//! host abspath is written; and a Claude-only run prints the invocation once with no
-//! codex line.
-//! `VT-5`: a dry run over an absent entry renders "would write" and writes nothing.
+//! Codex's MCP registration is user-level now: neither `boot install` nor the
+//! boot leg of `install` writes a project wrapper, so these tests assert its
+//! ABSENCE rather than its shape — an existing `.codex/config.toml` (a non-UTF-8
+//! one included) survives byte identical, an absent one stays absent, and a dry
+//! run writes nothing. `doctrine install` still runs the user-MCP leg, which
+//! degrades under the suite's never-existing `CODEX_HOME` and says so
+//! (`MCP_SKIPPED`).
+//!
+//! Hooks are unchanged (`VT-4`'s hook half): `.codex/hooks.json` is written, a
+//! second run refreshes nothing, and the activation notice reads the project
+//! file's `[features] hooks` key.
 
 #![allow(
     clippy::expect_used,
@@ -23,10 +27,11 @@ use std::path::Path;
 mod common;
 
 const CONFIG_REL: &str = ".codex/config.toml";
-const WRAPPER: &str = "exec \"${DOCTRINE_BIN:-doctrine}\" serve --mcp";
-const WROTE_LINE: &str = "wrote MCP server registration in .codex/config.toml";
-const WOULD_LINE: &str = "would write MCP server registration in .codex/config.toml";
-const FALLBACK_MARKER: &str = "could not be interpreted";
+const HOOKS_REL: &str = ".codex/hooks.json";
+/// The degraded user-MCP line, printed because `common::doctrine_cmd` pins
+/// `CODEX_HOME` to a path that never exists (`common::SAFE_CODEX_HOME`). The
+/// cause is pinned in `src/codex_mcp.rs`; here the header is what matters.
+const MCP_SKIPPED: &str = "codex: user MCP registration skipped";
 
 /// Run `doctrine install --agent <agent>` rooted at `dir`, asserting success;
 /// return stdout. `--skill code-review` keeps the install small and offline.
@@ -53,8 +58,9 @@ fn install(dir: &Path, agent: &str) -> String {
     String::from_utf8(out.stdout).expect("utf8 stdout")
 }
 
-/// Run `doctrine boot install --agent <agent>` rooted at `dir` — the path that
-/// reaches `wire(..., dry_run)`. `install --dry-run` short-circuits before wire.
+/// Run `doctrine boot install --agent <agent>` rooted at `dir`. `install
+/// --dry-run` short-circuits before the boot leg, so this is the only path that
+/// reaches the dry-run renderer.
 fn boot_install(dir: &Path, agent: &str, dry_run: bool) -> String {
     let mut cmd = common::doctrine_cmd(dir);
     cmd.args(["boot", "install", "--agent", agent, "-y"]);
@@ -70,88 +76,72 @@ fn boot_install(dir: &Path, agent: &str, dry_run: bool) -> String {
     String::from_utf8(out.stdout).expect("utf8 stdout")
 }
 
-/// The written `[mcp_servers.doctrine]` entry, by parsed value.
-fn codex_entry(dir: &Path) -> (Option<String>, Option<Vec<String>>, Option<Vec<String>>) {
-    let text = fs::read_to_string(dir.join(CONFIG_REL)).expect("config exists");
-    let doc: toml_edit::DocumentMut = text.parse().expect("config parses");
-    let servers = doc
-        .get("mcp_servers")
-        .and_then(|i| i.as_table_like())
-        .expect("mcp_servers table");
-    let entry = servers
-        .get("doctrine")
-        .and_then(|i| i.as_table_like())
-        .expect("doctrine entry");
-    let command = entry
-        .get("command")
-        .and_then(|i| i.as_str())
-        .map(String::from);
-    let args = entry.get("args").and_then(|i| i.as_array()).map(|a| {
-        a.iter()
-            .filter_map(|v| v.as_str())
-            .map(String::from)
-            .collect()
-    });
-    let env = entry.get("env_vars").and_then(|i| i.as_array()).map(|a| {
-        a.iter()
-            .filter_map(|v| v.as_str())
-            .map(String::from)
-            .collect()
-    });
-    (command, args, env)
+/// The degraded MCP line's text, if the run printed one.
+fn skipped_line(out: &str) -> Option<String> {
+    out.lines()
+        .find(|line| line.contains(MCP_SKIPPED))
+        .map(str::to_string)
+}
+
+/// Behaviour-preservation gate: hooks are untouched by SL-286, so every codex
+/// install still writes `.codex/hooks.json`.
+fn assert_hooks_written(root: &Path) {
+    assert!(
+        root.join(HOOKS_REL).is_file(),
+        "the codex hooks leg still writes {HOOKS_REL}"
+    );
 }
 
 #[test]
-fn codex_install_preserves_and_is_idempotent() {
+fn codex_install_leaves_an_existing_config_byte_identical() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     fs::create_dir_all(root.join(".codex")).unwrap();
-    fs::write(
-        root.join(CONFIG_REL),
-        "# keep me\n[features]\nhooks = true\n",
-    )
-    .unwrap();
+    let config = b"# keep me\n[features]\nhooks = true\n";
+    fs::write(root.join(CONFIG_REL), config).unwrap();
 
     let out = install(root, "codex");
-    assert!(out.contains(WROTE_LINE), "codex MCP line: {out}");
-
-    let (command, args, env) = codex_entry(root);
-    assert_eq!(command.as_deref(), Some("sh"));
-    assert_eq!(args, Some(vec!["-c".to_string(), WRAPPER.to_string()]));
-    assert_eq!(env, Some(vec!["DOCTRINE_BIN".to_string()]));
-
-    let text = fs::read_to_string(root.join(CONFIG_REL)).unwrap();
-    assert!(text.contains("# keep me"), "comment preserved: {text}");
     assert!(
-        text.contains("hooks = true"),
-        "[features] preserved: {text}"
+        skipped_line(&out).is_some(),
+        "the user MCP leg runs from install and degrades under the test CODEX_HOME: {out}"
     );
-    assert!(
-        !text.contains("/workspace") && !text.contains("/nix/store"),
-        "no host abspath in the tracked config: {text}"
+    assert_eq!(
+        fs::read(root.join(CONFIG_REL)).unwrap(),
+        config,
+        "no project MCP wrapper is written, so the file is untouched: {}",
+        String::from_utf8_lossy(&fs::read(root.join(CONFIG_REL)).unwrap()),
     );
+    assert_hooks_written(root);
 
-    // A second run over an unchanged file is a no-op MCP line, and the file holds.
-    let before = fs::read_to_string(root.join(CONFIG_REL)).unwrap();
+    // A second run over an unchanged tree is equally inert: the config still
+    // holds, and the hooks file is not rewritten.
+    let hooks = fs::read(root.join(HOOKS_REL)).unwrap();
     let again = install(root, "codex");
-    assert!(
-        !again.contains(WROTE_LINE),
-        "second run is a no-op MCP line: {again}"
+    assert!(skipped_line(&again).is_some(), "still degrades: {again}");
+    assert_eq!(fs::read(root.join(CONFIG_REL)).unwrap(), config);
+    assert_eq!(
+        fs::read(root.join(HOOKS_REL)).unwrap(),
+        hooks,
+        "the hooks refresh is a no-op"
     );
-    assert_eq!(fs::read_to_string(root.join(CONFIG_REL)).unwrap(), before);
 }
 
 #[test]
-fn codex_install_creates_the_file_from_absent() {
+fn codex_install_writes_no_config_when_absent() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     assert!(!root.join(CONFIG_REL).exists());
 
     let out = install(root, "codex");
-    assert!(out.contains(WROTE_LINE), "codex MCP line: {out}");
-    assert!(root.join(CONFIG_REL).is_file(), "config created");
-    let (command, _, _) = codex_entry(root);
-    assert_eq!(command.as_deref(), Some("sh"));
+    assert!(
+        skipped_line(&out).is_some(),
+        "the user MCP leg runs from install and degrades under the test CODEX_HOME: {out}"
+    );
+    assert!(
+        !root.join(CONFIG_REL).exists(),
+        "boot install creates no project config any more"
+    );
+    assert_hooks_written(root);
 }
 
 #[test]
@@ -163,12 +153,16 @@ fn codex_install_does_not_clobber_a_non_utf8_config() {
     fs::write(root.join(CONFIG_REL), bytes).unwrap();
 
     let out = install(root, "codex");
-    assert!(out.contains(FALLBACK_MARKER), "fallback line: {out}");
+    assert!(
+        skipped_line(&out).is_some(),
+        "the user MCP leg runs from install and degrades under the test CODEX_HOME: {out}"
+    );
     assert_eq!(
         fs::read(root.join(CONFIG_REL)).unwrap(),
         bytes,
         "an unreadable file is never renamed or rewritten"
     );
+    assert_hooks_written(root);
 }
 
 #[test]
@@ -184,15 +178,14 @@ fn codex_install_foreign_entry_repeat_output_is_stable() {
 
     let first = install(root, "codex");
     let second = install(root, "codex");
-    let fallback = |s: &str| {
-        s.lines()
-            .find(|l| l.contains(FALLBACK_MARKER))
-            .map(str::to_string)
-    };
+    assert!(
+        skipped_line(&first).is_some(),
+        "the leg ran and said so: {first}"
+    );
     assert_eq!(
-        fallback(&first),
-        fallback(&second),
-        "a foreign entry yields the same line each install, not a fresh instruction"
+        skipped_line(&first),
+        skipped_line(&second),
+        "the same degraded line each install, not a fresh instruction"
     );
     assert!(
         fs::read_to_string(root.join(CONFIG_REL))
@@ -200,35 +193,37 @@ fn codex_install_foreign_entry_repeat_output_is_stable() {
             .contains("command = \"doctrine\""),
         "the user entry is untouched"
     );
+    assert_hooks_written(root);
 }
 
 #[test]
-fn codex_dry_run_says_would_write_and_writes_nothing() {
+fn codex_dry_run_writes_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
 
     let out = boot_install(root, "codex", true);
-    assert!(out.contains(WOULD_LINE), "dry-run codex MCP line: {out}");
     assert!(
         !root.join(CONFIG_REL).exists(),
         "dry run writes no codex config"
     );
-    // After PHASE-03 the activation notice also says "would write", so NO dry-run
-    // output line contains "wrote" at all.
     assert!(out.contains("would write .codex/hooks.json"), "{out}");
     assert!(
         !out.contains("wrote"),
         "no dry-run line says 'wrote': {out}"
     );
+    assert!(
+        skipped_line(&out).is_none() && !out.contains("MCP server registration"),
+        "boot install has no codex MCP leg, so it renders no MCP line: {out}"
+    );
 }
 
 #[test]
-fn codex_notice_fires_on_a_hook_write_even_when_the_mcp_entry_is_current() {
+fn codex_notice_fires_only_on_a_hook_write() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     boot_install(root, "codex", false);
-    // Keep the config current, force a fresh hook write.
-    fs::remove_file(root.join(".codex/hooks.json")).unwrap();
+    // Keep everything else current, force a fresh hook write.
+    fs::remove_file(root.join(HOOKS_REL)).unwrap();
 
     let out = boot_install(root, "codex", false);
     assert!(
@@ -236,32 +231,34 @@ fn codex_notice_fires_on_a_hook_write_even_when_the_mcp_entry_is_current() {
         "the hook write fires the notice: {out}"
     );
     assert!(
-        !out.contains("MCP server registration"),
-        "the MCP entry was already current: {out}"
-    );
-    assert!(
-        !out.contains("not active until you trust"),
-        "the activation notice already carries the trust step: {out}"
+        !out.contains("MCP server registration") && skipped_line(&out).is_none(),
+        "boot install writes no MCP registration, so it reports none: {out}"
     );
 }
 
 #[test]
-fn codex_notice_does_not_fire_when_only_the_mcp_entry_refreshed() {
+fn codex_hook_clean_run_ignores_a_project_mcp_entry() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     boot_install(root, "codex", false);
-    // Keep the hooks current, force the MCP leg to write.
-    fs::remove_file(root.join(CONFIG_REL)).unwrap();
+    // A project entry the retired boot leg used to report on: untouched and
+    // unreported now.
+    let config = b"[mcp_servers.doctrine]\ncommand = \"doctrine\"\n";
+    fs::write(root.join(CONFIG_REL), config).unwrap();
 
     let out = boot_install(root, "codex", false);
-    assert!(out.contains(WROTE_LINE), "the MCP leg wrote: {out}");
     assert!(
         !out.contains("To activate:"),
         "a hook-clean run prints no activation notice: {out}"
     );
     assert!(
-        out.contains("not active until you trust"),
-        "the trust caveat prints once, since the notice did not: {out}"
+        !out.contains("MCP server registration") && skipped_line(&out).is_none(),
+        "boot install has no codex MCP leg: {out}"
+    );
+    assert_eq!(
+        fs::read(root.join(CONFIG_REL)).unwrap(),
+        config,
+        "the project entry is untouched"
     );
 }
 
@@ -287,7 +284,7 @@ fn codex_activation_notice_reads_the_project_hooks_key() {
 
     // Flip the project file to enabled: step 1 is omitted, the rest still prints.
     fs::write(&config, "[features]\nhooks = true\n").unwrap();
-    fs::remove_file(root.join(".codex/hooks.json")).unwrap();
+    fs::remove_file(root.join(HOOKS_REL)).unwrap();
     let out = boot_install(root, "codex", false);
     assert!(out.contains("To activate:"), "{out}");
     assert!(
@@ -299,7 +296,7 @@ fn codex_activation_notice_reads_the_project_hooks_key() {
     // A config without a `[features] hooks` key falls back to the unconditional
     // instruction.
     fs::write(&config, "# no features table\n").unwrap();
-    fs::remove_file(root.join(".codex/hooks.json")).unwrap();
+    fs::remove_file(root.join(HOOKS_REL)).unwrap();
     let out = boot_install(root, "codex", false);
     assert!(
         out.contains("Ensure [features] hooks = true"),
@@ -322,12 +319,12 @@ fn claude_only_run_prints_the_invocation_once_and_no_codex_line() {
         "the invocation is printed once, never re-appended: {out}"
     );
     assert!(
-        !out.contains(".codex/config.toml"),
-        "a Claude-only run emits no codex line: {out}"
+        !out.contains(".codex/config.toml") && skipped_line(&out).is_none(),
+        "a Claude-only run emits no codex MCP line: {out}"
     );
     assert!(
-        !out.contains("To activate:") && !out.contains("not active until you trust"),
-        "a Claude-only run emits neither the hooks notice nor the codex trust caveat: {out}"
+        !out.contains("To activate:"),
+        "a Claude-only run emits no codex hooks notice: {out}"
     );
     assert!(
         !root.join(CONFIG_REL).exists(),

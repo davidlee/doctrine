@@ -38,6 +38,10 @@ const DETAILS: &str = "Project root:";
 const NOTHING: &str = "Nothing to commit.";
 const HINT: &str = "Next:";
 const HARNESS_QUESTION: &str = "No agent harness found here. Set up for which?";
+/// SL-286 PHASE-04: codex's MCP registration is user-level, so the install run
+/// reports the degraded leg rather than writing a project wrapper. It degrades
+/// because every child runs under `SAFE_CODEX_HOME`.
+const CODEX_MCP_SKIPPED: &str = "codex: user MCP registration skipped";
 
 /// `doctrine <args…> -p <root>` from `root`, with `input` on stdin.
 fn install_with_stdin(root: &Path, args: &[&str], input: &str) -> Output {
@@ -365,8 +369,11 @@ fn removed_starter_appears_in_the_hint() {
     );
 }
 
+/// VT-3: a codex `--yes` install still lists the skill links and stays silent
+/// about delegation; the user-MCP leg degrades because the shared spawn seam pins
+/// `CODEX_HOME` at a nonexistent path (`SAFE_CODEX_HOME`), which the run says.
 #[test]
-fn codex_links_are_listed_without_delegation_disclosure() {
+fn codex_links_are_listed_and_user_mcp_degrades_under_the_safe_codex_home() {
     if common::under_worker_marker() {
         return;
     }
@@ -387,6 +394,10 @@ fn codex_links_are_listed_without_delegation_disclosure() {
     );
     assert!(!hint(&out).is_empty(), "control: hint printed: {out}");
     assert!(!out.contains("written by npx"), "{out}");
+    assert!(
+        out.lines().any(|line| line.contains(CODEX_MCP_SKIPPED)),
+        "the user MCP leg runs and says it skipped under CODEX_HOME={SAFE_CODEX_HOME}: {out}"
+    );
     assert!(
         !root.join("skills-lock.json").exists(),
         "doctrine writes no skills lockfile: {out}"
