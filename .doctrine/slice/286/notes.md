@@ -39,6 +39,11 @@ fresh-as-of: 2026-10-24 · PHASE-04 · 224fb8fc1
   red; real-binary smoke with a fake codex confirmed dry-run / -y / decline.
   Per-phase pi `review`: F1 (relative HOME read the project file as the user
   entry) fixed; F2/F3 comments fixed; F4, F5 rejected; F6 already fixed.
+- PHASE-05 (in progress) — codex e2e under `tests/common::ProposingEnv`
+  (44abc2777..9f802dc6a); gate green at 9f802dc6a; VT-1 PASS; T5 negative
+  control red. VH-1 PASS (user report, 2026-10-24): interactive codex
+  connected to doctrine after `doctrine install`, daemon PATH lacking
+  doctrine — no EVD-032 recurrence. VH-2 pending.
 - Minted: ISS-533 — MCP server replies to JSON-RPC notifications (pre-existing).
 - Design-time decisions DEC-403..DEC-411; EVD-033; RV-427 (concluded).
 
