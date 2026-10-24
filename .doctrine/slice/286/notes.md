@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-24 · PHASE-05 · 9f802dc6a
+fresh-as-of: 2026-10-24 · audit (PHASE-05 done) · 40bbf4e5d
 
 ### Produced
 
@@ -55,7 +55,8 @@ fresh-as-of: 2026-10-24 · PHASE-05 · 9f802dc6a
   IMP-522 update (0e99dbcbf): repo-root writes, cargo + git in the write form;
   PHASE-03 update: ceiling on function+tests runs, shared-seam ruling check.
   PHASE-04 update: review ceiling recovery, gate-only convention suites,
-  retirement + retarget in one commit.
+  retirement + retarget in one commit. PHASE-05 update: fixture PATH order,
+  argv-separated fakes, swap-the-command negative control.
 - EVD-034 — codex hides MCP initialize instructions (ASM-014 invalidated).
 - EVD-033 — `codex mcp add` replaces the whole table; `mcp get` shows the
   effective entry (ASM-015 invalidated).

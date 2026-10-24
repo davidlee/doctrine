@@ -117,3 +117,15 @@ Calibration update, SL-286 PHASE-04 (2026-10-24), largest phase so far:
   closes, and tell delegates to route binary-path needs through `tests/common`.
 - Combine a retirement and its e2e retarget in one commit when the retirement
   alone turns suites red; a per-task commit there lands a red tree.
+
+Calibration update, SL-286 PHASE-05 (2026-10-24), test-only phase:
+
+- One `implement` session carried T1..T5 plus review fixes (5 runs, ~$0.09;
+  context peak 91k at the last run — the fresh-session threshold held).
+- Delegates drift on test-fixture hazards a reviewer catches: a fake binary
+  logging `$*` (argv boundaries lost, so "exact argv" was unverified) and a
+  rebuilt PATH with the fixture `bin` LAST (real tools beside git shadow the
+  fakes). Rule fixture `bin` first; log argv element-separated.
+- A swap-the-command negative control (explicit `install -y` in the same env
+  must red the "no call" assertion) is the cheap proof a "never calls X" test
+  is not vacuous; run it yourself, then restore.
