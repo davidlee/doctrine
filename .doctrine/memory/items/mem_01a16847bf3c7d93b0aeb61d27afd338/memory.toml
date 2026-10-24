@@ -6,7 +6,7 @@ status = "active"
 title = "pi_agent writable delegates: worktree below root, orchestrator verifies"
 summary = "pi_agent delegation in doctrine: repo-root writes + cargo/git available since IMP-522; request ceiling, calibration, negative controls"
 created = "2026-10-23"
-updated = "2026-10-23"
+updated = "2026-10-24"
 
 [scope]
 paths = []

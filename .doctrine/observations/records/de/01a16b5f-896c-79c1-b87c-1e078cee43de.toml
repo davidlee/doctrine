@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a16b5f-896c-79c1-b87c-1e078cee43de"
+recorded_at = "2026-10-24T00:46:25.644349521Z"
+kind = "friction"
+summary = "execute/pi review: per-phase review on a 2.5k-line diff exhausted the 31-request ceiling before answering"
+detail = "SL-286 PHASE-04: the pi review profile read plan, design, sheet, diff and code for 31 requests and ended with result null (ceiling). Continuing the session with 'answer now' recovered it in 2 requests. Prompts for large diffs should cap reading explicitly (e.g. 'stop reading by request 20') or split the diff by file."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

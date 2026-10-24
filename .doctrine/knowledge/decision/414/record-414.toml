@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 414
+slug = "codex-mcp-wiring-implementation-deltas-from-the-sl-286-design"
+title = "codex_mcp wiring: implementation deltas from the SL-286 design"
+record_kind = "decision"
+status = "accepted"
+created = "2026-10-24"
+updated = "2026-10-24"
+tags = ["codex", "mcp", "reconcile"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Implementing SL-286 PHASE-04 (wire the codex user MCP leg into install and boot install) surfaced seams the design does not name."
+choice = "Adopt the implementation deltas listed in the body (rulings R1-R9 of the PHASE-04 sheet plus review F1); reconcile folds them into design.md."
+alternatives = []
+rationale = "Each delta names a seam the design leaves implicit (gather; consent prompt; dry-run heading; leg mapping) or closes a defect it allows (relative HOME)."
+consequences = ["reconcile amends design.md sec-leg and sec-report and sec-code-impact"]
+decided_by = "orchestrator (PHASE-04 rulings R1-R9; review F1 adjudication)"
+decided_on = "2026-10-24"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)

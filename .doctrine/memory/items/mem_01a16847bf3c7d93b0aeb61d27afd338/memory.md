@@ -96,3 +96,24 @@ Calibration update, SL-286 PHASE-03 (2026-10-24):
   opt-in sibling fn.
 - Ask delegates to print a notice when an environment-dependent test skips
   (e.g. chmod under root), so a green gate cannot hide a vacuous test.
+
+Calibration update, SL-286 PHASE-04 (2026-10-24), largest phase so far:
+
+- Rhythm held across ten `implement` runs (~$0.25 total incl. sheet and
+  review). One install.rs run with 4 production edits + 3 tests hit the
+  30-request ceiling at its final check with a green tree — inspect the tree
+  (`git status`, `git diff`), don't re-run it.
+- A delegate's ceiling-hit transcript can look alarming (it ran
+  `git stash list`, edited an unrequested file): check the diff before
+  judging. Here the "extra" edit was a correct lapsed-marker removal.
+- `review` on a 2,500-line phase diff hit the 31-request ceiling with no
+  answer; continuing the same session with "answer now, ≤3 tool calls" cost 2
+  requests and produced a full, accurate finding list (F1 a real defect: a
+  relative `$HOME` read the project file as the user config).
+- Focused tests miss repo-wide convention suites: `tests/spawn_cwd_convention`
+  rejects any test file outside `tests/common` naming `doctrine_bin` (even for
+  a symlink, not a spawn), and a delegate's "fmt clean" claim was false on
+  one file. Only the gate caught both — run it before the per-phase review
+  closes, and tell delegates to route binary-path needs through `tests/common`.
+- Combine a retirement and its e2e retarget in one commit when the retirement
+  alone turns suites red; a per-task commit there lands a red tree.

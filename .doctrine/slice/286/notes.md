@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-10-24 · PHASE-03 · 49e58e65e
+fresh-as-of: 2026-10-24 · PHASE-04 · 224fb8fc1
 
 ### Produced
 
@@ -30,6 +30,15 @@ fresh-as-of: 2026-10-24 · PHASE-03 · 49e58e65e
   49e58e65e; VT-1/VT-2 PASS; negative controls red. Per-phase pi `review`:
   10 findings — F1 blocker (my ruling put symlink write-through on shared
   `write_atomic`) fixed 4717b1f4e; 7 more fixed 49e58e65e; F6, F9 rejected.
+- PHASE-04 done — install and boot install run the codex user MCP leg; boot's
+  project-wrapper arm retired (ad689e094..224fb8fc1). `doctrine_cmd` pins a
+  never-created CODEX_HOME first (ad689e094). New seams: `codex_mcp::read_plan`
+  (one gather), `ask_consent`, `preview`; `Leg::CodexUserMcp`;
+  `tests/common::link_doctrine_into` (PHASE-05 fake-codex tests reuse it).
+  Gate green at 224fb8fc1; VT-1..3 PASS; VA-1 greps hold; negative controls
+  red; real-binary smoke with a fake codex confirmed dry-run / -y / decline.
+  Per-phase pi `review`: F1 (relative HOME read the project file as the user
+  entry) fixed; F2/F3 comments fixed; F4, F5 rejected; F6 already fixed.
 - Minted: ISS-533 — MCP server replies to JSON-RPC notifications (pre-existing).
 - Design-time decisions DEC-403..DEC-411; EVD-033; RV-427 (concluded).
 
@@ -39,6 +48,8 @@ fresh-as-of: 2026-10-24 · PHASE-03 · 49e58e65e
   (subtree write roots, judgement no-answer turns, transcript budget);
   IMP-522 update (0e99dbcbf): repo-root writes, cargo + git in the write form;
   PHASE-03 update: ceiling on function+tests runs, shared-seam ruling check.
+  PHASE-04 update: review ceiling recovery, gate-only convention suites,
+  retirement + retarget in one commit.
 - EVD-033 — `codex mcp add` replaces the whole table; `mcp get` shows the
   effective entry (ASM-015 invalidated).
 
@@ -50,6 +61,9 @@ fresh-as-of: 2026-10-24 · PHASE-03 · 49e58e65e
 - DEC-413 — PHASE-03 execute deltas (project path param, write-time re-check,
   opt-in symlink write-through, new report lines); reconcile folds into
   design.md. Items 7, 8 user-approved.
+- DEC-414 — PHASE-04 wiring deltas (one gather in codex_mcp, exec before the
+  plan, consent seam, dry-run heading, leg mapping, boot install Ok on Refused,
+  relative HOME → NoHome); reconcile folds into design.md.
 - ASM-014 — where codex shows the rootless instructions (VH in PHASE-05).
 - RSK-234 · IDE-069 · ISS-528 (partially resolved by DEC-406) · ISS-533.
 - Reconcile: REV for REQ-484 (SPEC-011) + rootless-serve requirement;
