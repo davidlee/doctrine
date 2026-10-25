@@ -73,6 +73,12 @@ entries = [
   ".doctrine/slice/*/phases",
   ".doctrine/**/handover.md",
   ".doctrine/slice/*/inquisition.md",
+  # Slice research (`doctrine slice research`) is runtime-tier evidence; an
+  # RFC's `research/` is authored and stays tracked, so this is slice-scoped.
+  ".doctrine/slice/*/research/",
+  # Install bakes an absolute exec path into codex's hooks — machine-specific.
+  # `.codex/config.toml` is the project's own codex config and stays tracked.
+  ".codex/hooks.json",
   ".doctrine/memory/index/*",
   ".doctrine/memory/embeddings/*",
   ".doctrine/memory/state/*",

@@ -6450,6 +6450,52 @@ mod tests {
         }
     }
 
+    /// ISS-531: the managed block alone — no project lines outside it — keeps
+    /// install-derived and runtime paths out of a client's tree, and leaves
+    /// the authored neighbours tracked. Checked by real `git check-ignore`.
+    #[test]
+    fn managed_block_ignores_derived_paths_and_spares_authored_ones() {
+        let manifest = load_manifest().unwrap();
+        let block = crate::install_ownership::render_block(
+            &manifest.gitignore.entries,
+            &manifest.framework.roots,
+            &[],
+        );
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let init = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root)
+            .status()
+            .unwrap();
+        assert!(init.success());
+        fs::write(root.join(".gitignore"), block.join("\n") + "\n").unwrap();
+
+        let derived = [
+            ".doctrine/slice/001/research/research.md",
+            ".doctrine/slice/001/research/raw/thread.md",
+            ".doctrine/slice/001/research/baseline.toml",
+            ".codex/hooks.json",
+        ];
+        let authored = [
+            ".doctrine/slice/001/design.md",
+            ".doctrine/rfc/001/research/research.md",
+            ".codex/config.toml",
+        ];
+        let paths: Vec<PathBuf> = derived.iter().chain(&authored).map(PathBuf::from).collect();
+        let ignored = crate::git::ignored_among(root, &paths).unwrap();
+
+        for path in derived {
+            assert!(ignored.contains(Path::new(path)), "{path} must be ignored");
+        }
+        for path in authored {
+            assert!(
+                !ignored.contains(Path::new(path)),
+                "{path} must stay tracked"
+            );
+        }
+    }
+
     /// SL-030 PHASE-03: the policy tree is an authored governance kind, so the
     /// manifest must create it (parity with adr / memory-items) and must NOT
     /// ignore it — install surface 1 of 3. The `.gitignore` negation (surface 2)

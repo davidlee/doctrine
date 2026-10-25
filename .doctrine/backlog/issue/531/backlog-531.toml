@@ -5,10 +5,10 @@ id = 531
 slug = "managed-gitignore-block-omits-codex-and-slice-research"
 title = "Managed gitignore block omits .codex and slice research"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-10-23"
-updated = "2026-10-23"
+updated = "2026-10-25"
 tags = ["area:install", "harness:codex", "next"]
 
 # outbound-only. Cross-kind structural edges (e.g. references with a role

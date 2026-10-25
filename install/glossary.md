@@ -123,7 +123,7 @@ Verification, audit and code-review findings do not live in the slice folder:
 they are written to a review ledger under `.doctrine/review/nnn/`.
 
 Also permitted inside a slice, spec, or backlog dir:
-- `research/*` — pre-design research round (gitignored, runtime tier):
+- `research/*` — pre-design research round (in a slice dir: gitignored, runtime tier):
   `research.md` (curated artefact), `raw/` (verbatim thread output),
   `baseline.toml` (staleness baseline, stamped by `doctrine slice research`)
 - `context/*`
