@@ -30,20 +30,14 @@ Use doctrine memory (the mcp tool). DON'T use claude built-in memory.
   for the AskUserQuestion tool.
 
 ## Reviewer
-- default reviewer: **codex-cli MCP** (`mcp__codex-cli__codex` / `…__review`) — a
-  third-party npm wrapper (`npx -y codex-mcp-server`) that shells the codex CLI.
-- the old `codex` MCP server entry is **dead** — codex-cli 0.154.0 removed the
-  `mcp-server` subcommand, so it fails `CONNECTION_CLOSED` on every reconnect.
-  Nothing to repoint it at; use codex-cli. (Verified 2026-09-14.)
-- **always pass `model`** — default to `gpt-6-sol`, medium or high effort. The wrapper's own default
-  (`gpt-5.3-codex`) 400s on a ChatGPT account, and its model enum is stale; ask
-  `codex debug models` for what the account actually serves.
-- **never `reasoningEffort: "minimal"`** — codex attaches `web_search`
-  unconditionally and the API rejects that pairing. `low`+ works; use `high` for
-  adversarial review.
-- pass `sandbox: "workspace-write"` so the reviewer raises onto the RV ledger
-  itself; readonly isolation prevents an inquisitorial ledger and GPT's adherence
-  makes that a poor tradeoff.
+- default reviewer: Codex via the **`codex:ask`** skill (David's fork of the
+  official Codex plugin). Model tier and effort come from the skill and the GPT
+  tiers in the global CLAUDE.md; don't pin model names here.
+- pass `--write` so the reviewer raises onto the RV ledger itself; readonly
+  isolation prevents an inquisitorial ledger and GPT's adherence makes that a
+  poor tradeoff.
+- **never `--effort minimal`**: current models reject it (400). `low`+ works;
+  use `high` for adversarial review.
 - Opus sub-agent is also useful for variety on subsequent passes.
 
 ## Delegating to pi (`pi_agent`)
