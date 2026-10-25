@@ -50,6 +50,7 @@ echo "smoke: --version ok"
 # entity templates are no longer copied, so they cannot serve as the canary here.
 proj="$work/proj"
 mkdir -p "$proj"
+: >"$proj/.project"   # root marker: C3 serves from inside $proj
 "$bin" install --path "$proj" --yes >/dev/null 2>&1 || fail "install"
 [ -s "$proj/.doctrine/doctrine.toml" ] || fail "install embed (doctrine.toml absent)"
 [ -s "$proj/.doctrine/project-orientation.md" ] \
@@ -67,21 +68,26 @@ echo "smoke: publication embed ok"
 # C3 — web/map/dist embed: boot the map server on an ephemeral port, discover the
 # bound URL from its startup line, GET / and require HTTP 200 with a non-empty
 # body. An empty/missing dist still compiles but serves no index — this is the
-# check that catches it.
+# check that catches it. The server scans its catalog before binding, so it runs
+# in the scratch project: a caller cwd (the CI checkout) would make startup
+# time scale with that repo and race the poll budget (slow x86_64 macOS runner).
 log="$work/serve.log"
-"$bin" map serve --port 0 >"$log" 2>&1 &
+(cd "$proj" && exec "$bin" map serve --port 0) >"$log" 2>&1 &
 server_pid=$!
 
 url=""
 i=0
-while [ "$i" -lt 50 ]; do
+while [ "$i" -lt 300 ]; do   # ~30s
   url="$(sed -n 's|.*\(http://127\.0\.0\.1:[0-9]*\)/.*|\1|p' "$log" 2>/dev/null | head -n 1)"
   [ -n "$url" ] && break
   kill -0 "$server_pid" 2>/dev/null || break   # server died before announcing
   i=$((i + 1))
   sleep 0.1
 done
-[ -n "$url" ] || fail "map serve (no listen URL)"
+if [ -z "$url" ]; then
+  sed 's/^/smoke: serve.log: /' "$log" >&2 || true
+  fail "map serve (no listen URL)"
+fi
 
 body="$work/body.html"
 code="$(curl -sS -o "$body" -w '%{http_code}' "$url/" 2>/dev/null || true)"
