@@ -1,0 +1,4 @@
+# Cached upstream docs are refreshed by fetch.sh; keep only the fetcher in Git.
+*.md
+/index.txt
+/llms.txt
