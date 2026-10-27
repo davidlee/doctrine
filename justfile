@@ -214,7 +214,7 @@ clean:
 # Build doctrine's quotient forms (flake.nix `quotientForms`) to fixed,
 # GC-rooted links, which the doctrine quotient policy names as
 # `<state>/forms/doctrine-<capability>/bin/doctrine-quotient-<capability>`.
-# Interim until quotient IMP-003 (CHR-183).
+# Run after a flake change to the forms; `nix flake check` checks them (CHR-183).
 quotient-forms state=(env("XDG_STATE_HOME", env("HOME") / ".local/state") / "quotient"):
   mkdir -p {{state}}/forms
   nix build -o {{state}}/forms/doctrine-read .#doctrine-quotient-read
