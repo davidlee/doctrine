@@ -9,6 +9,12 @@
       url = "github:davidlee/nix-config?dir=flakes/agents";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # quotient's form-family builder, for quotientForms below. Unpinned:
+    # a break upstream should surface here.
+    quotient = {
+      url = "github:davidlee/quotient";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
   };
@@ -129,38 +135,41 @@
             claude
           ]);
 
+        # The project half of every jail's and every form's options, over
+        # either builder's combinator set (agents README § quotient forms).
         # No provider key enters these jails: mkJail defaults to the LLM
         # gateway (`gatewayClient "pi"`), and the jail gets only the gateway
         # key, on FD 22. A jail with `gateway = null` falls back to
         # jailed-agents.nix's own key forwarding; don't duplicate it here.
-        jailEnvOptions = with jailLib.combinators; [
-          (try-fwd-env "DOCTRINE_BIN")
-          (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
-          # No CLAUDE_CODE_SHELL or bashInteractive here: the agents flake pins
-          # both in every jail.
-          # No CARGO_TARGET_DIR redirect: each worktree builds into its own
-          # in-tree, gitignored `target/` (cargo's default). Per-worktree build
-          # isolation is then correct by construction — both dispatch arms, `just`
-          # and raw `cargo`, with no shared target to thrash and no env channel
-          # required (SL-156; ADR-008 D-B1/D-B5 via REV-011). The original
-          # cross-mount concern (a jail-built test binary bakes CARGO_BIN_EXE at
-          # the jail mount path and spawn-fails on the host, and vice versa) is
-          # satisfied *by* in-tree targets: jail `/workspace/doctrine/target` and
-          # host `/home/.../doctrine/target` are distinct physical dirs, so no
-          # binary is shared across mounts. Persistent trees (main/edge) keep a
-          # warm cache in their bound `target/`; ephemeral forks cold-build (the
-          # deliberate trade — sccache is the warm-fork lever, ADR-008 D-B4). Host
-          # was always on default `target/` and is unchanged. Do not re-add a
-          # shared redirect: it reintroduces the cross-worktree fingerprint thrash
-          # this removal fixes.
-          #(ro-bind "${pkgs.coreutils}/bin/env" "/usr/bin/env")
-          #(add-pkg-deps [pkgs.coreutils])
-          # No doctrine bind here: the agents flake's jail default ro-binds the
-          # host's doctrine install dir (~/.local/share/doctrine/bin, from
-          # `just install`) at /run/doctrine-bin, ahead on PATH. A directory
-          # bind, not a file bind, so a reinstall's atomic rename reaches a
-          # running jail (IMP-249).
-        ];
+        projectOptions = c:
+          with c; [
+            (jailLib.tryFwdEnv c "DOCTRINE_BIN")
+            (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
+            # No CLAUDE_CODE_SHELL or bashInteractive here: the agents flake pins
+            # both in every jail.
+            # No CARGO_TARGET_DIR redirect: each worktree builds into its own
+            # in-tree, gitignored `target/` (cargo's default). Per-worktree build
+            # isolation is then correct by construction — both dispatch arms, `just`
+            # and raw `cargo`, with no shared target to thrash and no env channel
+            # required (SL-156; ADR-008 D-B1/D-B5 via REV-011). The original
+            # cross-mount concern (a jail-built test binary bakes CARGO_BIN_EXE at
+            # the jail mount path and spawn-fails on the host, and vice versa) is
+            # satisfied *by* in-tree targets: jail `/workspace/doctrine/target` and
+            # host `/home/.../doctrine/target` are distinct physical dirs, so no
+            # binary is shared across mounts. Persistent trees (main/edge) keep a
+            # warm cache in their bound `target/`; ephemeral forks cold-build (the
+            # deliberate trade — sccache is the warm-fork lever, ADR-008 D-B4). Host
+            # was always on default `target/` and is unchanged. Do not re-add a
+            # shared redirect: it reintroduces the cross-worktree fingerprint thrash
+            # this removal fixes.
+            #(ro-bind "${pkgs.coreutils}/bin/env" "/usr/bin/env")
+            #(add-pkg-deps [pkgs.coreutils])
+            # No doctrine bind here: the agents flake's jail default ro-binds the
+            # host's doctrine install dir (~/.local/share/doctrine/bin, from
+            # `just install`) at /run/doctrine-bin, ahead on PATH. A directory
+            # bind, not a file bind, so a reinstall's atomic rename reaches a
+            # running jail (IMP-249).
+          ];
 
         # workspaceDeps now sourced from the JAIL_WORKSPACE_DEPS env var
         # (set in the gitignored .envrc; requires `use flake --impure`).
@@ -175,7 +184,7 @@
             {
               profile = "specDev";
               extraPkgs = projectPkgs;
-              extraOptions = jailEnvOptions;
+              extraOptions = projectOptions jailLib.combinators;
               gateway = jailLib.gatewayClient "pi";
             }
             // args
@@ -218,71 +227,31 @@
           bubblewrap = pkgs.bubblewrap;
         };
 
-        # quotient `form-1` forms (`quotient help form`): the jails quotient's
-        # `pi_agent` runs a delegate in, carrying this project's toolchain and
-        # env. Interim copy of satan's `quotientFormFamily` (satan flake.nix);
-        # retire for quotient IMP-003's shared builder (CHR-183).
-        #
-        # The root is the server-supplied cwd, bound at its own absolute path:
-        # read-only or writable is the capability's one word. The form's one
-        # positional is the session directory; pi's argv follows verbatim.
-        quotientForms = let
-          sessionVar = "QUOTIENT_ACTIVE_SESSION_DIR";
-          rawArg = jailLib.combinators.unsafe-add-raw-args;
-          mkForm = capability: let
-            name = "doctrine-quotient-${capability}";
-            formJail = mkJail jailLib.makeJailedPi {
-              inherit name;
-              # No /workspace launch-dir mount and no env-sourced deps: the
-              # root and session dir below are the form's whole addition.
-              mountLaunchDir = false;
-              workspaceDepsFromEnv = false;
-              extraOptions =
-                jailEnvOptions
-                ++ [
-                  # The root is bound at its host path, so host and delegate
-                  # share `target/`: differing rustflags (.envrc's mold flag)
-                  # would make each rebuild over the other. Not RUSTC_WRAPPER:
-                  # sccache's host cache dir is unwritable here, and the
-                  # wrapper does not enter cargo's fingerprint.
-                  (jailLib.combinators.try-fwd-env "CARGO_BUILD_RUSTFLAGS")
-                  (rawArg (
-                    if capability == "read"
-                    then ''--ro-bind "$PWD" "$PWD"''
-                    else ''--bind "$PWD" "$PWD"''
-                  ))
-                  (rawArg ("--bind \"$" + sessionVar + "\" \"$" + sessionVar + "\""))
-                  (rawArg "--tmpfs /tmp")
-                  # After the generator's own --chdir "$HOME": the later wins.
-                  (rawArg ''--chdir "$PWD"'')
-                  (rawArg "--die-with-parent")
-                ];
-            };
-          in
-            pkgs.writeShellScriptBin name ''
-              set -euo pipefail
-              if [ "$#" -lt 1 ]; then
-                echo "${name}: missing the session directory (the one positional)" >&2
-                exit 64
-              fi
-              session_dir=$1
-              shift
-              case "$session_dir" in
-                /*) ;;
-                *) echo "${name}: session directory must be absolute: $session_dir" >&2; exit 64 ;;
-              esac
-              if [ ! -d "$session_dir" ]; then
-                echo "${name}: no session directory at $session_dir" >&2
-                exit 64
-              fi
-              export ${sessionVar}="$session_dir"
-              exec ${formJail}/bin/jailed-${name} "$@"
-            '';
-        in
-          lib.optionalAttrs isLinux {
-            doctrine-quotient-read = mkForm "read";
-            doctrine-quotient-write = mkForm "write";
-          };
+        # quotient's per-call forms for this root (`quotient help form`): the
+        # jails quotient's `pi_agent` runs a delegate in, with the lib's
+        # posture, this project's toolchain and its options. The prefix keeps
+        # the binary names the doctrine quotient policy names
+        # (`just quotient-forms`). No persisted home: the form shares nothing
+        # writable beyond the root and the session directory.
+        quotientFamily = jailLib.quotientFormFamily {
+          inherit (inputs) quotient;
+          prefix = "doctrine-quotient";
+          packages = projectPkgs;
+          options = c:
+            projectOptions c
+            ++ [
+              # The root is bound at its host path, so host and delegate
+              # share `target/`: differing rustflags (.envrc's mold flag)
+              # would make each rebuild over the other. Not RUSTC_WRAPPER:
+              # sccache's host cache dir is unwritable here, and the
+              # wrapper does not enter cargo's fingerprint.
+              (jailLib.tryFwdEnv c "CARGO_BUILD_RUSTFLAGS")
+            ];
+        };
+        quotientForms = lib.optionalAttrs isLinux {
+          doctrine-quotient-read = quotientFamily.read;
+          doctrine-quotient-write = quotientFamily.write;
+        };
 
         # Frontend: hermetic bun build → web/map/dist, embedded into the binary
         # via rust-embed (release profile reads web/map/dist/, debug reads
@@ -409,6 +378,14 @@
         # from, which forks drvs and rebuilds from scratch (see the `dirge`
         # note below for that failure mode).
         _module.args.pkgs = pkgs;
+
+        # quotient's form check over the family's text (`nix flake check`).
+        checks = lib.optionalAttrs isLinux {
+          quotient-forms = inputs.quotient.lib.checkFormFamily {
+            inherit pkgs;
+            family = quotientFamily;
+          };
+        };
 
         packages =
           jailPkgs
