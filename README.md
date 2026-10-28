@@ -12,7 +12,7 @@ Doctrine supplements coding agents with the determinism of classical software sy
 
 Doctrine is designed to work with any model or harness, though specific integrations may vary slightly. Its vendor-agnostic handling of project context, and strict guardrails, make less capable and cheaper models more reliable and reduce the barriers to substitution.
 
-![doctrine](./hero.png) 
+![doctrine](./hero_o.png) 
 
 > Heresy burns; Doctrine remains.
 
