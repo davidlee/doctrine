@@ -1,6 +1,6 @@
 # Doctrine
 
-Doctrine is an evolving, ambitious, but pragmatic approach to agentic engineering, expressed as a Rust CLI tool.
+Doctrine is an evolving, ambitious, pragmatic approach to agentic engineering, expressed as a Rust CLI tool. You might think of it as a harness for your harness.
 
 It promotes engineering rigour, fosters clear understanding, and bounds agent autonomy. Agents adhere to your intent, and you focus your attention on design, not supervision or repair.
 
@@ -14,7 +14,7 @@ Doctrine is designed to work with any model or harness, though specific integrat
 
 ![doctrine](./hero_o.png) 
 
-> Heresy burns; Doctrine remains.
+> freedom through constraint
 
 ## Design Goals
 
