@@ -13,8 +13,8 @@ sub-orchestrator def for any harness. The tier is operator-authored and lives at
 user level in all three harnesses.
 
 Its *content* has converged on two shapes (claude and codex share one, pi
-adapts). Its *packaging* has converged on nothing: three harnesses, three
-loading conventions, one of them inert.
+adapts). Its *packaging* is three conventions, and the same file form means a
+different thing in each.
 
 ## Observed state
 
@@ -27,7 +27,7 @@ are live under `~/.pi/`.
 |---|---|---|---|
 | `super-orchestrator` seat | `~/.claude/skills/…`, 11 317 B / 211 lines | 11 317 B — **byte-identical** | `~/.pi/skills/…`, 7 800 B / 144 lines — *adapted* |
 | `pi-orchestrate` | 1 394 B / 23 lines | 1 394 B — **byte-identical** | 3 106 B / 53 lines — *expanded* |
-| sub-orchestrator charter | `~/.claude/agents/sub-orchestrator.md`, 5 817 B — **claude-native location** | `super-orchestrator/references/sub-orchestrator.md`, 5 817 B — **byte-identical copy, in a location codex cannot load as an agent** | `~/.pi/agent/agents/sub-orchestrator.md`, 2 274 B, pi-native frontmatter |
+| sub-orchestrator charter | `~/.claude/agents/sub-orchestrator.md`, 5 817 B — **spawnable agent** | `super-orchestrator/references/sub-orchestrator.md`, 5 817 B — **byte-identical, but a document** | `~/.pi/agent/agents/sub-orchestrator.md`, 2 274 B, pi-native frontmatter — **spawnable agent** |
 
 Adjacent but not of this tier: `arbiter-review` (7 560 B) is claude-only.
 
@@ -39,14 +39,28 @@ Adjacent but not of this tier: `arbiter-review` (7 560 B) is claude-only.
    in an older handover", "do not require Quotient"). The charter is the same
    file in claude and codex too. Nothing needs inventing — one canonical content
    set plus a pi adaptation, exactly as field-converged.
-2. **Packaging is the actual defect.** claude loads the charter from
-   `~/.claude/agents/`; pi from `~/.pi/agent/agents/`; codex has **no agents dir
-   at all** (`~/.codex/agents` absent, and post-SL-281 doctrine installs no
-   codex agent defs — IMP-515), so its copy sits inert inside a skills tree as
-   documentation. The charter therefore *appears* present in all three and is
-   loadable in two — the same invisible-asymmetry failure as IMP-468 and
-   IMP-523, now in the third dimension: location rather than prose.
-3. **The seat is defined against two other skills.** Its description reads
+2. **Codex's packaging is right, and it is the only one that is.** codex has no
+   agent-def surface: `~/.codex/agents/` does not exist, `config.toml` has no
+   `[agents]` section, its `.system` packs carry `agents/openai.yaml` as
+   `display_name`/icon/`default_prompt` UI metadata rather than spawnable roles,
+   and `references/prompting-guide.md:93` defers subagent mechanics outward ("if
+   you are implementing a multi-agent system in your harness"). Its own
+   precedent for a *role* is `.system/review-agent/SKILL.md` — a role shipped as
+   a skill and invoked, not spawned. Carrying the charter as
+   `super-orchestrator/references/` is the same shape, and it keeps the seat and
+   its child contract in one directory, where they cannot desync. claude and pi
+   keep the charter in a separate tree from the seat, so a change to the
+   hand-back contract must land twice with no drift detector. **Co-location is
+   the better convention; the defect is not codex's.**
+3. **But a reference cannot be instantiated, so "present" is not "parity".** In
+   claude and pi the same 5 817 bytes become a separate context with its own
+   model and turn budget — a *process the harness runs*. On codex they land in
+   the seat's context, spending exactly the budget the tier exists to protect —
+   a *document the seat follows*. That is honest for the available surface, not
+   a bug, but it must not be read as the tier existing on codex in the same
+   sense. pi already papers over the same distinction in the other direction:
+   its 2 274 B def is pointers to the two skills, not a body.
+4. **The seat is defined against two other skills.** Its description reads
    "Combines /capsule-driver's tiering with /pi-orchestrate's delegation."
    `/capsule-driver` is doctrine canon; `/pi-orchestrate` is not shipped at all
    (all three copies user-level, and 1 394 B of it is a pointer to
@@ -61,6 +75,15 @@ as a **blocking** preflight item — and spends Sonnet/Opus subagents on top.
 Doctrine depends on quotient nowhere. The pi adaptation explicitly refuses the
 dependency ("Do not require Quotient or its host-side forms for native pi
 delegation").
+
+And the shared seat is not harness-neutral even setting quotient aside: codex
+runs it byte-identically while it instructs `TaskStop`, `SendMessage`,
+`PushNotification`, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` and
+`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` (one each), plus 8 `quotient` and 13
+Sonnet/Opus references — Claude Code machinery, on `gpt-6-luna` with
+`sandbox_mode = danger-full-access` and `approval_policy = "never"`.
+Byte-identity between claude and codex was never a virtue in the seat; only in
+the charter.
 
 So the claude/codex text cannot become canon as-is. Under
 **POL-003** (harness independence from host-harness seams) it may ship only as
@@ -86,12 +109,15 @@ explicitly.
 
 ## What a fix has to account for
 
-1. **One charter body, three wirings.** The def frontmatter is per-harness (pi:
-   `allowNestedSubagents`/`allowedAgents`; claude: `model`/`maxTurns`/`tools`/
-   `TaskStop`; codex: `.codex/agents/*.toml`, gated on IMP-515) while the body
-   is shared — and the harness's *loading convention* is a third variable the
-   shipping mechanism must own, or the codex copy repeats this bug. Same split
-   IMP-523 needs for the capsule tier; whichever lands first sets the pattern.
+1. **Invert the convention to codex's: one body, three stubs.** Canonical
+   charter text lives in the shipped skill's `references/`; each harness gets a
+   thin def carrying only harness-native instantiation keys (pi:
+   `allowNestedSubagents`/`allowedAgents`; claude: `model`/`maxTurns`/`tools`)
+   plus a pointer that says read the reference. Two zero-cost gains: the body has
+   exactly one home, and the seat and its contract version together. pi's def is
+   already stub-shaped. Codex needs no def at all — which is the argument for
+   not shipping it one once IMP-515 lands. Same split IMP-523 needs for the
+   capsule tier; whichever lands first sets the pattern.
 2. **No baked model.** `sub-orchestrator.md` pins `model: opus`, and
    `install/agents/claude/capsule-*.md` pins `opus`/`sonnet`. A shipped version
    must let the operator's configuration decide; the pi skill is already
