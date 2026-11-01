@@ -1,0 +1,46 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 524
+slug = "ship-an-orchestration-tier-super-orchestrator-seat-sub-orchestrator-charter-for-pi-claude-and-codex"
+title = "Ship an orchestration tier (super-orchestrator seat + sub-orchestrator charter) for pi, claude and codex"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-11-01"
+updated = "2026-11-01"
+tags = ["area:agents", "area:install", "area:skills", "cluster:capsule", "harness:claude", "harness:codex", "harness:pi"]
+
+# outbound-only. Cross-kind structural edges (e.g. references with a role
+# — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
+# uniform `[[relation]]` rows — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "sibling tier, same def-per-harness / skill-shared asymmetry; whichever lands first sets the split pattern"
+target = "IMP-523"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the shipped-tier precedent for orchestration defs + driver skill"
+target = "IMP-434"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "codex has no agent-def install leg after SL-281; a codex sub-orchestrator def depends on this"
+target = "IMP-515"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "SL-254 PHASE-10 deleted the orchestrator role prompt; the orchestrator concept is now split across that deletion, this tier and the capsule tier"
+target = "IDE-053"
