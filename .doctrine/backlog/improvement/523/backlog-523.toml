@@ -1,0 +1,39 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 523
+slug = "ship-a-pi-capsule-tier-agent-defs-and-a-harness-arm-for-capsule-driver"
+title = "Ship a pi capsule tier: agent defs and a harness arm for /capsule-driver"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-11-01"
+updated = "2026-11-01"
+tags = ["area:agents", "area:install", "area:skills", "cluster:capsule", "harness:pi"]
+
+# outbound-only. Cross-kind structural edges (e.g. references with a role
+# — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
+# uniform `[[relation]]` rows — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "IMP-434"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "plural install leg landed; this is the second axis — pi has no capsule defs in the dir it sweeps"
+target = "IMP-468"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "codex is the sibling missing-harness card; its framing treats pi as covered, which this item falsifies for the capsule tier"
+target = "IMP-515"
