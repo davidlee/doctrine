@@ -9,7 +9,7 @@ status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-11-01"
 updated = "2026-11-01"
-tags = ["area:agents", "area:install", "area:skills", "cluster:capsule", "harness:pi"]
+tags = ["area:agents", "area:governance", "area:install", "area:skills", "cluster:capsule", "harness:claude", "harness:pi"]
 
 # outbound-only. Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -20,6 +20,10 @@ tags = ["area:agents", "area:install", "area:skills", "cluster:capsule", "harnes
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "governed_by"
+target = "POL-003"
 
 [[relation]]
 label = "references"
@@ -37,3 +41,15 @@ label = "references"
 role = "concerns"
 descriptor = "codex is the sibling missing-harness card; its framing treats pi as covered, which this item falsifies for the capsule tier"
 target = "IMP-515"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "sibling tier; source of the co-location/pointer-stub conclusion and the shared placement decision — scope together"
+target = "IMP-524"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the live desync between capsule-orchestrator.md:20 and phase-plan step 8; the packaging fix makes it unrepresentable"
+target = "ISS-519"
