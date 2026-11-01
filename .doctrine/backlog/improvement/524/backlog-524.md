@@ -76,6 +76,30 @@ Doctrine depends on quotient nowhere. The pi adaptation explicitly refuses the
 dependency ("Do not require Quotient or its host-side forms for native pi
 delegation").
 
+This is **POL-002 facet 3** (no undeclared dependency on a host tool), not
+POL-003: quotient is not a harness, and POL-003's own rationale warns that
+stretching it past the harness axis "would let a real gap pass as
+already-governed". Facet 3 admits a host tool only at a declared altitude — a
+named baseline requirement with a version floor, or a feature-scoped capability
+that is opt-in, never acquired by a default path, and whose absence fails with a
+message naming what is missing and what would satisfy it.
+
+The field state fails facet 3 on both halves: "quotient is assumed" is a
+**blocking** preflight item, so the default path acquires the dependency, and its
+absence yields a preflight block rather than a named-missing-capability failure.
+
+So the conclusion is stronger than "needs an opt-in supplement". **The canonical
+tier must be quotient-free, with quotient as one conforming delegation adapter** —
+and the pi variant is the proof that this is possible: the dependency is not
+load-bearing on the capability (delegation), only on one implementation of it.
+
+The assumption is structural rather than careless. Doctrine's own dev jail pulls
+quotient as a flake input and builds confined-worker forms on `quotient`'s
+`pi_agent` (`flake.nix:14`, `~230-233`; `CLAUDE.md:45-81`), so the tool is
+ambient where the product is developed and reads as part of the platform. That
+is the leak facet 3 exists to catch, and it explains why the tier came out
+quotient-shaped without anyone deciding it should.
+
 And the shared seat is not harness-neutral even setting quotient aside: codex
 runs it byte-identically while it instructs `TaskStop`, `SendMessage`,
 `PushNotification`, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` and
@@ -83,14 +107,8 @@ runs it byte-identically while it instructs `TaskStop`, `SendMessage`,
 Sonnet/Opus references — Claude Code machinery, on `gpt-6-luna` with
 `sandbox_mode = danger-full-access` and `approval_policy = "never"`.
 Byte-identity between claude and codex was never a virtue in the seat; only in
-the charter.
-
-So the claude/codex text cannot become canon as-is. Under
-**POL-003** (harness independence from host-harness seams) it may ship only as
-an **opt-in supplement** whose correctness rests on doctrine-owned contracts —
-or be rewritten onto a neutral delegation contract with quotient as one
-conforming adapter. That rewrite is the real work in this item; copying three
-directories into `plugins/doctrine/skills/` is not.
+the charter. That half is the **POL-003** axis: harness vocabulary belongs in
+that harness's adapter, not in shared text.
 
 ## Placement — the open question
 
@@ -122,6 +140,11 @@ explicitly.
    `install/agents/claude/capsule-*.md` pins `opus`/`sonnet`. A shipped version
    must let the operator's configuration decide; the pi skill is already
    explicit about this ("do not automatically switch to GPT, Sonnet or Opus").
+3. **Quotient at a declared altitude, if it ships at all.** Either it drops out
+   of the canonical text and survives only as a delegation adapter behind a
+   doctrine-owned contract, or the tier declares it as a named requirement with
+   a version floor and a clean failure when absent. "Blocking preflight item" is
+   neither.
 3. **Confinement is not portable.** The pi text is jail-shaped and correct for a
    confined worker; the claude/codex tier runs outside any jail on the host's own
    auto-mode permissions. Neither assumption may leak into the other's copy.
@@ -142,5 +165,6 @@ explicitly.
 - **IDE-053** (orchestrator/worker role prompts for the clone workflow) — the
   orchestrator concept is split across that deletion, the capsule tier and this
   tier.
-- Governed by **POL-003**; the opt-in-supplement question it decides was raised
-  as IDE-034.
+- Governed by **POL-003** (harness vocabulary in adapters) and **POL-002
+  facet 3** (no silently assumed host tool — quotient). The opt-in-supplement
+  question POL-003 decides was raised as IDE-034.

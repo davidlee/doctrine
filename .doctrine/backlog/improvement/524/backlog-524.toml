@@ -22,6 +22,14 @@ after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
+label = "governed_by"
+target = "POL-002"
+
+[[relation]]
+label = "governed_by"
+target = "POL-003"
+
+[[relation]]
 label = "references"
 role = "concerns"
 descriptor = "sibling tier, same def-per-harness / skill-shared asymmetry; whichever lands first sets the split pattern"
@@ -48,5 +56,5 @@ target = "IDE-053"
 [[relation]]
 label = "references"
 role = "concerns"
-descriptor = "decides the opt-in-supplement shape a quotient-dependent tier must take under POL-003"
+descriptor = "decides the opt-in-supplement shape; the quotient dependency itself is POL-002 facet 3, the harness split is POL-003"
 target = "IDE-034"
