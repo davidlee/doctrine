@@ -44,3 +44,9 @@ label = "references"
 role = "concerns"
 descriptor = "SL-254 PHASE-10 deleted the orchestrator role prompt; the orchestrator concept is now split across that deletion, this tier and the capsule tier"
 target = "IDE-053"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "decides the opt-in-supplement shape a quotient-dependent tier must take under POL-003"
+target = "IDE-034"

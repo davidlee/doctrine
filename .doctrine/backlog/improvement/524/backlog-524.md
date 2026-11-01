@@ -7,88 +7,109 @@
 ## The gap
 
 Doctrine ships no orchestration tier. `plugins/doctrine/skills/` — the
-framework-owned canon that every harness links into its own skills dir — has no
-`super-orchestrator` and no `sub-orchestrator`, and
-`install/agents/{claude,pi}/` has no sub-orchestrator def. The tier in field use
-is operator/agent-authored and lives at user level, unowned by install.
+framework-owned canon every harness links into its own skills dir — has no
+`super-orchestrator` and no `sub-orchestrator`, and `install/agents/` has no
+sub-orchestrator def for any harness. The tier is operator-authored, lives at
+user level in all three harnesses, and has already diverged three ways.
 
-## Observed state (this environment, 2026-11-01)
+## Observed state
 
-| harness | super-orchestrator | sub-orchestrator | where |
+All three harnesses carry it. Viewed from a confined pi session, `~/` is a
+persistent share rather than the operator's host home, so the claude and codex
+skill dirs are copied in for inspection as `~/_claude_skills/` and
+`~/_codex_skills/`; pi's are live under `~/.pi/skills/`.
+
+| artefact | claude | codex | pi |
 |---|---|---|---|
-| pi | **skill present** | **agent def present** | `~/.pi/skills/super-orchestrator/SKILL.md` (7.8 KB), `~/.pi/skills/pi-orchestrate/SKILL.md`, symlinked from `~/.pi/agent/skills/`; def at `~/.pi/agent/agents/sub-orchestrator.md` (2.3 KB) |
-| claude | absent | absent | `~/.claude/skills/` holds only the `synced/` third-party packs; `~/.claude/agents/` does not exist |
-| codex | absent | absent | `~/.codex/skills/` holds only the `.system` built-ins |
+| `super-orchestrator/SKILL.md` | 11 317 B / 211 lines | 11 317 B — **byte-identical** | 7 800 B / 144 lines — *adapted* |
+| `pi-orchestrate/SKILL.md` | 1 394 B / 23 lines | 1 394 B — **byte-identical** | 3 106 B / 53 lines — *expanded* |
+| sub-orchestrator | **absent** | `super-orchestrator/references/sub-orchestrator.md`, 5 817 B, in **claude agent-def** frontmatter (`model: opus`, `maxTurns: 200`, `skills: pi-orchestrate`, `color: purple`) | `~/.pi/agent/agents/sub-orchestrator.md`, 2 274 B, pi-native frontmatter (`allowNestedSubagents`, `allowedAgents`, `inheritSkills`, `contact_supervisor`) |
 
-Two corrections to the working assumption, both load-bearing for scoping:
+Adjacent but not of this tier: `arbiter-review` (7 560 B) is claude-only.
 
-- **Only pi has them.** claude's `history.jsonl` mentions `super-orchestrator`
-  and `sub-orchestrator` twice each — past prompts, not installs.
-- **`sub-orchestrator` is not a skill.** It exists only as a pi *agent def*
-  (`inheritProjectContext: true`, `inheritSkills: true`, `allowedAgents:
-  worker, delegate, scout, planner, researcher, reviewer`). There is no
-  sub-orchestrator skill in any harness.
+## What that asymmetry says
 
-The pi skill states its own provenance: "Adapted from the operator's Claude
-super-orchestrator skill" — the claude original is no longer on disk. So the
-surviving artefact is a pi-shaped adaptation of a lost source, which is the
-drift IMP-523 describes in the capsule tier: hand-authored, user-level, outside
-the install surface, no refresh path, no second harness to keep it honest.
+1. **The split already exists in the field.** Two harnesses share one text
+   byte-for-byte; the third is a real adaptation (jail-aware: "run inside the
+   existing jail", "never assume they can read host paths mentioned in an older
+   handover", "do not require Quotient"). Whatever ships does not need to invent
+   a def-per-harness / skill-shared scheme — the operator already converged on
+   one. It needs to make it authoritative.
+2. **The middle rung exists in three incompatible forms and no canonical one.**
+   The only sub-orchestrator written in claude agent-def format is parked under
+   *codex's* skills tree, where codex cannot load it as an agent (codex defs are
+   `.codex/agents/*.toml` — IMP-515), while *claude's* own copy has no
+   `references/` at all. So in codex the charter is documentation, in claude it
+   is missing, and in pi it is a differently-shaped def. Three hand-maintained
+   variants, no source of truth — the same drift mode as IMP-523, but
+   demonstrably three-way, which is the strongest argument for shipping it.
+3. **The seat is defined against two other skills.** Its description reads
+   "Combines /capsule-driver's tiering with /pi-orchestrate's delegation."
+   `/capsule-driver` is doctrine canon; `/pi-orchestrate` is not shipped at all
+   (all three copies are user-level, and 1 394 B of it is a pointer to
+   `quotient help orchestrate`).
 
-## The tier as it stands
+## The constraint that decides the shape: quotient
 
-    super-orchestrator (seat: interactive, holds the human, one run)
-      └── sub-orchestrator (fresh child per charter: 1–3 phases, verifies, commits)
-            ├── planner / phase work
-            └── worker (bounded tests + implementation)
+The claude/codex text assumes **quotient** throughout — `mcp__quotient__pi_agent`
+workers, `pi_agent_wait` (~45 s cap per call), `quotient allow` for form
+approvals, `quotient help orchestrate` as the real guide, "quotient is assumed"
+as a **blocking** preflight item — and spends Sonnet/Opus subagents on top.
+Doctrine depends on quotient nowhere. The pi adaptation explicitly refuses the
+dependency ("Do not require Quotient or its host-side forms for native pi
+delegation").
 
-That is the same shape as the capsule tier (`super` → `capsule-orchestrator` →
-`capsule-worker`, IMP-434), with different child names and no
-`capsule-phase-planner` leaf. Whether these are two tiers or one tier with two
-naming generations is a decision this item should force, not inherit.
+So the claude/codex text cannot become canon as-is. Under
+**POL-003** (harness independence from host-harness seams) it may ship only as
+an **opt-in supplement** whose correctness rests on doctrine-owned contracts —
+or be rewritten onto a neutral delegation contract with quotient as one
+conforming adapter. That rewrite is the real work in this item; copying three
+directories into `plugins/doctrine/skills/` is not.
 
 ## Placement — the open question
 
 Presumed **project-local**, which is where doctrine's install model already
 lives: `.doctrine/skills` is the framework-owned canon and each harness links it
 (`harness.pi` / `harness.universal` → `.agents/skills`, `harness.claude` →
-`.claude/skills`). User-local would be a new altitude: `--global` is the only
-existing path to `$HOME`, and it would put the tier in every project on the
-machine regardless of whether that project is doctrine-governed. Decide it, and
-say why; do not let the current user-level location silently become the answer.
+`.claude/skills`).
+
+User-local deserves a real answer rather than a default, because it is the
+current state and it is *why* nobody noticed the three-way divergence: a copy no
+installer knows about is a copy no installer refreshes. It is also not an
+existing doctrine altitude for skills — `--global` is the only path to `$HOME`,
+and it would put the tier into every project on the machine, doctrine-governed
+or not. Decide it explicitly.
 
 ## What a fix has to account for
 
-1. **Defs are per-harness; skills are not.** IMP-523 established the asymmetry
-   for the capsule tier: the def carries harness-native spawning keys
-   (`allowNestedSubagents`/`allowedAgents` for pi; `Agent`/`TaskStop`/`maxTurns`
-   for claude; whatever codex's `.codex/agents/*.toml` schema is — see IMP-515),
-   while the skill prose is shared. The sub-orchestrator charter is the def half
-   and needs three variants; the seat skill is the prose half and needs either
-   one harness-neutral text or conditional arms.
-2. **The pi text is jail-shaped.** It already carries "run inside the existing
-   jail and main worktree", "never assume they can read host paths mentioned in
-   an older handover", "do not require Quotient". Those are correct for a
-   confined pi worker and wrong verbatim for a claude session on a host. Whatever
-   ships must not carry confinement assumptions into a harness that has none.
-3. **Model/provider is configured, never inferred.** The pi skill is explicit
-   about this ("do not automatically switch to GPT, Sonnet or Opus"); a shipped
-   version must keep that, and the claude/codex variants must not bake
-   `model: opus`/`sonnet` the way `install/agents/claude/capsule-*.md` does.
-4. **`pi-orchestrate` overlaps.** A second pi skill in the same directory claims
-   the same delegation ground ("bounded phase planning, tests and implementation
-   through native pi subagents while retaining orchestration, verification,
-   commits and Doctrine state"). Shipping either without ruling on the other
-   leaves two skills competing for one seat.
+1. **The charter is the def half.** Per-harness frontmatter (pi:
+   `allowNestedSubagents`/`allowedAgents`; claude: `model`/`maxTurns`/`tools`/
+   `TaskStop`; codex: `.codex/agents/*.toml`, gated on IMP-515) with a shared
+   body. Same split IMP-523 needs for the capsule tier — whichever lands first
+   sets the pattern.
+2. **No baked model.** `references/sub-orchestrator.md` pins `model: opus`, and
+   `install/agents/claude/capsule-*.md` pins `opus`/`sonnet`. A shipped version
+   must let the operator's configuration decide; the pi skill is already
+   explicit about this ("do not automatically switch to GPT, Sonnet or Opus").
+3. **Confinement is not portable.** The pi text is jail-shaped and correct for a
+   confined worker; the claude/codex tier runs outside any jail on the host's
+   own auto-mode permissions. Neither assumption may leak into the other's copy.
+4. **`pi-orchestrate` overlaps.** A second skill claiming the same delegation
+   ground ("bounded phase planning, tests and implementation through native pi
+   subagents while retaining orchestration, verification, commits and Doctrine
+   state"). Shipping the seat without ruling on `pi-orchestrate` leaves two
+   skills competing for one seat.
 
 ## Relations
 
-- **IMP-523** (pi capsule tier) — same class, sibling tier. Whichever is
-  designed first should set the def/skill harness-split pattern for the other.
+- **IMP-523** (pi capsule tier) — sibling tier, same def-per-harness /
+  skill-shared asymmetry.
 - **IMP-434** (capsule defs + `/capsule-driver`) — the shipped-tier precedent.
-- **IMP-515** (codex agent defs) — codex has no agent-def install leg at all
-  after SL-281 (`skills_via = "universal"`), so a codex sub-orchestrator def
-  depends on that card.
-- **IDE-053** (orchestrator/worker role prompts for the clone workflow) —
-  adjacent: role prompts were deleted in SL-254 PHASE-10, and the orchestrator
-  concept is split across that deletion, this tier, and the capsule tier.
+- **IMP-515** (codex agent defs) — codex has no agent-def install leg after
+  SL-281 (`skills_via = "universal"`), so a codex sub-orchestrator def depends
+  on it.
+- **IDE-053** (orchestrator/worker role prompts for the clone workflow) — the
+  orchestrator concept is split across that deletion, the capsule tier and this
+  tier.
+- Governed by **POL-003**; the opt-in-supplement question it decides was raised
+  as IDE-034.
