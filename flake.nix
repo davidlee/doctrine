@@ -5,16 +5,6 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     devshell.url = "github:numtide/devshell";
-    agents = {
-      url = "github:davidlee/nix-config?dir=flakes/agents";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    # quotient's form-family builder, for quotientForms below. Unpinned:
-    # a break upstream should surface here.
-    quotient = {
-      url = "github:davidlee/quotient";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
   };
@@ -67,22 +57,16 @@
         # mkDerivationFromStdenv, i.e. only into derivations built with it — here
         # just webModules/webDist (bun/vite, nothing native to link). It never
         # reaches crane (craneLib is built over plain pkgs) nor a devshell
-        # `cargo build`. mold arrives via CARGO_BUILD_RUSTFLAGS in .envrc instead.
+        # `cargo build`. mold arrives via CARGO_BUILD_RUSTFLAGS from the host's
+        # env (~/flakes/agents/dev-env.nix: host shells, jails and forms) instead.
         # It also throws outright on darwin ("Mold can't be used to emit Mach-O"),
         # and this stdenv is forced on every darwin eval path.
         inherit (pkgs) stdenv;
         isLinux = stdenv.hostPlatform.isLinux;
 
-        # Evaluates on every system: agentsByName/unjailed (the bare agent
-        # CLIs) exist on darwin too; only the jail builders are Linux-only,
-        # and those are read solely under isLinux guards (ISS-526).
-        jailLib = inputs.agents.lib.${system}.mkJailedAgents {};
-
-        # The tool set minus the jailed agents: what a doctrine working
-        # environment needs, independent of how it is confined. Exported as
-        # `packages.dev-tools` for consumers that jail differently — the
-        # microvm capsule runs the agent inside a VM, where a bwrap wrapper
-        # binding *host* paths is meaningless.
+        # What a doctrine working environment needs, independent of how (or
+        # whether) it is confined. Exported as `packages.dev-tools`; consumers
+        # build the environment around it (agents, jails, forms live there).
         devToolPkgs = commonToolPkgs ++ conformancePkgs;
 
         commonToolPkgs = with pkgs; [
@@ -90,7 +74,7 @@
           jjui
           just
           rust # the single toolchain, incl. rust-analyzer
-          mold # must be on PATH for .envrc's -C link-arg=-fuse-ld=mold
+          mold # must be on PATH for the host env's -C link-arg=-fuse-ld=mold
           helix
           cargo-edit # `cargo set-version` for the release recipe
           # tokei
@@ -126,8 +110,7 @@
           socat # row 5 — present transitively before this, undeclared
           tinyproxy
           iproute2
-          # capsule-verify (justfile) and the live-bwrap rows run it; it used
-          # to arrive only through jailPkgs (CHR-184).
+          # capsule-verify (justfile) and the live-bwrap rows run it (CHR-184).
           bubblewrap
         ]);
 
@@ -138,131 +121,6 @@
         devEnv = {
           env.LD_LIBRARY_PATH = lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib];
           hostEnv = ["DOCTRINE_BIN"]; # a per-checkout override
-        };
-
-        projectPkgs =
-          devToolPkgs
-          ++ (with jailLib.unjailed; [
-            codex
-            claude
-          ]);
-
-        # The project half of every jail's and every form's options, over
-        # either builder's combinator set (agents README § quotient forms).
-        # No provider key enters these jails: mkJail defaults to the LLM
-        # gateway (`gatewayClient "pi"`), and the jail gets only the gateway
-        # key, on FD 22. A jail with `gateway = null` falls back to
-        # jailed-agents.nix's own key forwarding; don't duplicate it here.
-        projectOptions = c:
-          with c; [
-            (jailLib.tryFwdEnv c "DOCTRINE_BIN")
-            (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
-            # No CLAUDE_CODE_SHELL or bashInteractive here: the agents flake pins
-            # both in every jail.
-            # No CARGO_TARGET_DIR redirect: each worktree builds into its own
-            # in-tree, gitignored `target/` (cargo's default). Per-worktree build
-            # isolation is then correct by construction — both dispatch arms, `just`
-            # and raw `cargo`, with no shared target to thrash and no env channel
-            # required (SL-156; ADR-008 D-B1/D-B5 via REV-011). The original
-            # cross-mount concern (a jail-built test binary bakes CARGO_BIN_EXE at
-            # the jail mount path and spawn-fails on the host, and vice versa) is
-            # satisfied *by* in-tree targets: jail `/workspace/doctrine/target` and
-            # host `/home/.../doctrine/target` are distinct physical dirs, so no
-            # binary is shared across mounts. Persistent trees (main/edge) keep a
-            # warm cache in their bound `target/`; ephemeral forks cold-build (the
-            # deliberate trade — sccache is the warm-fork lever, ADR-008 D-B4). Host
-            # was always on default `target/` and is unchanged. Do not re-add a
-            # shared redirect: it reintroduces the cross-worktree fingerprint thrash
-            # this removal fixes.
-            #(ro-bind "${pkgs.coreutils}/bin/env" "/usr/bin/env")
-            #(add-pkg-deps [pkgs.coreutils])
-            # No doctrine bind here: the agents flake's jail default ro-binds the
-            # host's doctrine install dir (~/.local/share/doctrine/bin, from
-            # `just install`) at /run/doctrine-bin, ahead on PATH. A directory
-            # bind, not a file bind, so a reinstall's atomic rename reaches a
-            # running jail (IMP-249).
-          ];
-
-        # workspaceDeps now sourced from the JAIL_WORKSPACE_DEPS env var
-        # (set in the gitignored .envrc; requires `use flake --impure`).
-        # makeJailedAgent reads + merges it, so nothing portable lives here.
-
-        # Every jail in this flake shares the same confinement posture; only
-        # the agent and its subagent graph differ. Holding the shared half here
-        # keeps a jail added later from silently missing the project's tools
-        # and env.
-        mkJail = maker: args:
-          maker (
-            {
-              profile = "specDev";
-              extraPkgs = projectPkgs;
-              extraOptions = projectOptions jailLib.combinators;
-              gateway = jailLib.gatewayClient "pi";
-            }
-            // args
-          );
-
-        jailPkgs = lib.optionalAttrs isLinux {
-          jailed-pi = mkJail jailLib.makeJailedPi {
-            allowSelfAsSubagent = true;
-            maxSubagentDepth = 2;
-          };
-          jailed-pi-research = mkJail jailLib.makeJailedPi {
-            name = "pi-research";
-            profile = "research";
-            allowSelfAsSubagent = true;
-          };
-          jailed-claude = mkJail jailLib.makeJailedClaude {
-            allowSelfAsSubagent = true;
-            # claude can spawn pi inside its own jail (no re-jail).
-            subagents = [
-              "pi"
-            ];
-            maxSubagentDepth = 2;
-          };
-          jailed-codex = mkJail jailLib.makeJailedCodex {
-            subagents = [
-              "claude"
-              "pi"
-              "codex"
-            ];
-          };
-          jailed-shell = mkJail jailLib.makeJailedAgent {
-            name = "shell";
-            agent = pkgs.zsh;
-            subagents = [
-              "pi"
-              "claude"
-            ];
-          };
-
-          bubblewrap = pkgs.bubblewrap;
-        };
-
-        # quotient's per-call forms for this root (`quotient help form`): the
-        # jails quotient's `pi_agent` runs a delegate in, with the lib's
-        # posture, this project's toolchain and its options. The prefix keeps
-        # the binary names the doctrine quotient policy names
-        # (`just quotient-forms`). No persisted home: the form shares nothing
-        # writable beyond the root and the session directory.
-        quotientFamily = jailLib.quotientFormFamily {
-          inherit (inputs) quotient;
-          prefix = "doctrine-quotient";
-          packages = projectPkgs;
-          options = c:
-            projectOptions c
-            ++ [
-              # The root is bound at its host path, so host and delegate
-              # share `target/`: differing rustflags (.envrc's mold flag)
-              # would make each rebuild over the other. Not RUSTC_WRAPPER:
-              # sccache's host cache dir is unwritable here, and the
-              # wrapper does not enter cargo's fingerprint.
-              (jailLib.tryFwdEnv c "CARGO_BUILD_RUSTFLAGS")
-            ];
-        };
-        quotientForms = lib.optionalAttrs isLinux {
-          doctrine-quotient-read = quotientFamily.read;
-          doctrine-quotient-write = quotientFamily.write;
         };
 
         # Frontend: hermetic bun build → web/map/dist, embedded into the binary
@@ -387,70 +245,44 @@
         # The SAME instance the let block above uses — not a second
         # `import nixpkgs`. Two instantiations per system double the eval and
         # hand the devshell module a different pkgs than `packages` is built
-        # from, which forks drvs and rebuilds from scratch (see the `dirge`
-        # note below for that failure mode).
+        # from, which forks drvs and rebuilds from scratch.
         _module.args.pkgs = pkgs;
 
-        # quotient's form check over the family's text (`nix flake check`).
-        checks = lib.optionalAttrs isLinux {
-          quotient-forms = inputs.quotient.lib.checkFormFamily {
-            inherit pkgs;
-            family = quotientFamily;
+        packages = {
+          inherit doctrine;
+          # Frontend layers exposed individually so they are buildable and
+          # debuggable without the full rust binary — `nix build .#web-modules -L`
+          # streams the bun install, `.#web-dist` the vite build, without
+          # reaching them only through `doctrine`.
+          web-modules = webModules;
+          web-dist = webDist;
+          # The gate's tools as one closure, for out-of-tree consumers that
+          # build the environment around them (SL-022's producer contract;
+          # flakes:SL-023's dev-envs). No product: a consumer snapshots the
+          # checkout per reload, and a crane doctrine here would rebuild with
+          # every snapshot (CHR-184). The host and jails take `just install`.
+          dev-tools = pkgs.buildEnv {
+            name = "doctrine-dev-tools";
+            paths = devToolPkgs;
+            ignoreCollisions = true;
+            passthru = {inherit devEnv;};
           };
+          # The fleet guest's tools: the same set plus the product, which the
+          # guest cannot reach from the host's `just install` (CHR-184). The
+          # microvm capsule puts this straight into the guest's
+          # systemPackages, so the VM and the devshell can't drift.
+          capsule-tools = pkgs.buildEnv {
+            name = "doctrine-capsule-tools";
+            paths = devToolPkgs ++ [doctrine];
+            ignoreCollisions = true;
+          };
+          default = doctrine;
         };
 
-        packages =
-          jailPkgs
-          // quotientForms
-          // {
-            inherit doctrine;
-            # Unjailed dirge pulled straight from the agents flake — same pkgs +
-            # callPackage as agents builds it, so it's the
-            # identical derivation (one drv hash, store path reused, no rebuild).
-            # Must come from agents's eval; doctrine's own pkgs (different nixpkgs +
-            # rust-overlay pin) would fork the drv and rebuild from scratch.
-            dirge = inputs.agents.packages.${system}.dirge;
-            # Frontend layers exposed individually so they are buildable and
-            # debuggable without the full rust binary — `nix build .#web-modules -L`
-            # streams the bun install, `.#web-dist` the vite build, without
-            # reaching them only through `doctrine`.
-            web-modules = webModules;
-            web-dist = webDist;
-            # The gate's tools as one closure, for out-of-tree consumers that
-            # build the environment around them (SL-022's producer contract;
-            # flakes:SL-023's dev-envs). No product: a consumer snapshots the
-            # checkout per reload, and a crane doctrine here would rebuild with
-            # every snapshot (CHR-184). The host and jails take `just install`.
-            dev-tools = pkgs.buildEnv {
-              name = "doctrine-dev-tools";
-              paths = devToolPkgs;
-              ignoreCollisions = true;
-              passthru = {inherit devEnv;};
-            };
-            # The fleet guest's tools: the same set plus the product, which the
-            # guest cannot reach from the host's `just install` (CHR-184). The
-            # microvm capsule puts this straight into the guest's
-            # systemPackages, so the VM and the devshell can't drift.
-            capsule-tools = pkgs.buildEnv {
-              name = "doctrine-capsule-tools";
-              paths = devToolPkgs ++ [doctrine];
-              ignoreCollisions = true;
-            };
-            default = doctrine;
-          };
-
+        # The fallback shell, where no consumer builds one (the Mac, or a
+        # checkout without ~/flakes): the same tools and env as dev-tools.
         devshells.default = {
-          packages =
-            projectPkgs
-            # Bare (unjailed) agents on the host PATH, from agents's eval
-            # (jailLib.unjailed): pi and claude are the drvs the jails bundle;
-            # dirge has no jail, and here == packages.dirge below.
-            ++ (with jailLib.unjailed; [
-              pi
-              dirge
-              claude
-            ])
-            ++ lib.optionals isLinux (lib.attrValues jailPkgs);
+          packages = devToolPkgs;
 
           # darwin + nix: rustc's link line emits `-liconv` with `-nodefaultlibs`,
           # which strips the Nix clang wrapper's auto-injected NIX_LDFLAGS — so
@@ -463,52 +295,13 @@
             export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-L ${pkgs.libiconv}/lib"
           '';
 
-          env = [
-            {
-              name = "LD_LIBRARY_PATH";
-              value = lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib];
-            }
-            {
-              name = "UV_PYTHON_PREFERENCE";
-              value = "only-system";
-            }
-          ];
+          env = lib.mapAttrsToList (name: value: {inherit name value;}) devEnv.env;
 
           commands = [
-            {
-              name = "d";
-              help = "short for doctrine";
-              command = "doctrine $@";
-            }
             {
               name = "jd";
               help = "just doctrine";
               command = "just doctrine $@";
-            }
-            {
-              name = "drn";
-              help = "short for doctrine";
-              command = "doctrine $@";
-            }
-            {
-              name = "jpi";
-              help = "jailed-pi";
-              command = "jailed-pi $@";
-            }
-            {
-              name = "jcx";
-              help = "jailed-codex";
-              command = "jailed-codex $@";
-            }
-            {
-              name = "jcl";
-              help = "jailed-claude --dangerously-skip-permissions";
-              command = "jailed-claude --dangerously-skip-permissions $@";
-            }
-            {
-              name = "jail-zsh";
-              help = "jailed shell (zsh) in pi's context";
-              command = "jailed-shell $@";
             }
           ];
         };

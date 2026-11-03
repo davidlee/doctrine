@@ -211,15 +211,6 @@ clean:
 ## INSTALL
 ##
 
-# Build doctrine's quotient forms (flake.nix `quotientForms`) to fixed,
-# GC-rooted links, which the doctrine quotient policy names as
-# `<state>/forms/doctrine-<capability>/bin/doctrine-quotient-<capability>`.
-# Run after a flake change to the forms; `nix flake check` checks them (CHR-183).
-quotient-forms state=(env("XDG_STATE_HOME", env("HOME") / ".local/state") / "quotient"):
-  mkdir -p {{state}}/forms
-  nix build -o {{state}}/forms/doctrine-read .#doctrine-quotient-read
-  nix build -o {{state}}/forms/doctrine-write .#doctrine-quotient-write
-
 # Catches source-filter / asset-embed gaps `cargo build` can't (it reads the real
 # web/map/dist on disk; the ix sandbox builds the frontend hermetically). Slow
 # first run, crane-cached after. Host-real; a genuine failure exits non-zero, but
@@ -258,10 +249,13 @@ web-hash:
     exit 1
   fi
 
-# install with vite stage, into doctrine's own root: its bin/ is the directory
-# jails bind (agents flake), so nothing else in ~/.cargo/bin is exposed
+# install with vite stage, into doctrine's own root. Its bin/ is a host fact
+# (~/flakes/agents/doctrine.nix `installBinDir`): on PATH on the host, and bound
+# at the same path in every jail, so nothing else in ~/.cargo/bin is exposed.
+# A release build without mold: the host env's CARGO_BUILD_RUSTFLAGS is for dev
+# builds; crane never sees it, so only this recipe clears it.
 install: web-build
-  cargo install --path . --root ~/.local/share/doctrine
+  CARGO_BUILD_RUSTFLAGS= cargo install --path . --root ~/.local/share/doctrine
 
 # # list memories
 # list-memories:
