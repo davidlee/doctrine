@@ -126,7 +126,19 @@
           socat # row 5 — present transitively before this, undeclared
           tinyproxy
           iproute2
+          # capsule-verify (justfile) and the live-bwrap rows run it; it used
+          # to arrive only through jailPkgs (CHR-184).
+          bubblewrap
         ]);
+
+        # What the tools need beyond packages, as plain data, for a consumer
+        # that builds the environment around dev-tools (flakes:SL-023's
+        # dev-envs, CHR-184): `env` is set as given; each `hostEnv` name is
+        # forwarded from the launch environment when set.
+        devEnv = {
+          env.LD_LIBRARY_PATH = lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib];
+          hostEnv = ["DOCTRINE_BIN"]; # a per-checkout override
+        };
 
         projectPkgs =
           devToolPkgs
@@ -413,6 +425,14 @@
               # doctrine rides here, not in devToolPkgs: the host devshell and
               # jails take the cargo install (`just install`); the VM guest
               # can't reach the host's, so it keeps the crane build.
+              paths = devToolPkgs ++ [doctrine];
+              ignoreCollisions = true;
+              passthru = {inherit devEnv;};
+            };
+            # The fleet guest's tools: the same set plus the product, which the
+            # guest cannot reach from the host's `just install` (CHR-184).
+            capsule-tools = pkgs.buildEnv {
+              name = "doctrine-capsule-tools";
               paths = devToolPkgs ++ [doctrine];
               ignoreCollisions = true;
             };
