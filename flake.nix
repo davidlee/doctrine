@@ -416,21 +416,21 @@
             # reaching them only through `doctrine`.
             web-modules = webModules;
             web-dist = webDist;
-            # The devshell's tool set as one closure, for out-of-tree consumers
-            # that need the same tools without the devshell (the microvm
-            # capsule puts this straight into the guest's systemPackages, so
-            # the VM and this devshell can't drift).
+            # The gate's tools as one closure, for out-of-tree consumers that
+            # build the environment around them (SL-022's producer contract;
+            # flakes:SL-023's dev-envs). No product: a consumer snapshots the
+            # checkout per reload, and a crane doctrine here would rebuild with
+            # every snapshot (CHR-184). The host and jails take `just install`.
             dev-tools = pkgs.buildEnv {
               name = "doctrine-dev-tools";
-              # doctrine rides here, not in devToolPkgs: the host devshell and
-              # jails take the cargo install (`just install`); the VM guest
-              # can't reach the host's, so it keeps the crane build.
-              paths = devToolPkgs ++ [doctrine];
+              paths = devToolPkgs;
               ignoreCollisions = true;
               passthru = {inherit devEnv;};
             };
             # The fleet guest's tools: the same set plus the product, which the
-            # guest cannot reach from the host's `just install` (CHR-184).
+            # guest cannot reach from the host's `just install` (CHR-184). The
+            # microvm capsule puts this straight into the guest's
+            # systemPackages, so the VM and the devshell can't drift.
             capsule-tools = pkgs.buildEnv {
               name = "doctrine-capsule-tools";
               paths = devToolPkgs ++ [doctrine];

@@ -178,11 +178,13 @@ restore_ignored() {
 #
 # SL-245 was B with a perfectly current pin, which is why A alone is not enough.
 #
-# Neither costs a nix eval. A is sound rather than exact: `dev-tools` is
-# `devToolPkgs` in flake.nix resolved through flake.lock, so those two files are
-# the only way it moves — a false alarm is possible, silence is not. B is a smell
-# detector in `stateMaxBytes`'s sense: an image written before the pinned commit
-# existed cannot contain it, and the converse is not claimed.
+# Neither costs a nix eval. A is sound rather than exact: the guest takes
+# `capsule-tools` (the fleet's targets/doctrine.nix), the product plus a tool set
+# that is `devToolPkgs` in flake.nix resolved through flake.lock, so those two
+# files are the only way the tool set moves — a false alarm is possible, silence
+# is not. B is a smell detector in `stateMaxBytes`'s sense: an image written
+# before the pinned commit existed cannot contain it, and the converse is not
+# claimed.
 
 # Which oubliette built this slot is the slot's own answer, written by
 # `microvm -c`. Better than a constant here: it is per slot, and it names the
