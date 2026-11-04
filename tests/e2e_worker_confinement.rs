@@ -161,6 +161,7 @@ fn bwrap_confinement_boxes_writes_to_worktree_only() {
     let root_probe_path = repo_root.join("SL254-VT3-confinement-probe-do-not-commit");
     let probe = format!(
         "echo worker_env=${{DOCTRINE_WORKER:-MISSING}}; \
+         echo sccache_uds=${{SCCACHE_SERVER_UDS:-MISSING}}; \
          if echo probe >'{inside}/inside.txt' 2>/dev/null; then echo inside=ok; else echo inside=refused; fi; \
          if echo probe >'{outside}/outside.txt' 2>/dev/null; then echo outside=ok; else echo outside=refused; fi; \
          if echo probe >'{root}' 2>/dev/null; then echo root=ok; else echo root=refused; fi",
@@ -171,6 +172,8 @@ fn bwrap_confinement_boxes_writes_to_worktree_only() {
 
     let output = Command::new("bwrap")
         .args(&argv)
+        // As a host shell exports it: the worker must not inherit this address.
+        .env("SCCACHE_SERVER_UDS", "/run/user/1000/sccache.sock")
         .arg("--")
         .arg("/bin/sh")
         .arg("-c")
@@ -196,6 +199,10 @@ fn bwrap_confinement_boxes_writes_to_worktree_only() {
     assert!(
         stdout.contains("worker_env=1"),
         "DOCTRINE_WORKER=1 must be visible inside the confined process; stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("sccache_uds=/tmp/sccache.sock"),
+        "the worker's sccache server must live in its own /tmp, not the host's socket; stdout={stdout}"
     );
     assert!(
         stdout.contains("inside=ok"),

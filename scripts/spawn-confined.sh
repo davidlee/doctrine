@@ -181,6 +181,11 @@ case "$(uname)" in
       --chdir "$D"
       --die-with-parent
       --setenv DOCTRINE_WORKER 1
+      # The worker's sccache server is its own. `--ro-bind / /` leaves the host's
+      # socket reachable and the env is inherited, so a host address either hands
+      # the compile to a host server, outside this jail, or fails where no server
+      # runs: the client cannot bind in a read-only directory (flakes:RV-047 F-1).
+      --setenv SCCACHE_SERVER_UDS /tmp/sccache.sock
       # TMPDIR must point INSIDE the jail's writable set. Inherited, it names an
       # orchestrator-side path (`/work/tmp`, `/tmp/...`) that `--ro-bind / /`
       # leaves read-only, and a harness that mkdirs a per-session scratch dir

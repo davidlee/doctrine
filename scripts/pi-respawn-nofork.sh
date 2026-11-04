@@ -42,6 +42,7 @@ timeout "$BACKSTOP" \
     --chdir "$D" \
     --die-with-parent \
     --setenv DOCTRINE_WORKER 1 \
+    --setenv SCCACHE_SERVER_UDS /tmp/sccache.sock \
     pi --mode rpc --thinking off --session-dir "$D/.pi-session" \
     --no-extensions --no-skills --no-themes \
     --offline --approve --tools read,bash,edit,write,grep,find,ls \
