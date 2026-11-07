@@ -32,11 +32,11 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "publication/manifest.toml"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "plugins/doctrine/skills/execute/**"
@@ -49,6 +49,38 @@ intent = "scope-relevant"
 [[selector]]
 selector = "plugins/doctrine/skills/audit/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "install/commitment-ledger.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/plan/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/phase-plan/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/execute/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/consult/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/audit/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/glossary.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/using-doctrine.md"
+intent = "design-target"
 
 [[relation]]
 label = "related"
