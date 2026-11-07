@@ -543,6 +543,8 @@ not a restatement (`ADR-005`):
 '''
 satisfied_by = ["PHASE-02/EX-1"]
 how = "EX-1 gives each of the five skills its pointer per the table"
+needs = ["C-23"]
+gated_by = ["PHASE-02/EN-1"]
 verdict = "proportionate"
 note = "added for RV-431 F-1: the earlier row quoted only the lead-in"
 
@@ -577,6 +579,83 @@ basis = "RV-431 F-5"
 phase = "plan"
 retires = false
 successor = ""
+
+# ── Supersessions (RV-431 F-5) ──────────────────────────────────────────
+
+[[commitment]]
+id = "C-38"
+kind = "explicit"
+source = { section = "sec-3", heading = "Authoring procedure" }
+quote = '''
+mechanism — that is where host directives (project or harness conventions)
+govern how the procedure is applied (`POL-003`). The guidance names the seam
+and the proportionality, nothing more.'''
+satisfied_by = ["PHASE-01/EX-4"]
+how = "EX-4 carries the orchestration seam in neutral terms, prescribing no split or mechanism"
+verdict = "proportionate"
+note = "supersedes C-16, whose stored quote carried a newline the design lacks (RV-431 F-5)"
+
+[[commitment]]
+id = "C-39"
+kind = "explicit"
+source = { section = "sec-4", heading = "Plan review" }
+quote = '''
+Two RVs at facet `plan`, opened in parallel, each with its own raiser label
+(`review new` takes one raiser label per ledger, and two ledgers avoid turn
+contention).'''
+satisfied_by = ["PHASE-01/EX-5"]
+how = "EX-5: two RVs at facet plan, raisers commitments and sequencing, with the reads/checks table, fresh contexts, primary or solo tree"
+verdict = "proportionate"
+note = "supersedes C-18, whose stored quote carried a newline the design lacks (RV-431 F-5)"
+
+[[commitment]]
+id = "C-40"
+kind = "explicit"
+source = { section = "sec-5", heading = "Variances and lifecycle touchpoints" }
+quote = '''
+Between design lock and planning, extraction is the first close reading:
+defects return to `/design`; a different realisation chosen at planning is a
+variance with `phase = "plan"`.'''
+satisfied_by = ["PHASE-01/EX-6"]
+how = "EX-6 states plan-time defects and plan-time variances"
+verdict = "proportionate"
+note = "supersedes C-21, whose stored quote carried a newline the design lacks (RV-431 F-5)"
+
+[[variance]]
+commitment = "C-03"
+class = "realisation"
+change = "Retracts the preceding C-03 variance: its premise was false. A TOML multi-line literal adds no newline of its own; a quote ending mid-line puts the closing delimiter on its last line and is then exact. The verbatim predicate stands unchanged."
+basis = "RV-431 F-5 (raiser contest)"
+phase = "plan"
+retires = false
+successor = ""
+
+[[variance]]
+commitment = "C-16"
+class = "intent"
+change = "Superseded by C-38: transcription correction; the stored quote ended in a newline the design text lacks. The commitment itself is unchanged."
+basis = "RV-431 F-5; user delegated plan acceptances 2026-11-08: you can do my acceptances"
+phase = "plan"
+retires = true
+successor = "C-38"
+
+[[variance]]
+commitment = "C-18"
+class = "intent"
+change = "Superseded by C-39: transcription correction; the stored quote ended in a newline the design text lacks. The commitment itself is unchanged."
+basis = "RV-431 F-5; user delegated plan acceptances 2026-11-08: you can do my acceptances"
+phase = "plan"
+retires = true
+successor = "C-39"
+
+[[variance]]
+commitment = "C-21"
+class = "intent"
+change = "Superseded by C-40: transcription correction; the stored quote ended in a newline the design text lacks. The commitment itself is unchanged."
+basis = "RV-431 F-5; user delegated plan acceptances 2026-11-08: you can do my acceptances"
+phase = "plan"
+retires = true
+successor = "C-40"
 
 # ── Proofs ───────────────────────────────────────────────────────────────────
 

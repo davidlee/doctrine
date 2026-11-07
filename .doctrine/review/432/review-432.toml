@@ -19,12 +19,27 @@ note = """
 Sequencing pass over SL-287 plan.toml/plan.md/commitment-ledger.toml against design sec-3/sec-4 and the tree. Checked: phase order vs needs (agrees; C-31/C-29 -> PHASE-01 publication, gated by PHASE-02/EN-1); missed needs (none of correctness; F-3 precision); parallel candidates (C-30 valid vs PHASE-01, disjoint surface; C-29 conditionally); EN gates (PHASE-02/EN-1 gates via disk manifest, which every_shipped_lib_citation_resolves reads, lib_citation.rs:223,437); ends-green (no orphan/reachability-of-citation test found by search; reachability invariant needs the manifest entry, which PHASE-01/EX-1 adds; dedup_skills_route_not_restate bans only flag fragments and needs using-doctrine/--help, already present; bare-mention gate F-1); sizing (fine); VT reach (install.rs mod tests has asset_text/embedded_filenames via super::*, toml crate, asset_source::publication_manifest_bytes_from_disk and PublicationManifest::admit; verify-vt attribution is slice-wide via recorded source deltas, all three VT files are in the slice's change set; currently UNATTRIBUTABLE as expected pre-execution); binary for PHASE-02 VA (F-2).
 """
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Round 2: re-read RV-432 dispositions and the 8ed74a8ee diff of plan.toml, plan.md, commitment-ledger.toml. Verified F-1..F-3. Checked new rows C-34..C-37 and the C-03 variance for sequencing effects: C-34/C-35/C-37 are PHASE-01-only, so no edges; C-36 lacks the C-23 edge (F-4, nit). Phase order, EN gates and VT files are unchanged."
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Round 2: re-read RV-432 dispositions and the 8ed74a8ee diff of plan.toml, plan.md, commitment-ledger.toml. Verified F-1..F-3. Checked new rows C-34..C-37 and the C-03 variance for sequencing effects: C-34/C-35/C-37 are PHASE-01-only, so no edges; C-36 lacks the C-23 edge (F-4, nit). Phase order, EN gates and VT files are unchanged."
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Round 3: verified F-4 against the working-tree commitment-ledger.toml (C-36 needs/gated_by). No new sequencing defects."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-287"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Green-ness rationale misses the bare-mention gate that PHASE-01 arms for both phases"
 detail = """
@@ -56,9 +71,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Fixed: verified no_bare_library_mention_in_shipped_text (src/lib_citation.rs:452) arms on the new manifest entry. PHASE-01/EX-7 and PHASE-02/EX-5 now require shipped docs named only by lib: address; plan.md green-ness bullet names the test."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "plan.toml PHASE-01/EX-7 and PHASE-02/EX-5 now require lib:-address-only naming and cite no_bare_library_mention_in_shipped_text; plan.md green bullet names the test (8ed74a8ee)."
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "PHASE-02/VA-1 names no binary; PATH doctrine is the release and reverts or false-fails"
 detail = """
@@ -86,9 +106,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Fixed: PHASE-02/VA-1 and EX-4 name ./target/debug/doctrine (freshly built) for install and library show, and warn off the PATH release binary."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "PHASE-02/EX-4 and VA-1 now name ./target/debug/doctrine for install and library show and warn off the PATH release binary (8ed74a8ee)."
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "C-31/C-29 need C-22, which PHASE-02/EX-1 itself completes; the real edge is C-23"
 detail = """
@@ -112,6 +137,43 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Fixed: C-29 and C-31 now need C-23 (the manifest entry) only; plan.md diagram and rationale credit C-22 to both phases."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "C-29 and C-31 now need C-23 only; plan.md diagram/rationale credit C-22 to both phases (8ed74a8ee)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "New C-36 (touchpoint pointers) carries no needs/gated_by; duplicates C-31 edge-less"
+detail = """
+Claim: the revision added C-36 (commitment-ledger.toml, "Added by the plan review (RV-431 F-1)") with no `needs` and no `gated_by`. C-36 quotes the touchpoint passage, satisfied by PHASE-02/EX-1: five pointers to `lib:reference/commitment-ledger.md`. That is the same cross-phase dependency C-31 carries (`needs = ["C-23"]`, `gated_by = ["PHASE-02/EN-1"]`). C-36's quote is a superset of C-31's (C-31 is its lead-in).
+
+Evidence: `git diff HEAD~1 -- .doctrine/slice/287/commitment-ledger.toml`: C-36 has `satisfied_by = ["PHASE-02/EX-1"]` and no needs/gated_by fields. C-31 is unchanged apart from its needs, and is not retired: no [[variance]] retires it.
+
+Effect: none on the realised order. PHASE-02/EN-1 already gates PHASE-02, and C-31 still records the edge. But it breaks the ledger's own entry-criteria rule (design sec-3, "every cross-phase `needs` edge has such an EN"; ledger-wise, a pointer commitment with no recorded edge), and two governing rows now cover one passage.
+
+Suggested fix: give C-36 `needs = ["C-23"]` and `gated_by = ["PHASE-02/EN-1"]`. Or, if C-36 is meant to replace C-31's lead-in-only quote, retire C-31 with an intent variance (successor C-36) and carry the needs onto C-36. Which one is the commitments reviewer's call (RV-431); the missing edge is the sequencing defect.
+"""
+disposition = "fix-now"
+response = 'Fixed: C-36 gains needs = ["C-23"] and gated_by = ["PHASE-02/EN-1"], matching C-31. C-31 is kept, not retired: its quote is still current design text and C-36 widens rather than replaces it.'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Fixed: C-36 gains needs = ["C-23"] and gated_by = ["PHASE-02/EN-1"], matching C-31. C-31 is kept, not retired: its quote is still current design text and C-36 widens rather than replaces it.'
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = 'C-36 now has needs = ["C-23"] and gated_by = ["PHASE-02/EN-1"], matching C-31 (working-tree commitment-ledger.toml). Keeping C-31 as a governing row is a commitments-remit call; sequencing is consistent.'
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

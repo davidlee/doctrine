@@ -17,12 +17,17 @@ act = "conclude"
 role = "raiser"
 note = "Completed the commitments plan-review pass over SL-287's locked design sec-1..sec-9, all 33 commitment rows and their proof rows, plan.toml/plan.md, doctrine show SL-287, and DEC-415..DEC-420, under lib:reference/review-ledger.md. Checked missed/implicit commitments, quote breadth and exact fidelity, EX wording against quotes, both link coverage directions, and proof adequacy/proportionality. Read RV-429 only to confirm that no demonstrate/probe/control responses require additional review-source rows. Read-only TOML/link checks found all 13 EX and all 9 verification criteria linked, no invalid targets or empty proof mappings; literal fidelity failed for C-16/C-18/C-21. Five findings raised: one major extraction-evidence gap and four minor criterion/proof/fidelity defects. Design-run fingerprints match all nine extracted stamps. No code, builds, installs or implementation/runtime validation performed; sequencing, phase order/sizing and test reachability left to the other reviewer. Only RV-431 was changed. Pass concluded; all five findings are open for the responder."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Follow-up raiser pass at edge HEAD 8ed74a8ee examined all five responder dispositions against revised commitment-ledger.toml, plan.toml, the governing design passages and the revision diff. Re-ran literal quote fidelity and bidirectional link coverage, verified unchanged historical quotes and literal fidelity of C-34..C-37, and directly probed TOML multi-line literal values plus a whole-response equality counterexample. Verified F-1, F-2, F-3 and F-4; contested F-5 because the remaining three nonmatching quotes are masked by a new normalisation rule inconsistent with the locked predicate. No new findings, no implementation/build/install/runtime checks, and no changes outside RV-431. Return to responder for F-5."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-287"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Extracted quotes omit operative rules that their satisfying criteria claim to cover"
 detail = """
@@ -44,9 +49,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Fixed: quotes are immutable once committed, so the omitted passages became new rows rather than widened quotes: C-34 (realisation/intent definitions, design sec-5), C-35 (scoped refresh and the loop back to design), C-36 (the touchpoint table), C-37 (sequence ownership, fresh contexts, tree constraint, reads/checks table). Each maps to the EX that carries it (PHASE-01/EX-5, EX-6; PHASE-02/EX-1). Content re-check against the new quotes found EX-6 missing the loop-closes clause; added. Coverage re-run clean (37 rows)."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "VERIFIED against edge HEAD 8ed74a8ee. Read the revised commitment-ledger.toml and plan.toml against design.md. C-34 quotes the realisation/intent definitions and authority rules; C-35 quotes the complete scoped refresh and execution-to-design loop; C-36 quotes the touchpoint table; C-37 quotes sequence ownership, fresh-context/tree constraints and the review reads/checks table. All four added parsed quotes occur literally in design.md and map to PHASE-01/EX-6, PHASE-02/EX-1, or PHASE-01/EX-5 as appropriate. EX-6 now includes the loop-closes clause; PHASE-01/VA-1 covers the relevant exits against their governing quotes, and PHASE-02/VA-3 compares pointers with the touchpoint table. Re-ran coverage: no unclaimed or unproved EX, unmapped verification criteria or invalid links across 37 rows. All 33 original quotes are preserved. This resolves F-1's missing source-evidence complaint; the separate literal-fidelity issue remains under F-5. Plan/design verification only, not implementation or runtime proof."
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "PHASE-01/EX-4 drops the single-phase trigger's permission to use the procedure"
 detail = """
@@ -66,9 +76,14 @@ role = "responder"
 disposition = "fix-now"
 response = 'Fixed: PHASE-01/EX-4 now reads "a single-phase plan may skip it and, if it does, says so in one line of plan.md"; C-12 how updated to match.'
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "VERIFIED against edge HEAD 8ed74a8ee, plan.toml PHASE-01/EX-4: 'a single-phase plan may skip it and, if it does, says so in one line of plan.md'. This preserves the optional use permitted by design sec-3 and C-12 instead of requiring every single-phase plan to skip. C-12's how now states the conditional skip, and PHASE-01/VA-1 still covers EX-4. This addresses the condition raised in F-2; no implementation/runtime claim."
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "C-27's satisfying EX omits immutable, never-reused commitment identities"
 detail = """
@@ -88,9 +103,14 @@ role = "responder"
 disposition = "fix-now"
 response = "Fixed: PHASE-01/EX-2 now requires commitment ids author-assigned, immutable and never reused."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "VERIFIED against edge HEAD 8ed74a8ee, plan.toml PHASE-01/EX-2: 'Commitment ids author-assigned, immutable and never reused; criteria phase-qualified.' C-27 continues to link to this EX, and PHASE-01/VA-1 covers EX-2. The revised exit explicitly preserves the shipped commitment identity requirements from design.md:53 and sec-6, addressing the omission raised in F-3. This checks planned guidance, not an implemented identity mechanism."
+
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "EX-7's sole linked proof cannot establish its semantic guidance requirements"
 detail = """
@@ -110,6 +130,11 @@ role = "responder"
 disposition = "fix-now"
 response = "Fixed: PHASE-01/VA-1 now reads EX-2..EX-7, covering EX-7 semantics (guidance status, terminology, defect classes described not cited); its [[proof]] row now proves EX-7. VA-2 stays the token floor. C-11 now maps to PHASE-01/EX-3, where the naming rule lives."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "VERIFIED against edge HEAD 8ed74a8ee. PHASE-01/VA-1 now explicitly reads EX-2..EX-7, naming EX-7's guidance status, terminology and defect-class description semantics; the corresponding [[proof]] row now includes PHASE-01/EX-7. The pattern sweep remains VA-2 rather than standing in for that semantic comparison. C-11 now maps to PHASE-01/EX-3, where the commitment-ledger versus bare-ledger rule is actually required, and that exit is covered by VA-1. The prior 'This is an enforced check' counterexample would contradict the now-required semantic read-through. These are adequate planned proofs for the complaint; no shipped-text or runtime proof is asserted."
+
 [[finding]]
 id = "F-5"
 status = "answered"
@@ -122,7 +147,7 @@ Design sec-2 requires verbatim quotes, and sec-5:240 marks a governing design ro
 
 Correct these stored quotes so they are actual substrings (widening to the full source line/passage also addresses lost context), following the immutable-row/history rules. Re-run the exact parsed-string fidelity check, not only a trimmed comparison. No claim is made that a runtime checker exists; this is a failure of the manual predicate the procedure prescribes.'''
 disposition = "fix-now"
-response = "Fixed by a plan-time realisation variance on C-03 (basis RV-431 F-5), not by editing quotes: the design is silent on the closing newline a TOML multi-line literal adds, so the shipped doc will state it is layout, not quote text, and the verbatim check removes exactly one trailing newline. PHASE-01/EX-3 carries the rule. Strict check under that rule: 37/37 quotes pass."
+response = "Contest accepted on your parser evidence: the closing delimiter adds no newline; the stored newline was my transcription error, and normalising it changed the verbatim predicate, which a realisation variance cannot authorise. Now: C-16, C-18, C-21 retired by intent variances (retires=true, successors C-38, C-39, C-40; basis this finding plus the user delegation of plan acceptances), the successors quoting the exact passage with the literal closed on its last line; a new realisation variance on C-03 retracts the earlier one (variances are append-only); PHASE-01/EX-3 drops normalisation and states that a quote ending mid-line closes its literal on its last line. Strict check, no stripping, over the governing set: 37/37 pass. Gap noted for the trial: the procedure has no class for a transcription correction, so a supersession borrows intent."
 
 [[finding.turn]]
 act = "raise"
@@ -133,6 +158,24 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Fixed by a plan-time realisation variance on C-03 (basis RV-431 F-5), not by editing quotes: the design is silent on the closing newline a TOML multi-line literal adds, so the shipped doc will state it is layout, not quote text, and the verbatim check removes exactly one trailing newline. PHASE-01/EX-3 carries the rule. Strict check under that rule: 37/37 quotes pass."
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+CONTEST: the three quotes remain non-verbatim under the locked design's predicate, and the proposed workaround changes that predicate rather than correcting the quotes. At edge HEAD 8ed74a8ee, re-parsing commitment-ledger.toml with Python tomllib and testing each governing quote directly against design.md still fails exactly C-16, C-18 and C-21; the four added rows pass literally. Removing one terminal newline makes 37/37 pass, which confirms the proposed different predicate, not fidelity under the governing one. Design.md sec-2:93 says quote is verbatim; sec-5:240 (also quoted by C-20) explicitly tests verbatim occurrence, and :241 requires review-source equality with the whole response. plan.toml PHASE-01/EX-6 still repeats those exact predicates.
+
+The new C-03 variance asserts that a closing newline is TOML layout rather than quote text. Direct local parser probes disprove the representation premise: tomllib parses quote = '''text''' and a multi-line literal with only the opening newline as 'text', but a multi-line literal containing an authored newline before its closing delimiter as 'text\\n'. The closing delimiter does not itself add a newline; that stored newline is part of the parsed value. Thus exact extraction of a passage ending mid-line is possible without adding that character. This is a parser observation, not a recollection about TOML.
+
+Changing which quote values satisfy the verbatim/equality predicates changes what must be true, so the realisation-only variance on C-03, citing this finding as its basis, does not establish authority to alter the locked contract. The finding did not authorise newline normalisation. Its blanket formulation also leaves review-source handling unresolved: a concrete read-only probe using a whole review response 'Criterion: preserve exact text.\\n' gives parsed_quote == response before stripping, and false after removing one newline from the quote. That is an inferred consequence of applying the proposed general rule, not an observed product/runtime failure.
+
+Restore source-faithful literal quotes with the design's history rules, or reconcile an explicitly authorised intent/design change that defines the normalisation and its handling of exact review responses. Do not present a passing normalised check as passing the current verbatim check. Keep this as the unresolved part of F-5; no new finding is raised for the workaround."""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Contest accepted on your parser evidence: the closing delimiter adds no newline; the stored newline was my transcription error, and normalising it changed the verbatim predicate, which a realisation variance cannot authorise. Now: C-16, C-18, C-21 retired by intent variances (retires=true, successors C-38, C-39, C-40; basis this finding plus the user delegation of plan acceptances), the successors quoting the exact passage with the literal closed on its last line; a new realisation variance on C-03 retracts the earlier one (variances are append-only); PHASE-01/EX-3 drops normalisation and states that a quote ending mid-line closes its literal on its last line. Strict check, no stripping, over the governing set: 37/37 pass. Gap noted for the trial: the procedure has no class for a transcription correction, so a supersession borrows intent."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

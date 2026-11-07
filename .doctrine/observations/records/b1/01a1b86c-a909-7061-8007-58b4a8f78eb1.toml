@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1b86c-a909-7061-8007-58b4a8f78eb1"
+recorded_at = "2026-11-07T23:51:31.337404776Z"
+kind = "friction"
+summary = "commitment ledger dogfood: no variance class for a transcription correction"
+detail = "SL-287 /plan, plan review RV-431 F-5. Three ledger quotes carried a trailing newline the design lacks (an extraction error, the design unchanged). Quotes are immutable once committed, and retiring a row requires an intent variance, defined as 'what must be true changed; needs the user or a design revision first'. A transcription correction is neither realisation nor intent. I used intent with retires=true under the user's delegated plan acceptance. Evidence for the RFC-029 § 9 trial: either allow pre-execution ledger edits, or add a correction class."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
