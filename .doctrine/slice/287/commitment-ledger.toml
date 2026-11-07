@@ -1,0 +1,517 @@
+# Commitment ledger for SL-287 — dogfooded from design.md § 2–5 before the
+# reference doc exists. Authored; quotes are verbatim and never edited.
+schema = "commitment-ledger/1"
+
+[[extracted]]
+section = "sec-1"
+fingerprint = "38a55ed7132e"
+[[extracted]]
+section = "sec-2"
+fingerprint = "23232f961eac"
+[[extracted]]
+section = "sec-3"
+fingerprint = "9521948e75e4"
+[[extracted]]
+section = "sec-4"
+fingerprint = "afa22eb1bb82"
+[[extracted]]
+section = "sec-5"
+fingerprint = "9d257f99c1aa"
+[[extracted]]
+section = "sec-6"
+fingerprint = "f62069247423"
+[[extracted]]
+section = "sec-7"
+fingerprint = "34457498e11c"
+[[extracted]]
+section = "sec-8"
+fingerprint = "512a867fd4dd"
+[[extracted]]
+section = "sec-9"
+fingerprint = "3feabb169a0b"
+# sec-9 (risks) yields no rows: its residuals are follow-ups, not deliverables.
+# RV-429 has no demonstrate/probe/control findings, so no review rows.
+
+# ── PHASE-01: the reference doc, its publication, the ship test ──────────────
+
+[[commitment]]
+id = "C-01"
+kind = "explicit"
+source = { section = "sec-1", heading = "What changes and why" }
+quote = '''
+No engine, schema, verb or check changes. One test is added (§ Code impact).
+'''
+satisfied_by = ["PHASE-01/EX-8", "PHASE-02/EX-5"]
+how = "each phase's diff touches only its listed paths; the one src change is the ship test"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-02"
+kind = "explicit"
+source = { section = "sec-2", heading = "The commitment ledger" }
+quote = '''
+`commitment-ledger.toml` in the slice folder — **authored** tier, committed and
+reviewed with the plan (`DEC-415`). Nothing parses it; its schema is the
+shipped reference doc's example, and the marker line keeps a later reader
+possible without a migration.
+'''
+satisfied_by = ["PHASE-01/EX-2", "PHASE-01/EX-3"]
+how = "EX-2 fixes the example as the schema with the marker line; EX-3 states location, tier and that nothing parses it"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-03"
+kind = "explicit"
+source = { section = "sec-2", heading = "The commitment ledger" }
+quote = '''
+- **`quote` is verbatim and never edited.** Change is recorded as a variance.
+  `source` names the design-run section id (`design.md` carries a stable
+  `doctrine:section` marker per section) plus its heading; never a line.
+'''
+satisfied_by = ["PHASE-01/EX-3"]
+how = "EX-3 lists the quote and source rules"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-04"
+kind = "explicit"
+source = { section = "sec-2", heading = "The commitment ledger" }
+quote = '''
+- **Two source kinds.** A *design* row quotes `design.md`. A *review* row
+  quotes the response of a routed design-review finding — one routed to
+  `demonstrate`, `probe` or `control`, whose criterion sketch and placement
+  constraint stay on the review ledger by rule and are never copied into the
+  design. Its `source` names the RV and finding; its quote is the *whole*
+  current response, and its check is equality with the response in
+  `doctrine review show RV-NNN -f F-n`, not containment — so an amendment that
+  appends to the response is a change.
+'''
+satisfied_by = ["PHASE-01/EX-2", "PHASE-01/EX-3"]
+how = "EX-2 carries one row of each source kind; EX-3 states whole-response equality, not containment"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-05"
+kind = "explicit"
+source = { section = "sec-2", heading = "The commitment ledger" }
+quote = '''
+- **The governing set** is every commitment not retired. An `intent` variance
+  with `retires = true` ends its commitment: superseded when it names a
+  `successor`, withdrawn when it does not. A retired row keeps its quote as
+  history; satisfaction, coverage, quote checks and phase-sheet copying all
+  read the governing set only.
+'''
+satisfied_by = ["PHASE-01/EX-2", "PHASE-01/EX-3"]
+how = "EX-2's variance row carries retires/successor; EX-3 defines the governing set and who reads it"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-06"
+kind = "explicit"
+source = { section = "sec-2", heading = "The commitment ledger" }
+quote = '''
+- **`[[extracted]]` stamps what was read** — each section's fingerprint at
+  extraction — so a later revision of the design is detectable per section
+  (§ Variances: refresh after a design revision).
+'''
+satisfied_by = ["PHASE-01/EX-2", "PHASE-01/EX-3"]
+how = "EX-2's example has an [[extracted]] table; EX-3 states its purpose"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-07"
+kind = "explicit"
+source = { section = "sec-2", heading = "The commitment ledger" }
+quote = '''
+- **Implicit commitments** are those the design entails without stating — e.g.
+  a behaviour it relies on staying unchanged. They carry `kind = "implicit"`
+  and a `quote` of the passage that entails them.
+'''
+satisfied_by = ["PHASE-01/EX-3"]
+how = "EX-3 names implicit commitments and what they quote"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-08"
+kind = "explicit"
+source = { section = "sec-2", heading = "The commitment ledger" }
+quote = '''
+- **`needs` is correctness only** — "C-04 cannot be correct until C-01
+  holds". No soft ordering field; phase order carries taste. Optional and
+  expected to be sparse: omit it when the dependency is simply the whole prior
+  phase. `needs` must be acyclic.
+'''
+satisfied_by = ["PHASE-01/EX-3"]
+how = "EX-3 states needs as correctness-only, optional, sparse, acyclic, no soft field"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-09"
+kind = "explicit"
+source = { section = "sec-2", heading = "The commitment ledger" }
+quote = '''
+- **Proofs are a separate table** in `REQ-468`'s shape. Commitment → EX lives
+  on the commitment; EX ← VT lives on the proof; every coverage direction is
+  derived from those two, never authored twice.
+'''
+satisfied_by = ["PHASE-01/EX-2", "PHASE-01/EX-3"]
+how = "EX-2 has a [[proof]] table; EX-3 states derived coverage. The REQ id is not shipped (C-24)"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-10"
+kind = "explicit"
+source = { section = "sec-2", heading = "The commitment ledger" }
+quote = '''
+- **No link field goes into `plan.toml`.** The plan reader drops unknown fields
+  silently today (`RFC-029` OQ-1), so authoring one there would read as
+  recorded and be lost.
+'''
+satisfied_by = ["PHASE-01/EX-3"]
+how = "EX-3 states the rule and the reason, without the RFC id"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-11"
+kind = "explicit"
+source = { section = "sec-2", heading = "The commitment ledger" }
+quote = '''
+- Name it "commitment ledger" everywhere; bare "ledger" means the review ledger.
+'''
+satisfied_by = ["PHASE-01/EX-7", "PHASE-02/EX-3"]
+how = "EX-7 holds the doc to the naming; PHASE-02/EX-3 makes the glossary distinguish the two"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-12"
+kind = "explicit"
+source = { section = "sec-3", heading = "Authoring procedure" }
+quote = '''
+**Trigger** (`DEC-417`): required for any plan with more than one phase. A
+single-phase plan may skip it and says so in one line of `plan.md`. The trigger
+reads only the plan's own content (`POL-002`).
+'''
+satisfied_by = ["PHASE-01/EX-4"]
+how = "EX-4 states the trigger, the one-line skip and that it reads only the plan"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-13"
+kind = "explicit"
+source = { section = "sec-3", heading = "Authoring procedure" }
+quote = '''
+1. **Extract** — after scaffolding, before authoring phases. Walk `design.md`
+   section by section; one row per commitment, explicit or implicit, quoted.
+'''
+satisfied_by = ["PHASE-01/EX-4"]
+how = "EX-4 carries the extract step: when, how, review rows, [[extracted]] stamps, defects return to design"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-14"
+kind = "explicit"
+source = { section = "sec-3", heading = "Authoring procedure" }
+quote = '''
+2. **Satisfy** — while authoring `plan.toml`, fill each row's `satisfied_by`,
+   `how` and `gated_by`, and add `[[proof]]` rows for each verification
+   criterion. Use `needs` to construct the plan:
+'''
+satisfied_by = ["PHASE-01/EX-4"]
+how = "EX-4 carries satisfy with the three needs uses: sequencing, gates, parallel candidates (host decides)"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-15"
+kind = "explicit"
+source = { section = "sec-3", heading = "Authoring procedure" }
+quote = '''
+3. **Cross-check** (`DEC-416`), before the first commit:
+   - *coverage* — over the governing set: a commitment no EX satisfies; an EX no proof proves; a
+     verification criterion that proves nothing; an EX that meets no commitment
+     (an extraction gap or scope drift — resolve which);
+   - *content* — each satisfying EX's wording against the quote: counts, names,
+     sets, conditions;
+   - *proportionality* — set each row's `verdict`: `proportionate`; `weak` (the
+     proof does not exercise the commitment, e.g. a keyword floor standing in
+     for behaviour); `excessive` (more or brittler proof than the risk
+     warrants); `deferred` (proved later or at audit — `note` says where and
+     why). Never count tests.
+   - *entry criteria* — every `gated_by` names an EN on the relying phase that
+     actually gates the commitment; every cross-phase `needs` edge has such an
+     EN; `needs` has no cycle and never points forward.
+'''
+satisfied_by = ["PHASE-01/EX-4"]
+how = "EX-4 names the four checks: coverage (four cases, governing set), content, proportionality (four verdicts, never count tests), entry criteria"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-16"
+kind = "explicit"
+source = { section = "sec-3", heading = "Authoring procedure" }
+quote = '''
+mechanism — that is where host directives (project or harness conventions)
+govern how the procedure is applied (`POL-003`). The guidance names the seam
+and the proportionality, nothing more.
+'''
+satisfied_by = ["PHASE-01/EX-4"]
+how = "EX-4 carries the orchestration seam in neutral terms, prescribing no split or mechanism"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-17"
+kind = "explicit"
+source = { section = "sec-4", heading = "Plan review" }
+quote = '''
+For multi-phase plans this replaces `/plan` step 7 ("consider plan
+critically"); its findings feed the existing revise steps 8–9 (`DEC-418`).
+'''
+satisfied_by = ["PHASE-01/EX-5", "PHASE-02/EX-1"]
+how = "EX-5 specifies the review; PHASE-02/EX-1 wires it into /plan step 7"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-18"
+kind = "explicit"
+source = { section = "sec-4", heading = "Plan review" }
+quote = '''
+Two RVs at facet `plan`, opened in parallel, each with its own raiser label
+(`review new` takes one raiser label per ledger, and two ledgers avoid turn
+contention).
+'''
+satisfied_by = ["PHASE-01/EX-5"]
+how = "EX-5: two RVs at facet plan, raisers commitments and sequencing, with the reads/checks table, fresh contexts, primary or solo tree"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-19"
+kind = "explicit"
+source = { section = "sec-5", heading = "Variances and lifecycle touchpoints" }
+quote = '''
+A variance is a change against a specific commitment after extraction
+(`DEC-420`). It is appended, never edited in place, and the `quote` stays.
+'''
+satisfied_by = ["PHASE-01/EX-6"]
+how = "EX-6: append-only; realisation needs a recorded basis, intent needs the user or a design revision first"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-20"
+kind = "explicit"
+source = { section = "sec-5", heading = "Variances and lifecycle touchpoints" }
+quote = '''
+- **Detect** — at the locked-exit handoff to `/plan`, and at the start of each
+  `/phase-plan`, the ledger is stale if any of these holds:
+  - the current section-id set (`doctrine design show --format prompt`)
+    differs from the `[[extracted]]` set — a section added or removed;
+  - a recorded fingerprint differs from the current one;
+  - a governing design row's quote no longer occurs verbatim in `design.md`;
+  - a governing review row's quote no longer equals its finding's response;
+  - a routed finding on the design-review RV has no governing row.
+
+  Without a managed design run, the fallback is the `doctrine:section` markers
+  in `design.md` for the section set, plus the quote check and a diff of
+  `design.md` since the ledger's last commit.
+'''
+satisfied_by = ["PHASE-01/EX-6"]
+how = "EX-6 carries the five stale predicates, the no-run fallback, and the scoped refresh with retirement and re-stamp"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-21"
+kind = "explicit"
+source = { section = "sec-5", heading = "Variances and lifecycle touchpoints" }
+quote = '''
+Between design lock and planning, extraction is the first close reading:
+defects return to `/design`; a different realisation chosen at planning is a
+variance with `phase = "plan"`.
+'''
+satisfied_by = ["PHASE-01/EX-6"]
+how = "EX-6 states plan-time defects and plan-time variances"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-22"
+kind = "explicit"
+source = { section = "sec-6", heading = "Governance and guidance" }
+quote = '''
+- **`ADR-005`** — one normative home: `install/commitment-ledger.md`, published
+  as `lib:reference/commitment-ledger.md`. Skills route to it. It must be
+  pointed at by a skill to be reachable; five skills do.
+'''
+satisfied_by = ["PHASE-01/EX-1", "PHASE-02/EX-1"]
+how = "PHASE-01/EX-1 creates and publishes the doc; PHASE-02/EX-1 adds the five pointers"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-23"
+kind = "explicit"
+source = { section = "sec-6", heading = "Governance and guidance" }
+quote = '''
+- **`ADR-019`** — publication needs a `publication/manifest.toml` entry, or
+  `lib:` citations do not resolve.
+'''
+satisfied_by = ["PHASE-01/EX-1"]
+how = "EX-1 adds the [[entry]] beside review-ledger's"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-24"
+kind = "explicit"
+source = { section = "sec-6", heading = "Governance and guidance" }
+quote = '''
+- **`ADR-024` / `POL-002`** — shipped text grounds only on prose, `lib:`
+  addresses, skill names and CLI verbs. No `SL-`/`RFC-`/`DEC-`/`REQ-` ids, no
+  `src/` paths; the defect classes are described, not cited.
+'''
+satisfied_by = ["PHASE-01/EX-7", "PHASE-02/EX-5"]
+how = "each phase's EX holds its edited shipped files to it; swept by VA-2 in each phase"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-25"
+kind = "explicit"
+source = { section = "sec-6", heading = "Governance and guidance" }
+quote = '''
+- **`POL-003`** — the orchestration seam is described in neutral terms
+  (planner, delegate, reviewer); no harness, tool or delegate mechanism is
+  named. Host directives decide the split.
+'''
+satisfied_by = ["PHASE-01/EX-4"]
+how = "EX-4's seam clause"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-26"
+kind = "explicit"
+source = { section = "sec-6", heading = "Governance and guidance" }
+quote = '''
+- **`ADR-007`** — the plan review is the existing RV kind at facet `plan`; no
+  new facet, kind or multi-raiser mechanism.
+'''
+satisfied_by = ["PHASE-01/EX-5"]
+how = "EX-5 specifies the review on the existing kind and facet"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-27"
+kind = "explicit"
+source = { section = "sec-6", heading = "Governance and guidance" }
+quote = '''
+- **`STD-002` / `DEC-101`** — "commitment", never "obligation"; ledger ids are
+  author-assigned and immutable; criteria are phase-qualified.
+'''
+satisfied_by = ["PHASE-01/EX-2", "PHASE-01/EX-7"]
+how = "EX-2's example uses author ids and phase-qualified criteria; EX-7 bans 'obligation'"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-28"
+kind = "explicit"
+source = { section = "sec-6", heading = "Governance and guidance" }
+quote = '''
+- **`DEC-101` authoring rule** — guidance, never presented as an enforced check.
+'''
+satisfied_by = ["PHASE-01/EX-7", "PHASE-02/EX-1"]
+how = "the doc and every pointer present the procedure as guidance"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-29"
+kind = "explicit"
+source = { section = "sec-6", heading = "Governance and guidance" }
+quote = '''
+- **Storage rule** — the ledger is authored TOML. `lib:reference/glossary.md`'s
+  slice-directory layout and `lib:reference/using-doctrine.md`'s storage example
+  gain it, and the glossary distinguishes it from the review ledger.
+'''
+satisfied_by = ["PHASE-02/EX-3"]
+how = "EX-3 adds the layout row, the storage example and the term"
+needs = ["C-22"]
+gated_by = ["PHASE-02/EN-1"]
+verdict = "proportionate"
+note = "needs C-22 only if the glossary cites the lib: address; harmless either way"
+
+[[commitment]]
+id = "C-30"
+kind = "explicit"
+source = { section = "sec-6", heading = "Governance and guidance" }
+quote = '''
+Also corrected while touching `/plan` step 4: its claim that `specs` /
+`requirements` stay empty "(no registry yet)" is false — plans populate them
+and the reader drops them (`RFC-029` § 5). The edit states only what is true:
+relations are written with `doctrine link`; the in-file tables are not read.
+'''
+satisfied_by = ["PHASE-02/EX-2"]
+how = "EX-2 rewrites the step-4 line to those two facts"
+verdict = "proportionate"
+note = "no needs: a parallel candidate with PHASE-01 (disjoint surface); serial here, host's call"
+
+# ── PHASE-02: the five pointers and adjacent shipped text ────────────────────
+
+[[commitment]]
+id = "C-31"
+kind = "explicit"
+source = { section = "sec-5", heading = "Variances and lifecycle touchpoints" }
+quote = '''
+Touchpoints — each skill gets a pointer to `lib:reference/commitment-ledger.md`,
+not a restatement (`ADR-005`):
+'''
+satisfied_by = ["PHASE-02/EX-1"]
+how = "EX-1 names each skill's anchor and what its pointer says, per the touchpoint table"
+needs = ["C-22", "C-23"]
+gated_by = ["PHASE-02/EN-1"]
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-32"
+kind = "explicit"
+source = { section = "sec-7", heading = "Code impact" }
+quote = '''
+Installed copies (`.doctrine/skills/`, `.claude/skills/`) refresh via
+`doctrine install` from the built binary; they are not edited by hand.
+'''
+satisfied_by = ["PHASE-02/EX-4"]
+how = "EX-4: refresh by doctrine install after cargo build"
+verdict = "proportionate"
+
+[[commitment]]
+id = "C-33"
+kind = "implicit"
+source = { section = "sec-8", heading = "Verification" }
+quote = '''
+- **VT** — `doctrine check gate` green: existing shipped-asset, reachability and
+  skill-dedup tests stay green unchanged.
+'''
+satisfied_by = ["PHASE-01/EX-8", "PHASE-02/EX-5"]
+how = "both phases end green with existing tests unmodified"
+verdict = "proportionate"
+
+# ── Proofs ───────────────────────────────────────────────────────────────────
+
+[[proof]]
+criterion = "PHASE-01/VT-1"
+proves = ["PHASE-01/EX-1", "PHASE-01/EX-2", "PHASE-01/EX-8"]
+[[proof]]
+criterion = "PHASE-01/VT-2"
+proves = ["PHASE-01/EX-8"]
+[[proof]]
+criterion = "PHASE-01/VA-1"
+proves = ["PHASE-01/EX-2", "PHASE-01/EX-3", "PHASE-01/EX-4", "PHASE-01/EX-5", "PHASE-01/EX-6"]
+[[proof]]
+criterion = "PHASE-01/VA-2"
+proves = ["PHASE-01/EX-7"]
+[[proof]]
+criterion = "PHASE-01/VA-3"
+proves = ["PHASE-01/EX-8"]
+[[proof]]
+criterion = "PHASE-02/VT-1"
+proves = ["PHASE-02/EX-1", "PHASE-02/EX-5"]
+[[proof]]
+criterion = "PHASE-02/VA-1"
+proves = ["PHASE-02/EX-1", "PHASE-02/EX-4"]
+[[proof]]
+criterion = "PHASE-02/VA-2"
+proves = ["PHASE-02/EX-5"]
+[[proof]]
+criterion = "PHASE-02/VA-3"
+proves = ["PHASE-02/EX-1", "PHASE-02/EX-2", "PHASE-02/EX-3"]

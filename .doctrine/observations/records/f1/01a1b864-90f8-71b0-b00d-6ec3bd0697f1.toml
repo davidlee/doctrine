@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1b864-90f8-71b0-b00d-6ec3bd0697f1"
+recorded_at = "2026-11-07T23:42:40.888923741Z"
+kind = "friction"
+summary = "verify-vt: says 'keyword present' when the keyword is absent"
+detail = "/plan on SL-287, before implementation. doctrine slice verify-vt 287 reported 'UNATTRIBUTABLE VT-1 — keyword present but plugins/doctrine/skills/plan/SKILL.md not modified by this slice', yet grep -c of the keyword in that file is 0 (same for src/install.rs 'fn commitment_ledger_is_shipped'). The message sent me checking whether the keyword floor was vacuous. The UNATTRIBUTABLE verdict may be right; the 'keyword present' clause is not."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
