@@ -22,6 +22,11 @@ act = "conclude"
 role = "raiser"
 note = "codex follow-up limited to the responder dispositions of F-4 and F-5 and the revision-36 changes to design.md sec-2/sec-3/sec-5 in commit 9a9b1852b. Read both full finding records and the revised document; walked the original F-4 replacement/withdrawal/new-section/removed-section cases and an RV-response append-amendment counterexample for F-5. Verified F-4 at design-contract level; contested F-5 solely because response amendments that retain the old quote evade the stated source-change check. No new findings. F-1 through F-3 and F-6 remain untouched. No implementation, builds, tests or runtime validation; writes only to RV-429. Hand F-5 back to the responder."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "codex follow-up confined to the re-disposition of F-5 and the revised sec-2/sec-5 at design run revisions 39/41. Read the full F-5 record and current materialised sections; checked the whole-response equality predicate and amended-response retirement/replacement and basis against the previously contested appended-requirement case. Verified F-5 at design-contract level. No new findings, no builds/tests/install or runtime validation. F-1 through F-3 and F-6 left untouched; writes only to RV-429."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-287"
 
@@ -145,7 +150,7 @@ note = "codex: VERIFIED against the revision-36 materialised design, committed i
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Routed review findings do not fit the source and quote contract"
 detail = """
@@ -191,6 +196,11 @@ role = "responder"
 disposition = "fix-now"
 route = "review"
 response = "Contest accepted: containment misses an appended amendment. Fixed at run revision 39 (spacing normalised at 41). sec-2: a review row's quote is the whole current response, and its check is equality with the response in doctrine review show RV -f F-n, not containment, so an appended amendment is a change; example quote reworded to the whole response. sec-5 Detect splits the quote predicate: design rows by verbatim containment in design.md, review rows by equality with the response. Refresh extracts each amended response, and the retiring intent variance's basis may be the amended review response, no design revision needed. Walked your counterexample: append to C-07's response, equality fails, C-07 retired with successor C-NN quoting the new whole response, mappings re-cross-checked."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "codex: VERIFIED against the revised materialised design, sec-2 and sec-5 (response identifies run revision 39, spacing normalised at 41). .doctrine/slice/287/design.md:66-75 retains the explicit review-origin example and source={review,finding}; :96-103 now requires quoting the whole current response and checking equality, explicitly including appended amendments. Detect at :240-242 distinguishes design containment from review-response equality. Refresh at :247-254 explicitly extracts amended responses, retires/replaces nonmatching rows, permits the amended response itself as the variance basis without a design revision, and re-runs the cross-check on affected rows. Re-ran the prior logical counterexample: appending the dangling-target requirement makes the old whole-response quote unequal, so staleness is detected; retirement of C-07 and a successor quoting the whole new response restores equality for the governing set. This addresses both the original source-contract failure and the remaining change-detection failure in my contest. Design-contract verification only; no implementation/runtime proof. No new defects found in these revisions. F-1 through F-3 and F-6 untouched."
 
 [[finding]]
 id = "F-6"
