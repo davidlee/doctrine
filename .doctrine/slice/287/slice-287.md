@@ -75,8 +75,12 @@ Shipped text must not cite repo-private ids (`POL-002`, `ADR-024`).
   mitigation; the follow-up trial should show whether cited-but-wrong shrinks.
 - **Risk:** ceremony on simple plans. Mitigation: an explicit trigger; skip
   otherwise.
-- **OQ:** where the ledger artefact lives (slice-folder markdown, plan notes,
-  or the RV ledger itself), and whether it is authored or runtime.
+- **OQ:** where the ledger artefact lives (slice folder, plan notes, or the RV
+  ledger itself), and whether it is authored or runtime.
+- **OQ (user aside, 2026-11-08):** the ledger's format deserves design even if
+  nothing machine-reads it yet — TOML may beat Markdown (storage rule:
+  structured data in TOML; a later consumer, e.g. `SL-258` or an `IMP-409`
+  check, could read it without a migration).
 - **OQ:** trigger for "complex design".
 - **Adjacent, not in scope:** `/plan` step 4 says `specs`/`requirements` stay
   empty "no registry yet" — stale per `RFC-029` § 5 (`ISS-321`).
