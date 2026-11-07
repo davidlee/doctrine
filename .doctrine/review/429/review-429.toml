@@ -8,9 +8,40 @@ title = "design review of SL-287"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "raiser"
 responder = "responder"
+rounds_base = 0
+contests_base = 0
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-287"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "major"
+title = "Ledger has no refresh after the design is revised and relocked"
+detail = """
+Raised by the user (human reviewer) while reading the draft, 2026-11-08: "if design is revisited & relocked, how do we ensure the commitment ledger is updated correctly? kinda needs a fresh pass.. is that accounted for?"
+
+It is not. The design covers variances that originate in execution or consult, and extraction-time defects that return to /design, but not the design itself changing after the ledger exists. After a relock, rows may quote text that no longer exists, and commitments added in revised sections have no row. Nothing detects either.
+
+Agreed remedy (user: "agree"): rows name their section by design-run section id plus heading; the ledger records each section's fingerprint at extraction; the locked-exit handoff to /plan and each /phase-plan compare recorded fingerprints against `doctrine design show --format prompt` and check every quote still occurs verbatim in design.md; on drift, a refresh pass scoped to changed sections re-extracts, supersedes gone rows via an intent variance plus a new-id replacement row, adds new rows, re-runs the cross-check on affected rows, and re-stamps fingerprints. Fallback without a managed run: quote check plus a diff of design.md since the ledger's last commit. Both checks are mechanisable later (note under risks, link IMP-525).
+"""
+disposition = "fix-now"
+response = """
+Fixed in the design at run revision 29. sec-2 (ledger format): source becomes {section, heading}; new [[extracted]] table stamps each section's fingerprint at extraction. sec-3 (authoring): extraction stamps [[extracted]]. sec-5 (variances): new subsection "Refresh after a design revision" - detect at the locked-exit handoff to /plan and at each /phase-plan via fingerprint compare plus verbatim-quote check (fallback: quote check plus design.md diff); refresh scoped to changed sections, supersede gone rows by intent variance plus new-id replacement, add new rows, re-run cross-check, re-stamp; touchpoint table updated for /plan and /phase-plan. sec-9 (risks): staleness detection is manual, first candidate for a mechanical check; relock cost is IMP-525.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Fixed in the design at run revision 29. sec-2 (ledger format): source becomes {section, heading}; new [[extracted]] table stamps each section's fingerprint at extraction. sec-3 (authoring): extraction stamps [[extracted]]. sec-5 (variances): new subsection "Refresh after a design revision" - detect at the locked-exit handoff to /plan and at each /phase-plan via fingerprint compare plus verbatim-quote check (fallback: quote check plus design.md diff); refresh scoped to changed sections, supersede gone rows by intent variance plus new-id replacement, add new rows, re-run cross-check, re-stamp; touchpoint table updated for /plan and /phase-plan. sec-9 (risks): staleness detection is manual, first candidate for a mechanical check; relock cost is IMP-525.
+"""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

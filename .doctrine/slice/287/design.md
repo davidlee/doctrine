@@ -45,10 +45,14 @@ possible without a migration.
 ```toml
 schema = "commitment-ledger/1"
 
+[[extracted]]                      # one per design section read at extraction
+section = "sec-3"
+fingerprint = "7c052c403fa9"       # from `doctrine design show --format prompt`
+
 [[commitment]]
 id = "C-01"                        # author-assigned, immutable, never reused
 kind = "explicit"                  # explicit | implicit
-source = "design.md § The commitment ledger"
+source = { section = "sec-3", heading = "The commitment ledger" }
 quote = '''
 verbatim design text, as many lines as it takes
 '''
@@ -73,7 +77,11 @@ phase = "PHASE-02"                 # or "plan" before execution
 Rules:
 
 - **`quote` is verbatim and never edited.** Change is recorded as a variance.
-  `source` names a design heading, not a line (headings survive edits).
+  `source` names the design-run section id (`design.md` carries a stable
+  `doctrine:section` marker per section) plus its heading; never a line.
+- **`[[extracted]]` stamps what was read** — each section's fingerprint at
+  extraction — so a later revision of the design is detectable per section
+  (§ Variances: refresh after a design revision).
 - **Implicit commitments** are those the design entails without stating — e.g.
   a behaviour it relies on staying unchanged. They carry `kind = "implicit"`
   and a `quote` of the passage that entails them.
@@ -97,7 +105,8 @@ reads only the plan's own content (`POL-002`).
 1. **Extract** — after scaffolding, before authoring phases. Walk `design.md`
    section by section; one row per commitment, explicit or implicit, quoted.
    Routed design-review findings (the existing step-3 sub-procedure) become
-   rows too, with `source` naming the finding. A gap or contradiction found
+   rows too, with `source` naming the finding. Stamp an `[[extracted]]` row per
+   section read. A gap or contradiction found
    while extracting is a design defect: stop and return to `/design`, as step 2
    already requires.
 2. **Satisfy** — while authoring `plan.toml`, fill each row's `satisfied_by`,
@@ -161,11 +170,34 @@ not a restatement (`ADR-005`):
 
 | skill | pointer |
 |---|---|
-| `/plan` | build the ledger (§ Authoring procedure); run the plan review (§ Plan review) |
-| `/phase-plan` | copy the phase's ledger rows' quotes into the runtime phase sheet, so the worker reads the design's words |
+| `/plan` | build the ledger (§ Authoring procedure); run the plan review (§ Plan review); on entry after a relock, run the refresh |
+| `/phase-plan` | run the staleness check (§ Refresh); copy the phase's ledger rows' quotes into the runtime phase sheet, so the worker reads the design's words |
 | `/execute` | a change to how or whether a commitment is met is recorded as a variance |
 | `/consult` | a consult outcome that changes a commitment is recorded as a variance, citing the DEC |
 | `/audit` | read the ledger: each commitment's quote, its variances, and where it was finally satisfied |
+
+### Refresh after a design revision
+
+A revised and relocked design invalidates the ledger silently: rows may quote
+text that no longer exists, and commitments added in revised sections have no
+row (`RV-429` F-1).
+
+- **Detect** — at the locked-exit handoff to `/plan`, and at the start of each
+  `/phase-plan`: compare every `[[extracted]]` fingerprint with
+  `doctrine design show --format prompt`, and check every `quote` still occurs
+  verbatim in `design.md`. Any difference means the ledger is stale. Without a
+  managed design run, the fallback is the quote check plus a diff of
+  `design.md` since the ledger's last commit.
+- **Refresh, scoped to changed sections** — re-extract each changed section; a
+  row whose quote is gone is superseded by an `intent` variance (`basis`: the
+  design revision; `change`: "superseded by C-NN") and a replacement row with a
+  new id; add rows for new commitments; re-run the cross-check on affected
+  rows; re-stamp the fingerprints.
+- **The loop closes** — an `intent` variance raised during execution is what
+  sends work back to design; the refresh after relock is where the ledger
+  confirms the design now says the new thing.
+
+### Between lock and planning
 
 Between design lock and planning, extraction is the first close reading:
 defects return to `/design`; a different realisation chosen at planning is a
@@ -245,6 +277,9 @@ closure condition.
 - **Unenforced.** Nothing checks the ledger exists or is current. Accepted:
   `DEC-101`'s authoring rule puts this in guidance until a consumer earns a
   check (`IMP-409`, `SL-258`).
+- **Staleness detection is manual.** The fingerprint and quote checks are
+  mechanical and cheap — the first candidate for a real check once a consumer
+  earns it; relock cost itself is `IMP-525`.
 - **Drift from `plan.toml`.** Criteria ids are immutable, so ledger references
   do not rot; renamed or withdrawn criteria still need a ledger edit.
 - **Overlap with `SL-258`.** That slice mechanises extraction and admission;
