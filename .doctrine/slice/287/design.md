@@ -68,7 +68,7 @@ id = "C-07"
 kind = "explicit"
 source = { review = "RV-NNN", finding = "F-2" }
 quote = '''
-the finding's response text: its criterion sketch and placement constraint
+the finding's whole response: its criterion sketch and placement constraint
 '''
 satisfied_by = ["PHASE-01/EX-3"]
 how = "criterion cites RV-NNN F-2 inline, on the earliest phase the constraint allows"
@@ -97,8 +97,10 @@ Rules:
   quotes the response of a routed design-review finding — one routed to
   `demonstrate`, `probe` or `control`, whose criterion sketch and placement
   constraint stay on the review ledger by rule and are never copied into the
-  design. Its `source` names the RV and finding; its quote is checked against
-  `doctrine review show RV-NNN -f F-n`, not `design.md`.
+  design. Its `source` names the RV and finding; its quote is the *whole*
+  current response, and its check is equality with the response in
+  `doctrine review show RV-NNN -f F-n`, not containment — so an amendment that
+  appends to the response is a change.
 - **The governing set** is every commitment not retired. An `intent` variance
   with `retires = true` ends its commitment: superseded when it names a
   `successor`, withdrawn when it does not. A retired row keeps its quote as
@@ -121,7 +123,6 @@ Rules:
   silently today (`RFC-029` OQ-1), so authoring one there would read as
   recorded and be lost.
 - Name it "commitment ledger" everywhere; bare "ledger" means the review ledger.
-
 
 <!-- doctrine:section sec-3 -->
 ## Authoring procedure
@@ -175,7 +176,6 @@ mechanism — that is where host directives (project or harness conventions)
 govern how the procedure is applied (`POL-003`). The guidance names the seam
 and the proportionality, nothing more. The plan review (§ Plan review) is the
 same seam at review time.
-
 
 <!-- doctrine:section sec-4 -->
 ## Plan review
@@ -237,17 +237,18 @@ row (`RV-429` F-1).
   - the current section-id set (`doctrine design show --format prompt`)
     differs from the `[[extracted]]` set — a section added or removed;
   - a recorded fingerprint differs from the current one;
-  - a governing row's quote no longer occurs verbatim in its source
-    (`design.md` for design rows, the finding's response for review rows);
+  - a governing design row's quote no longer occurs verbatim in `design.md`;
+  - a governing review row's quote no longer equals its finding's response;
   - a routed finding on the design-review RV has no governing row.
 
   Without a managed design run, the fallback is the `doctrine:section` markers
   in `design.md` for the section set, plus the quote check and a diff of
   `design.md` since the ledger's last commit.
-- **Refresh, scoped to what changed** — extract each added or changed section
-  and each unrowed routed finding. Retire each governing row whose quote is
-  gone, or whose section was removed, with an `intent` variance (`basis`: the
-  design revision): `retires = true` plus the `successor` id when the
+- **Refresh, scoped to what changed** — extract each added or changed section,
+  each unrowed routed finding and each amended response. Retire each governing
+  row whose quote no longer matches, or whose section was removed, with an
+  `intent` variance (`basis`: the design revision, or the amended review
+  response): `retires = true` plus the `successor` id when the
   commitment was restated, no successor when it was dropped. Add rows for new
   commitments. Re-run the cross-check on affected rows; re-stamp
   `[[extracted]]` to the current section set and fingerprints.
@@ -260,7 +261,6 @@ row (`RV-429` F-1).
 Between design lock and planning, extraction is the first close reading:
 defects return to `/design`; a different realisation chosen at planning is a
 variance with `phase = "plan"`. The cost of returning to design is `IMP-525`.
-
 
 <!-- doctrine:section sec-6 -->
 ## Governance and guidance

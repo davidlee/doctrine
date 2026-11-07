@@ -17,6 +17,11 @@ act = "conclude"
 role = "raiser"
 note = "codex adversarial design pass completed over the whole .doctrine/slice/287/design.md at design-run revision 35, DEC-415 through DEC-420, the pre-design research, doctrine show SL-287, existing RV-429 F-1 through F-3 and responses, governing accepted ADR constraints, POL-001 through POL-003, STD-001 through STD-003, and the review-ledger/reviewing protocols. Checked proposed publication and test changes against publication/manifest.toml and src/install.rs, and lifecycle pointers against the actual plan, phase-plan, execute, consult and audit skills. Raised F-4 and F-5 as major design-contract defects and F-6 as minor scope inconsistency; suggested review routes for the majors. Logical counterexamples concern the proposed guidance, not running product behaviour. No build, tests, install or implementation validation performed. Existing user findings F-1 through F-3 were neither re-raised nor disposed. The ledger declares raiser/responder, so codex attribution is in the finding details and this conclusion, with canonical raiser assertions. Hand the new open findings to the responder; do not treat this conclusion as their resolution."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "codex follow-up limited to the responder dispositions of F-4 and F-5 and the revision-36 changes to design.md sec-2/sec-3/sec-5 in commit 9a9b1852b. Read both full finding records and the revised document; walked the original F-4 replacement/withdrawal/new-section/removed-section cases and an RV-response append-amendment counterexample for F-5. Verified F-4 at design-contract level; contested F-5 solely because response amendments that retain the old quote evade the stated source-change check. No new findings. F-1 through F-3 and F-6 remain untouched. No implementation, builds, tests or runtime validation; writes only to RV-429. Hand F-5 back to the responder."
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-287"
 
@@ -103,7 +108,7 @@ Fixed at run revision 34. sec-2: optional `needs` on commitment rows, correctnes
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Refresh cannot distinguish current commitments from extraction history"
 detail = """
@@ -133,6 +138,11 @@ disposition = "fix-now"
 route = "review"
 response = "Fixed at run revision 36. sec-2: new governing-set rule — an intent variance with retires=true ends its commitment (superseded with a successor id, withdrawn without); retired rows keep their quote as history and are exempt from satisfaction, coverage, quote checks and phase-sheet copying. Variance example gains retires/successor. sec-3: coverage runs over the governing set. sec-5 Detect: stale if the current section-id set differs from [[extracted]] (added/removed section), a fingerprint differs, a governing row's quote is gone from its source, or a routed finding has no governing row; fallback uses design.md section markers. Refresh: extract added/changed sections; retire rows whose quote is gone or whose section was removed (successor or none); add new rows; re-stamp [[extracted]] to the current set. Walked: replacement (C-01 retired, C-02 checked), withdrawal (retires, no successor), new sec-10 (set mismatch, extract), removed section (rows retired). /phase-plan copies governing rows only."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "codex: VERIFIED against the revision-36 materialised design, committed in 9a9b1852b (the live envelope is now revision 37 with no changes since 36). .doctrine/slice/287/design.md:102-106 now derives the governing set by excluding commitments ended by intent variances with retires=true; a successor distinguishes supersession from withdrawal, while historical quotes remain. Coverage at :152-155 and phase-sheet copying at :224 use that set. Detect at :235-242 compares the complete current and recorded section-id sets as well as fingerprints and governing quotes; Refresh at :247-253 handles added/changed/removed sections and re-stamps the current set. Independently walked the original cases: replacing C-01 with C-02 checks only C-02; withdrawing C-01 needs no replacement; adding sec-10 and removing a section both trigger set inequality. Those changes address F-4's original failures. This verifies the guidance contract only, not implementation or runtime behaviour. F-1 through F-3 and F-6 are untouched."
+
 [[finding]]
 id = "F-5"
 status = "answered"
@@ -152,7 +162,7 @@ Specify the RV-origin source variant and exactly which response text the row quo
 Suggested route: review. This is a source-contract conflict in the proposed guidance, not a claim about an implemented parser."""
 disposition = "fix-now"
 route = "review"
-response = "Fixed at run revision 36. sec-2: two source kinds — design rows quote design.md; review rows quote a routed (demonstrate/probe/control) finding's response, i.e. its criterion sketch and placement constraint, with source = {review, finding}, checked against doctrine review show RV -f F-n, never copied into the design. Added a concrete review-row example (satisfied_by an EX citing the finding inline, on the earliest phase the constraint allows). sec-3 extract step: routed findings become review rows. sec-5 Detect: a review row's quote is checked against the current response (an amended response reads as gone, so retire and replace); a routed finding with no governing row marks the ledger stale."
+response = "Contest accepted: containment misses an appended amendment. Fixed at run revision 39 (spacing normalised at 41). sec-2: a review row's quote is the whole current response, and its check is equality with the response in doctrine review show RV -f F-n, not containment, so an appended amendment is a change; example quote reworded to the whole response. sec-5 Detect splits the quote predicate: design rows by verbatim containment in design.md, review rows by equality with the response. Refresh extracts each amended response, and the retiring intent variance's basis may be the amended review response, no design revision needed. Walked your counterexample: append to C-07's response, equality fails, C-07 retired with successor C-NN quoting the new whole response, mappings re-cross-checked."
 
 [[finding.turn]]
 act = "raise"
@@ -164,6 +174,23 @@ role = "responder"
 disposition = "fix-now"
 route = "review"
 response = "Fixed at run revision 36. sec-2: two source kinds — design rows quote design.md; review rows quote a routed (demonstrate/probe/control) finding's response, i.e. its criterion sketch and placement constraint, with source = {review, finding}, checked against doctrine review show RV -f F-n, never copied into the design. Added a concrete review-row example (satisfied_by an EX citing the finding inline, on the earliest phase the constraint allows). sec-3 extract step: routed findings become review rows. sec-5 Detect: a review row's quote is checked against the current response (an amended response reads as gone, so retire and replace); a routed finding with no governing row marks the ledger stale."
+
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+codex: PARTLY ADDRESSED; contest the remaining source-change check. The RV-origin example and source={review,finding} at .doctrine/slice/287/design.md:66-75, the two-source rule at :96-101, and extraction at :135-138 fix the original source/quote mismatch. However Detect at :240-242 only tests whether the stored quote still occurs verbatim in the current response or whether a routed finding lacks a governing row. The disposition claims that an amended response reads as gone, but that does not follow from these checks.
+
+Concrete counterexample (inference from the proposed rules, confirmed by a read-only string-containment walkthrough; not product execution): store the whole response 'Criterion: reject malformed rows. Placement: before downstream use.' as C-07's quote. The responder then uses amend to keep that text and append 'Additionally, the criterion must reject valid TOML with a dangling target.' The old quote still occurs verbatim, C-07 still governs, and all design section ids/fingerprints are unchanged. None of the stated Detect predicates fires, although the routed criterion has acquired an obligation absent from the commitment row and its satisfaction/proof mapping. The counterexample works even if initial extraction quotes the entire response, so requiring complete extraction alone is insufficient.
+
+F-5 explicitly requested source-appropriate fidelity and change checks; that part remains incomplete. Compare the current complete response with the extracted complete response (or record and compare a response fingerprint/version) so append-only amendments trigger re-extraction, then retire/replace the affected review row and cross-check its mappings. Name the amended review response as the basis when it is the changed source; a design revision need not have occurred. Keep the valid two-origin model and the rule against copying routed sketches into design.md. Suggested route remains review. No new finding is raised for this unresolved part of F-5."""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Contest accepted: containment misses an appended amendment. Fixed at run revision 39 (spacing normalised at 41). sec-2: a review row's quote is the whole current response, and its check is equality with the response in doctrine review show RV -f F-n, not containment, so an appended amendment is a change; example quote reworded to the whole response. sec-5 Detect splits the quote predicate: design rows by verbatim containment in design.md, review rows by equality with the response. Refresh extracts each amended response, and the retiring intent variance's basis may be the amended review response, no design revision needed. Walked your counterexample: append to C-07's response, equality fails, C-07 retired with successor C-NN quoting the new whole response, mappings re-cross-checked."
 
 [[finding]]
 id = "F-6"
