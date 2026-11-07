@@ -47,8 +47,6 @@ Codify the pattern as shipped workflow guidance — prose, no engine change:
 4. **Plan review shape.** Codify the two-reviewer plan review (ledger
    cross-check; sequencing and phase gates) on the existing RV ledger
    machinery.
-5. **Evidence.** Trial on the next complex slice; sort its findings by the
-   `SL-251` classes and record the result into `SL-258`'s design.
 
 ## Non-Goals
 
@@ -72,9 +70,9 @@ Shipped text must not cite repo-private ids (`POL-002`, `ADR-024`).
 ## Risks, assumptions, open questions
 
 - **Assumption:** the informal results transfer to agents following written
-  guidance, including cheaper models. The trial tests this.
+  guidance, including cheaper models. The follow-up trial tests this.
 - **Risk:** extraction becomes the new paraphrase site. Quoting/anchoring is the
-  mitigation; the trial should show whether cited-but-wrong shrinks.
+  mitigation; the follow-up trial should show whether cited-but-wrong shrinks.
 - **Risk:** ceremony on simple plans. Mitigation: an explicit trigger; skip
   otherwise.
 - **OQ:** where the ledger artefact lives (slice-folder markdown, plan notes,
@@ -87,9 +85,13 @@ Shipped text must not cite repo-private ids (`POL-002`, `ADR-024`).
 
 - Shipped guidance reads coherently, validates (`doctrine check gate`), and
   carries no repo-private ids.
-- One trial plan built and reviewed with the procedure; findings classified;
-  evidence recorded against `SL-258`.
+- The trial is **not** a closure condition (see Follow-Ups).
 
 ## Summary
 
 ## Follow-Ups
+
+- **Trial** (deferred out of scope by the user, 2026-11-08; tracked in
+  `RFC-029`): run the procedure on the next complex slice, sort its plan-review
+  findings by the `SL-251` classes (unclaimed / cited-but-wrong / needs a tree
+  check), and record the result as evidence for `SL-258`'s design.

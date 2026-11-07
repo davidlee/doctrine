@@ -94,3 +94,7 @@ target = "EVD-005"
 label = "related"
 target = "SPEC-031"
 
+[[relation]]
+label = "related"
+target = "SL-287"
+
