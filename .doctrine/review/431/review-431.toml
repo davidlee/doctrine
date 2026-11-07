@@ -137,7 +137,7 @@ note = "VERIFIED against edge HEAD 8ed74a8ee. PHASE-01/VA-1 now explicitly reads
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Three stored quotes fail the literal fidelity predicate on unchanged design text"
 detail = '''
@@ -176,6 +176,11 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Contest accepted on your parser evidence: the closing delimiter adds no newline; the stored newline was my transcription error, and normalising it changed the verbatim predicate, which a realisation variance cannot authorise. Now: C-16, C-18, C-21 retired by intent variances (retires=true, successors C-38, C-39, C-40; basis this finding plus the user delegation of plan acceptances), the successors quoting the exact passage with the literal closed on its last line; a new realisation variance on C-03 retracts the earlier one (variances are append-only); PHASE-01/EX-3 drops normalisation and states that a quote ending mid-line closes its literal on its last line. Strict check, no stripping, over the governing set: 37/37 pass. Gap noted for the trial: the procedure has no class for a transcription correction, so a supersession borrows intent."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = "VERIFIED against edge HEAD 875198534. Read the re-disposition and ledger supersession block, then independently parsed the TOML and derived the governing set using intent variances with retires=true. Exactly C-16, C-18 and C-21 are retired, with existing successors C-38, C-39 and C-40. Each successor's parsed quote equals its predecessor's value minus the one incorrectly transcribed terminal newline; satisfaction targets are preserved. All 37 governing quotes now occur literally in design.md with no stripping or other normalisation. All historical quotes from the prior revision remain unchanged, and the appended C-03 variance explicitly retracts the previous normalisation proposal. PHASE-01/EX-3 now explains closing a mid-line quote on its last line, preserves verbatim fidelity and whole-review-response equality, and no longer claims a trailing newline is TOML layout. Re-ran governing-set coverage: no unclaimed or unproved EX, unmapped verification criteria or invalid links. These observations resolve the original defect and the remaining concerns in my contest. No defects introduced by this repair were found within the narrowed scope. Verification is of the authored plan/ledger contract, not implementation or runtime behaviour; no new findings."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
