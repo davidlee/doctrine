@@ -24,7 +24,7 @@ ref   = "IMP-526"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Sidecar relay line should ask the agent to name the new ids to the user; it only says 'tell the user to look at the tree'"
 detail = """
@@ -47,6 +47,13 @@ role = "responder"
 disposition = "fix-now"
 response = 'Partly valid: the sidecar line already carried the new ids, but the instruction did not ask the agent to pass them on. Sidecar ask now ends "and note the new ids" when the write added nodes (render/tree.rs relay_line). Test: relay_names_added_inquiries_and_the_consultation_rule; e2e sidecar_mode_sends_the_user_to_the_tree.'
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Verified in bbbb28e8b: src/design_run/render/tree.rs sidecar ask is "tell the user to look at `{tree}` and note the new ids" when nodes were added, with the ids carried by "new: ...". Pinned by tests.rs relay_names_added_inquiries_and_the_consultation_rule (ends_with "and note the new ids") and e2e_design_tree sidecar_tail; both pass.
+"""
+
 [[finding]]
 id = "F-2"
 status = "answered"
@@ -60,7 +67,7 @@ Observed: DEC-421 choice: "The design skill states the same contract"; consequen
 Suggestion: amend DEC-421's choice/consequences to name the fragment, and either accept the stage scoping explicitly or also carry the rule where later-stage declarations get their guidance.
 """
 disposition = "fix-now"
-response = "Fixed: DEC-421 choice amended to name install/design-prompts/inquiry.md as where the contract is stated, not the design skill."
+response = "Contest accepted: consequences amended - ReviewedGraph stated as removed (initial-concerns-recorded binds InquiryMap), and the design-skill entry replaced by install/design-run-stages.md regenerating plus install/design-prompts/inquiry.md stating the contract. choice and consequences now agree."
 
 [[finding.turn]]
 act = "raise"
@@ -72,9 +79,22 @@ role = "responder"
 disposition = "fix-now"
 response = "Fixed: DEC-421 choice amended to name install/design-prompts/inquiry.md as where the contract is stated, not the design skill."
 
+[[finding.turn]]
+act = "contest"
+role = "raiser"
+note = """
+Choice is amended correctly (record-421.toml:15 now names install/design-prompts/inquiry.md, and the relay line itself carries the consultation rule for later-stage additions, which answers the stage-scoping half). But the same record's consequences still read "install/design-run-stages.md and the design skill regenerate" (record-421.toml:18), so DEC-421 now contradicts itself. Its first consequence, "Coverage::ReviewedGraph compares like InquiryMap (variant may collapse)", is also stale now that the variant is gone. Amend both consequence entries; then this verifies.
+"""
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Contest accepted: consequences amended - ReviewedGraph stated as removed (initial-concerns-recorded binds InquiryMap), and the design-skill entry replaced by install/design-run-stages.md regenerating plus install/design-prompts/inquiry.md stating the contract. choice and consequences now agree."
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Accepted decisions DEC-121 and DEC-300 still describe the removed ReviewedGraph / full-map blocking comparison"
 detail = """
@@ -100,9 +120,16 @@ role = "responder"
 disposition = "fix-now"
 response = "Fixed: DEC-121 and DEC-300 bodies now carry a partially-replaced-by-DEC-421 note, as DEC-302 does."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Verified: record-121.md:96 and record-300.md:5 carry the "Partially replaced by DEC-421" annotation, the same pattern used for DEC-302 (structured choice left as the historical text, prose marks the replacement).
+"""
+
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "e2e growing_run fixture comments still claim growth stales the graph review via ReviewedGraph; the reblock act is now redundant"
 detail = """
@@ -125,9 +152,16 @@ role = "responder"
 disposition = "fix-now"
 response = "Fixed: growing_run and large_run_still_renders comments corrected; the redundant reblock graph-reviewed act removed. e2e_design_forward green."
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Verified: tests/e2e_design_forward.rs growing_run no longer records the reblock GraphReviewed act; the comments at ~700 and ~796 state the DEC-421 rule. e2e_design_forward passes (290 passed), so large_run_still_renders holds without the re-record — confirming it was redundant.
+"""
+
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Consultation clause is emitted for every added node regardless of provenance, so it misstates imported and user-directed nodes as 'an inquiry you added'"
 detail = """
@@ -150,9 +184,16 @@ role = "responder"
 disposition = "fix-now"
 response = 'Fixed: relay_line takes the added nodes; all are named, and the consultation clause names only AgentProposed ones ("consult the user before dispositioning X, which you raised"). Imported and user-directed nodes no longer carry it. Unit test covers a mixed agent/user-directed write.'
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Verified: relay() passes nodes; relay_line names every added id and attaches "consult the user before dispositioning <ids>, which you raised" only for Provenance::AgentProposed. Unit test adds one agent and one user-directed node and asserts the clause names inq-8 only; passes.
+"""
+
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Splice left a 132-column doc line in Coverage::carried_shape"
 detail = """
@@ -170,6 +211,13 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Fixed: gate.rs carried_shape doc rewrapped."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Verified: src/design_run/gate.rs carried_shape doc rewrapped.
+"""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
