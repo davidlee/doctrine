@@ -96,6 +96,10 @@ selectors; the exact touch-set is design's job.
 - **OQ-1** — is the adaptation envelope (reserved / bounded / delegated /
   observational, per RFC-026 `G15`) in this vertical's minimal payload, or a
   follow-up once challenge/refine mechanics exist?
+  *Note 2026-11-08:* `SL-287` (`DEC-420`) ships a thin, unmechanised form —
+  commitment-ledger variances classed `realisation` (recorded basis suffices)
+  vs `intent` (always escalates). An envelope here would refine that default
+  per commitment; `SL-287`'s follow-up trial is evidence for this question.
 - **OQ-2** — does the "contract revision" framing ride the existing Revision
   kind (ADR-013) or is the dispatched governing set its own projection?
 - **OQ-3** — altitude, *adjudicated at scoping*: RFCs carry no binding

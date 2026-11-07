@@ -38,6 +38,18 @@ intent = "scope-relevant"
 selector = "src/install.rs"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "plugins/doctrine/skills/execute/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "plugins/doctrine/skills/consult/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "plugins/doctrine/skills/audit/**"
+intent = "scope-relevant"
+
 [[relation]]
 label = "related"
 target = "RFC-029"

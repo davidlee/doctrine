@@ -65,6 +65,8 @@ Codify the pattern as shipped workflow guidance — prose, no engine change:
   and at review (replaces step 7 for multi-phase plans).
 - `plugins/doctrine/skills/phase-plan/SKILL.md` — one-line pointer: carry the
   phase's ledger quotes into the runtime sheet.
+- `plugins/doctrine/skills/{execute,consult,audit}/SKILL.md` — one-line
+  pointers: record a variance in the ledger (`DEC-420`); audit reads it.
 - `publication/manifest.toml` + a shipped-ness test in `src/install.rs`.
 - `install/glossary.md`, `install/using-doctrine.md` — slice-directory layout
   and storage example gain the ledger; "commitment ledger" vs review ledger.
