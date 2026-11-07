@@ -10,6 +10,12 @@ raiser    = "raiser"
 responder = "responder"
 rounds_base = 0
 contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "codex adversarial design pass completed over the whole .doctrine/slice/287/design.md at design-run revision 35, DEC-415 through DEC-420, the pre-design research, doctrine show SL-287, existing RV-429 F-1 through F-3 and responses, governing accepted ADR constraints, POL-001 through POL-003, STD-001 through STD-003, and the review-ledger/reviewing protocols. Checked proposed publication and test changes against publication/manifest.toml and src/install.rs, and lifecycle pointers against the actual plan, phase-plan, execute, consult and audit skills. Raised F-4 and F-5 as major design-contract defects and F-6 as minor scope inconsistency; suggested review routes for the majors. Logical counterexamples concern the proposed guidance, not running product behaviour. No build, tests, install or implementation validation performed. Existing user findings F-1 through F-3 were neither re-raised nor disposed. The ledger declares raiser/responder, so codex attribution is in the finding details and this conclusion, with canonical raiser assertions. Hand the new open findings to the responder; do not treat this conclusion as their resolution."
 
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-287"
@@ -94,6 +100,88 @@ disposition = "fix-now"
 response = """
 Fixed at run revision 34. sec-2: optional `needs` on commitment rows, correctness only, acyclic, expected sparse. sec-3: needs drives sequencing (never forward), gates (cross-phase edge appears as gated_by EN) and parallel candidates (no needs path + disjoint surfaces; host directives decide); cross-check adds no-cycle / no-forward / every cross-phase edge gated. sec-4: sequencing reviewer reads the ledger and checks plan order agrees with needs; plan.toml owns the realised sequence, needs is its rationale. sec-9: why this is not RFC-027 H9 and how it gathers H9 reopening evidence; mechanical acyclicity check is a follow-up.
 """
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "major"
+title = "Refresh cannot distinguish current commitments from extraction history"
+detail = """
+Raiser: codex; the existing RV-429 declares the generic raiser role, used for the write assertion.
+
+Expected: the F-1 refresh repair must reach a current ledger after an authorised revision, while preserving history and discovering new commitments.
+
+Verified design-contract evidence: .doctrine/slice/287/design.md:80-85 makes quotes immutable and records extracted-section fingerprints; :209-214 checks every stored quote against current design.md and compares every recorded extracted fingerprint; :215-219 retains the predecessor, appends an intent variance naming its replacement, and adds a new-id row. Neither this section nor the cross-check at :127-140 defines a governing subset that excludes superseded commitments. The phase-sheet pointer at :198 likewise copies the phase's rows without distinguishing history.
+
+Counterexample (inference from those rules, also walked through in memory with a read-only Python expression): C-01 quotes 'The retry limit is three.' The revised design says 'The retry limit is five.' Refresh retains C-01, appends 'superseded by C-02', and adds C-02. The next every-quote check still fails on C-01; re-stamping fingerprints cannot repair it. A removed commitment with no successor has no stated disposition either. Conversely, if the revision adds sec-10 while all previously recorded sections are unchanged, comparing only recorded extracted fingerprints and checking surviving quotes detects nothing, so the new section's commitments escape extraction.
+
+This is a defect in the remedy added for F-1, not a repeat of the original missing-refresh finding. Define how append-only history yields the governing commitment set (including withdrawal without replacement), use that set for fidelity/coverage/runtime-sheet selection, and reconcile the complete current section-id set against the recorded set so additions/removals are handled. Preserve historical quotes without demanding that superseded text occur in the current design. Walk through replacement, deletion and new-section cases against the revised procedure.
+
+Suggested route: review. These are contradictory/incomplete procedure rules, established at design level; no implementation or runtime behaviour is asserted."""
+disposition = "fix-now"
+route = "review"
+response = "Fixed at run revision 36. sec-2: new governing-set rule — an intent variance with retires=true ends its commitment (superseded with a successor id, withdrawn without); retired rows keep their quote as history and are exempt from satisfaction, coverage, quote checks and phase-sheet copying. Variance example gains retires/successor. sec-3: coverage runs over the governing set. sec-5 Detect: stale if the current section-id set differs from [[extracted]] (added/removed section), a fingerprint differs, a governing row's quote is gone from its source, or a routed finding has no governing row; fallback uses design.md section markers. Refresh: extract added/changed sections; retire rows whose quote is gone or whose section was removed (successor or none); add new rows; re-stamp [[extracted]] to the current set. Walked: replacement (C-01 retired, C-02 checked), withdrawal (retires, no successor), new sec-10 (set mismatch, extract), removed section (rows retired). /phase-plan copies governing rows only."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Fixed at run revision 36. sec-2: new governing-set rule — an intent variance with retires=true ends its commitment (superseded with a successor id, withdrawn without); retired rows keep their quote as history and are exempt from satisfaction, coverage, quote checks and phase-sheet copying. Variance example gains retires/successor. sec-3: coverage runs over the governing set. sec-5 Detect: stale if the current section-id set differs from [[extracted]] (added/removed section), a fingerprint differs, a governing row's quote is gone from its source, or a routed finding has no governing row; fallback uses design.md section markers. Refresh: extract added/changed sections; retire rows whose quote is gone or whose section was removed (successor or none); add new rows; re-stamp [[extracted]] to the current set. Walked: replacement (C-01 retired, C-02 checked), withdrawal (retires, no successor), new sec-10 (set mismatch, extract), removed section (rows retired). /phase-plan copies governing rows only."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "major"
+title = "Routed review findings do not fit the source and quote contract"
+detail = """
+Raiser: codex; the existing RV-429 declares the generic raiser role, used for the write assertion.
+
+Expected: instrument-routed design findings must survive extraction without copying their criterion sketches into design.md or inventing design-section provenance.
+
+Verified evidence: .doctrine/slice/287/design.md:55 and :80-82 define source as a design-run section id plus heading; :110-114 also requires routed design-review findings to become quoted commitment rows whose source names the finding. The universal fidelity check at :209-212 requires every quote to occur verbatim in design.md. In contrast, install/design-prompts/reviewing.md, 'What the machine will reject', explicitly keeps instrument-routed criterion sketches and placement constraints on the RV rather than repairing them into design.md; plugins/doctrine/skills/plan/SKILL.md:43-53 tells planning to read those finding responses and transcribe the obligations.
+
+Failure scenario (inference): a slice has a probe/control/demonstrate response whose criterion sketch exists only on its design RV. Extracting that obligation exactly requires a quote from the RV response, which cannot pass the specified design.md-only quote check and has no design-section source of the prescribed form. Quoting a related design passage instead does not preserve the routed sketch/placement constraint; copying the sketch into design.md conflicts with the existing review procedure. This occurs even on initial extraction, before any design revision or supersession, and is distinct from the historical-row refresh defect.
+
+Specify the RV-origin source variant and exactly which response text the row quotes, retain the review/finding identity and placement constraint, and define source-appropriate fidelity and change checks for it. Include a concrete RV-origin example beside the design-origin example. Do not solve the mismatch by requiring routed obligations to be duplicated into the design.
+
+Suggested route: review. This is a source-contract conflict in the proposed guidance, not a claim about an implemented parser."""
+disposition = "fix-now"
+route = "review"
+response = "Fixed at run revision 36. sec-2: two source kinds — design rows quote design.md; review rows quote a routed (demonstrate/probe/control) finding's response, i.e. its criterion sketch and placement constraint, with source = {review, finding}, checked against doctrine review show RV -f F-n, never copied into the design. Added a concrete review-row example (satisfied_by an EX citing the finding inline, on the earliest phase the constraint allows). sec-3 extract step: routed findings become review rows. sec-5 Detect: a review row's quote is checked against the current response (an amended response reads as gone, so retire and replace); a routed finding with no governing row marks the ledger stale."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = "Fixed at run revision 36. sec-2: two source kinds — design rows quote design.md; review rows quote a routed (demonstrate/probe/control) finding's response, i.e. its criterion sketch and placement constraint, with source = {review, finding}, checked against doctrine review show RV -f F-n, never copied into the design. Added a concrete review-row example (satisfied_by an EX citing the finding inline, on the earliest phase the constraint allows). sec-3 extract step: routed findings become review rows. sec-5 Detect: a review row's quote is checked against the current response (an amended response reads as gone, so retire and replace); a routed finding with no governing row marks the ledger stale."
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "minor"
+title = "The design includes a correction the slice explicitly excludes"
+detail = """
+Raiser: codex; the existing RV-429 declares the generic raiser role, used for the write assertion.
+
+Verified inconsistency: 'doctrine show SL-287', 'Risks, assumptions, open questions', explicitly marks the stale /plan step-4 specs/requirements instruction as 'Adjacent, not in scope' and assigns it to ISS-321. .doctrine/slice/287/design.md:253-256 nevertheless promises that correction, and the code-impact row at :266 includes it as SL-287 work. DEC-415 through DEC-420 do not add that correction to this slice.
+
+Expected: scope and design must agree on the work implementation is authorised to deliver. Inference: following the current code-impact table would include an explicitly excluded edit, while following the scope would omit a promised change; a reviewer cannot assess conformance against both.
+
+Reconcile the scope explicitly if this correction is accepted into SL-287, or remove this correction from the design and leave it with ISS-321. This finding does not request either edit from the raiser; this pass writes RV-429 only."""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
