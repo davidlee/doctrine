@@ -1,0 +1,117 @@
+id    = 432
+slug  = "plan-review-of-sl-287-sequencing"
+title = "Plan review of SL-287 — sequencing"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "plan"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "sequencing"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Sequencing pass over SL-287 plan.toml/plan.md/commitment-ledger.toml against design sec-3/sec-4 and the tree. Checked: phase order vs needs (agrees; C-31/C-29 -> PHASE-01 publication, gated by PHASE-02/EN-1); missed needs (none of correctness; F-3 precision); parallel candidates (C-30 valid vs PHASE-01, disjoint surface; C-29 conditionally); EN gates (PHASE-02/EN-1 gates via disk manifest, which every_shipped_lib_citation_resolves reads, lib_citation.rs:223,437); ends-green (no orphan/reachability-of-citation test found by search; reachability invariant needs the manifest entry, which PHASE-01/EX-1 adds; dedup_skills_route_not_restate bans only flag fragments and needs using-doctrine/--help, already present; bare-mention gate F-1); sizing (fine); VT reach (install.rs mod tests has asset_text/embedded_filenames via super::*, toml crate, asset_source::publication_manifest_bytes_from_disk and PublicationManifest::admit; verify-vt attribution is slice-wide via recorded source deltas, all three VT files are in the slice's change set; currently UNATTRIBUTABLE as expected pre-execution); binary for PHASE-02 VA (F-2).
+"""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-287"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "minor"
+title = "Green-ness rationale misses the bare-mention gate that PHASE-01 arms for both phases"
+detail = """
+Claim: the plan's "each phase ends green" reasoning (plan.md § Sequencing, bullet "Each phase ends green") checks only for an orphan test and misses the bare-mention test, which becomes binding on both phases the moment PHASE-01's manifest entry lands. No EX in either phase names it.
+
+Evidence (tree):
+- src/lib_citation.rs:140-150 `bare_targets` = every `reference/*.md` address basename in the manifest (minus `governance.md`).
+- src/lib_citation.rs:192 `SHIPPED_TEXT_ROOTS = ["plugins/doctrine/skills", "install"]`; src/lib_citation.rs:452-465 `no_bare_library_mention_in_shipped_text` fails on any occurrence of a target outside a `lib:` citation, including path forms (`install/x.md`, `reference/x.md`; test at :349-367).
+- So after PHASE-01/EX-1 adds `reference/commitment-ledger.md`, the string `commitment-ledger.md` becomes a bare target. `grep -rn commitment-ledger install plugins/doctrine/skills` today: no hits, so existing text is safe.
+
+Consequence (inference):
+- PHASE-01: `install/commitment-ledger.md` is itself walked. Any bare `review-ledger.md`, `glossary.md`, `using-doctrine.md` or a self-mention `commitment-ledger.md` in it fails the gate. EX-5 ("findings follow the review-ledger protocol") invites exactly such a reference. (`commitment-ledger.toml` is safe: the target is `commitment-ledger.md`.)
+- PHASE-02: every pointer and the glossary/using-doctrine edit (EX-3, "distinguishes it from the review ledger") must name the doc only as `lib:reference/commitment-ledger.md`; a pointer like "see commitment-ledger.md § Refresh" fails.
+
+EX-7 / PHASE-02/EX-5 ("grounds only on prose, lib: addresses...") arguably cover this by implication, and the gate would catch it, so this is not a correctness hole — but the plan's stated green-ness rationale is incomplete and the worker gets no warning.
+
+Suggested fix: in plan.md's green bullet and PHASE-01/EX-7 + PHASE-02/EX-5, name `no_bare_library_mention_in_shipped_text`: library docs are named only by `lib:` address, never bare basename or path.
+"""
+disposition = "fix-now"
+response = "Fixed: verified no_bare_library_mention_in_shipped_text (src/lib_citation.rs:452) arms on the new manifest entry. PHASE-01/EX-7 and PHASE-02/EX-5 now require shipped docs named only by lib: address; plan.md green-ness bullet names the test."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed: verified no_bare_library_mention_in_shipped_text (src/lib_citation.rs:452) arms on the new manifest entry. PHASE-01/EX-7 and PHASE-02/EX-5 now require shipped docs named only by lib: address; plan.md green-ness bullet names the test."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "minor"
+title = "PHASE-02/VA-1 names no binary; PATH doctrine is the release and reverts or false-fails"
+detail = """
+Claim: PHASE-02/VA-1 ("After cargo build + doctrine install, doctrine library show lib:reference/commitment-ledger.md resolves") does not say which binary. On this tree the bare `doctrine` is the installed release and will not do what VA-1 expects.
+
+Evidence:
+- `which -a doctrine` → `/home/david/.local/share/doctrine/bin/doctrine` only (the boot snapshot's "Invoking doctrine" names the same path). `./target/debug/doctrine` is the cargo build output.
+- `doctrine library show lib:reference/commitment-ledger.md` today → `Error: unknown library address 'lib:reference/commitment-ledger.md': no published entry`. The PATH binary's embed will not gain the entry until a release.
+- `.gitignore:65` ignores `.doctrine/skills/*`, so a wrong-binary `doctrine install` silently reinstalls the release's skills (without the five pointers) and nothing in git shows it.
+
+Inference: a worker following VA-1 literally either sees a false failure (library show) or reverts the installed copies (install), contradicting PHASE-02/EX-4. EX-4 itself is correct ("from the freshly built binary"); VA-1 should match it.
+
+Suggested fix: VA-1 names `./target/debug/doctrine install` and `./target/debug/doctrine library show ...` (or "the freshly built binary", as EX-4 does).
+"""
+disposition = "fix-now"
+response = "Fixed: PHASE-02/VA-1 and EX-4 name ./target/debug/doctrine (freshly built) for install and library show, and warn off the PATH release binary."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed: PHASE-02/VA-1 and EX-4 name ./target/debug/doctrine (freshly built) for install and library show, and warn off the PATH release binary."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "nit"
+title = "C-31/C-29 need C-22, which PHASE-02/EX-1 itself completes; the real edge is C-23"
+detail = """
+Claim: C-31's `needs = ["C-22", "C-23"]` points partly at itself. C-22 is satisfied by PHASE-01/EX-1 AND PHASE-02/EX-1 (commitment-ledger.toml, C-22 `satisfied_by`), and PHASE-02/EX-1 is C-31's own satisfying EX. C-22's quote ("five skills do") is the pointer work C-31 delivers.
+
+Evidence: commitment-ledger.toml C-22 (`satisfied_by = ["PHASE-01/EX-1", "PHASE-02/EX-1"]`), C-31 (`satisfied_by = ["PHASE-02/EX-1"]`, `needs = ["C-22", "C-23"]`). plan.md's diagram labels PHASE-01 with "(C-22, C-23)", but C-22 is not complete until PHASE-02.
+
+No cycle is recorded (C-22 has no `needs`), and the phase order is unaffected: the real correctness edge is C-23 (the manifest entry, PHASE-01/EX-1), which PHASE-02/EN-1 gates correctly. Same for C-29 (`needs = ["C-22"]`). This is precision in the dogfooded rationale, not a sequencing defect.
+
+Suggested fix: C-31 and C-29 need C-23 only (or split C-22 into "the doc exists and is published" vs "five skills point at it", with the latter satisfied in PHASE-02).
+"""
+disposition = "fix-now"
+response = "Fixed: C-29 and C-31 now need C-23 (the manifest entry) only; plan.md diagram and rationale credit C-22 to both phases."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed: C-29 and C-31 now need C-23 (the manifest entry) only; plan.md diagram and rationale credit C-22 to both phases."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

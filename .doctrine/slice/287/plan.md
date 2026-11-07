@@ -21,15 +21,15 @@ shape of design sec-4. The trial evidence `RFC-029` § 9 wants starts here.
 
 ```text
 PHASE-01  doc + manifest entry + ship test ──► lib:reference/commitment-ledger.md resolves
-              │  (C-22, C-23)
-              ▼  PHASE-02/EN-1 gates C-29, C-31
+              │  (C-23 manifest entry; C-22 begins)
+              ▼  PHASE-02/EN-1 gates C-29, C-31 (need C-23)
 PHASE-02  five skill pointers · /plan step-4 fix · glossary · using-doctrine
 ```
 
 - **Why this order.** A skill citing `lib:reference/commitment-ledger.md`
   before its manifest entry exists fails `every_shipped_lib_citation_resolves`,
-  so the pointers (C-31) and any glossary citation (C-29) need the published
-  address (C-22, C-23). That is the only correctness edge; the ledger records it
+  so the pointers (C-31) and any glossary citation (C-29) need the manifest
+  entry (C-23). C-22 (one home, pointed at by five skills) spans both phases. That is the only correctness edge; the ledger records it
   as `needs`, and PHASE-02/EN-1 is its gate.
 - **Parallel candidate, not taken.** The `/plan` step-4 correction (C-30) needs
   nothing and touches a disjoint line; it could run beside PHASE-01. Two
@@ -38,7 +38,10 @@ PHASE-02  five skill pointers · /plan step-4 fix · glossary · using-doctrine
   content review (PHASE-01/VA-1, the heaviest check) separate from the pointer
   wiring, and give the procedure a real cross-phase edge to exercise.
 - **Each phase ends green.** PHASE-01 adds a doc nothing cites yet (no orphan
-  check exists); PHASE-02 adds citations of a published address.
+  check exists); PHASE-02 adds citations of a published address. The manifest
+  entry also arms `no_bare_library_mention_in_shipped_text` for both phases:
+  from PHASE-01 on, shipped text names the doc (and its siblings) only by
+  `lib:` address — PHASE-01/EX-7, PHASE-02/EX-5.
 
 ## Notes
 
@@ -46,5 +49,9 @@ PHASE-02  five skill pointers · /plan step-4 fix · glossary · using-doctrine
   (PHASE-01/EX-6 counted four staleness conditions; the design has five), two
   lead-in-only quotes (C-15, C-20, widened to the full passage), and an
   unattributable VT (PHASE-02/VT-1 pointed at a file the slice never edits).
+- Plan review (RV-431 commitments, RV-432 sequencing) added C-34..C-37 for
+  passages the first extraction quoted only by lead-in, a plan-time
+  `realisation` variance on C-03 (closing newline is TOML layout), and
+  tightened PHASE-01/EX-2, EX-4, EX-6, EX-7, VA-1 and PHASE-02/EX-5, VA-1.
 - VT keyword floors here are weak by nature (prose deliverables); the doc's
   substance is proved by PHASE-01/VA-1 against the ledger's quotes.

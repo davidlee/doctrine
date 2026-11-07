@@ -178,8 +178,8 @@ source = { section = "sec-2", heading = "The commitment ledger" }
 quote = '''
 - Name it "commitment ledger" everywhere; bare "ledger" means the review ledger.
 '''
-satisfied_by = ["PHASE-01/EX-7", "PHASE-02/EX-3"]
-how = "EX-7 holds the doc to the naming; PHASE-02/EX-3 makes the glossary distinguish the two"
+satisfied_by = ["PHASE-01/EX-3", "PHASE-02/EX-3"]
+how = "EX-3 states the naming rule; PHASE-02/EX-3 makes the glossary distinguish the two"
 verdict = "proportionate"
 
 [[commitment]]
@@ -192,7 +192,7 @@ single-phase plan may skip it and says so in one line of `plan.md`. The trigger
 reads only the plan's own content (`POL-002`).
 '''
 satisfied_by = ["PHASE-01/EX-4"]
-how = "EX-4 states the trigger, the one-line skip and that it reads only the plan"
+how = "EX-4 states the trigger, that a single-phase plan may skip and if so says so in one line, and that it reads only the plan"
 verdict = "proportionate"
 
 [[commitment]]
@@ -426,10 +426,10 @@ quote = '''
 '''
 satisfied_by = ["PHASE-02/EX-3"]
 how = "EX-3 adds the layout row, the storage example and the term"
-needs = ["C-22"]
+needs = ["C-23"]
 gated_by = ["PHASE-02/EN-1"]
 verdict = "proportionate"
-note = "needs C-22 only if the glossary cites the lib: address; harmless either way"
+note = "needs C-23 (the manifest entry) only if the glossary cites the lib: address; RV-432 F-3"
 
 [[commitment]]
 id = "C-30"
@@ -458,7 +458,7 @@ not a restatement (`ADR-005`):
 '''
 satisfied_by = ["PHASE-02/EX-1"]
 how = "EX-1 names each skill's anchor and what its pointer says, per the touchpoint table"
-needs = ["C-22", "C-23"]
+needs = ["C-23"]
 gated_by = ["PHASE-02/EN-1"]
 verdict = "proportionate"
 
@@ -486,6 +486,98 @@ satisfied_by = ["PHASE-01/EX-8", "PHASE-02/EX-5"]
 how = "both phases end green with existing tests unmodified"
 verdict = "proportionate"
 
+# ── Added by the plan review (RV-431 F-1) ─────────────────────────────────
+
+[[commitment]]
+id = "C-34"
+kind = "explicit"
+source = { section = "sec-5", heading = "Variances and lifecycle touchpoints" }
+quote = '''
+- **`realisation`** — how the commitment is met changed; intent holds. A
+  recorded `basis` suffices.
+- **`intent`** — what must be true changed. Always needs the user or a design
+  revision first; the `basis` cites that act.
+'''
+satisfied_by = ["PHASE-01/EX-6"]
+how = "EX-6 defines realisation and intent and who must act first"
+verdict = "proportionate"
+note = "added for RV-431 F-1: the earlier row quoted only the lead-in"
+
+[[commitment]]
+id = "C-35"
+kind = "explicit"
+source = { section = "sec-5", heading = "Variances and lifecycle touchpoints" }
+quote = '''
+- **Refresh, scoped to what changed** — extract each added or changed section,
+  each unrowed routed finding and each amended response. Retire each governing
+  row whose quote no longer matches, or whose section was removed, with an
+  `intent` variance (`basis`: the design revision, or the amended review
+  response): `retires = true` plus the `successor` id when the
+  commitment was restated, no successor when it was dropped. Add rows for new
+  commitments. Re-run the cross-check on affected rows; re-stamp
+  `[[extracted]]` to the current section set and fingerprints.
+- **The loop closes** — an `intent` variance raised during execution is what
+  sends work back to design; the refresh after relock is where the ledger
+  confirms the design now says the new thing.
+'''
+satisfied_by = ["PHASE-01/EX-6"]
+how = "EX-6 carries the scoped refresh, retirement, re-stamp, and the loop back to design"
+verdict = "proportionate"
+note = "added for RV-431 F-1: the earlier row quoted only the lead-in"
+
+[[commitment]]
+id = "C-36"
+kind = "explicit"
+source = { section = "sec-5", heading = "Variances and lifecycle touchpoints" }
+quote = '''
+Touchpoints — each skill gets a pointer to `lib:reference/commitment-ledger.md`,
+not a restatement (`ADR-005`):
+
+| skill | pointer |
+|---|---|
+| `/plan` | build the ledger (§ Authoring procedure); run the plan review (§ Plan review); on entry after a relock, run the refresh |
+| `/phase-plan` | run the staleness check (§ Refresh); copy the phase's governing rows' quotes into the runtime phase sheet, so the worker reads the design's words |
+| `/execute` | a change to how or whether a commitment is met is recorded as a variance |
+| `/consult` | a consult outcome that changes a commitment is recorded as a variance, citing the DEC |
+| `/audit` | read the ledger: each commitment's quote, its variances, and where it was finally satisfied |
+'''
+satisfied_by = ["PHASE-02/EX-1"]
+how = "EX-1 gives each of the five skills its pointer per the table"
+verdict = "proportionate"
+note = "added for RV-431 F-1: the earlier row quoted only the lead-in"
+
+[[commitment]]
+id = "C-37"
+kind = "explicit"
+source = { section = "sec-4", heading = "Plan review" }
+quote = '''
+contention). After authoring, `plan.toml` owns the realised sequence and the
+ledger's `needs` is its rationale; the `sequencing` reviewer checks they agree.
+Reviewers should be fresh contexts, not the plan's author. Review
+writes are refused inside dispatch workers, so this runs in a primary or
+solo tree.
+
+| raiser | reads | checks |
+|---|---|---|
+| `commitments` | `design.md`, `commitment-ledger.toml`, `plan.toml` | missed commitments (implicit especially); quote fidelity; EX wording vs quote; coverage; verdicts |
+| `sequencing` | `design.md`, `plan.toml`, `commitment-ledger.toml`, the tree | phase order agrees with `needs`; missed `needs`; parallel candidates; EN gates do gate what later phases need; each phase ends green; phase sizing; each VT's `test_file` can reach what the test needs |
+'''
+satisfied_by = ["PHASE-01/EX-5"]
+how = "EX-5 carries ownership of sequence, fresh contexts, tree constraint, and the reads/checks table"
+verdict = "proportionate"
+note = "added for RV-431 F-1: the earlier row quoted only the lead-in"
+
+# ── Variances ────────────────────────────────────────────────────────────────
+
+[[variance]]
+commitment = "C-03"
+class = "realisation"
+change = "The doc states that a multi-line literal's closing newline is TOML layout, not quote text: the verbatim check compares the quote with that one trailing newline removed. The design is silent; a strict check fails any quote ending mid-line (C-16, C-18, C-21)."
+basis = "RV-431 F-5"
+phase = "plan"
+retires = false
+successor = ""
+
 # ── Proofs ───────────────────────────────────────────────────────────────────
 
 [[proof]]
@@ -496,7 +588,7 @@ criterion = "PHASE-01/VT-2"
 proves = ["PHASE-01/EX-8"]
 [[proof]]
 criterion = "PHASE-01/VA-1"
-proves = ["PHASE-01/EX-2", "PHASE-01/EX-3", "PHASE-01/EX-4", "PHASE-01/EX-5", "PHASE-01/EX-6"]
+proves = ["PHASE-01/EX-2", "PHASE-01/EX-3", "PHASE-01/EX-4", "PHASE-01/EX-5", "PHASE-01/EX-6", "PHASE-01/EX-7"]
 [[proof]]
 criterion = "PHASE-01/VA-2"
 proves = ["PHASE-01/EX-7"]

@@ -1,0 +1,138 @@
+id    = 431
+slug  = "plan-review-of-sl-287-commitments"
+title = "Plan review of SL-287 — commitments"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "plan"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "commitments"
+responder = "responder"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = "Completed the commitments plan-review pass over SL-287's locked design sec-1..sec-9, all 33 commitment rows and their proof rows, plan.toml/plan.md, doctrine show SL-287, and DEC-415..DEC-420, under lib:reference/review-ledger.md. Checked missed/implicit commitments, quote breadth and exact fidelity, EX wording against quotes, both link coverage directions, and proof adequacy/proportionality. Read RV-429 only to confirm that no demonstrate/probe/control responses require additional review-source rows. Read-only TOML/link checks found all 13 EX and all 9 verification criteria linked, no invalid targets or empty proof mappings; literal fidelity failed for C-16/C-18/C-21. Five findings raised: one major extraction-evidence gap and four minor criterion/proof/fidelity defects. Design-run fingerprints match all nine extracted stamps. No code, builds, installs or implementation/runtime validation performed; sequencing, phase order/sizing and test reachability left to the other reviewer. Only RV-431 was changed. Pass concluded; all five findings are open for the responder."
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "SL-287"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "major"
+title = "Extracted quotes omit operative rules that their satisfying criteria claim to cover"
+detail = """
+Expected: design.md sec-2..sec-3 requires quoted commitments wide enough to compare satisfying EX wording against the governing intent; PHASE-01/VA-1 explicitly uses the governing rows' quotes as its content-check evidence. Observed in .doctrine/slice/287/commitment-ledger.toml: C-19 (lines 285-295) quotes only the introductory variance paragraph, omitting design.md:209-212's definitions of realisation (how changes, intent holds) and intent (what must be true changes) and their different authority/basis rules. C-20 (297-317) quotes Detect and its fallback only, but its how claims to cover scoped refresh, retirement and re-stamping: design.md:247-257's refresh procedure and execution-to-design loop have no quoted row. C-31 (451-463) quotes only the touchpoint lead-in, omitting the table at design.md:221-227 that its how and PHASE-02/EX-1 claim to satisfy. Likewise C-18's quote stops before the review reads/checks table and fresh-context/tree constraints used by PHASE-01/EX-5 (design.md:188-200).
+
+Verified by reading all 33 rows against the full design: these passages are not quoted elsewhere. The plan often retains the intended clauses, but the ledger does not retain their source evidence. Inference: a later EX or shipped-doc mistranscription of refresh, variance semantics or pointer behaviour can pass the planned quote-based comparison because the quoted baseline contains none of the rule being checked. This recreates the cited-but-wrong blind spot the slice is intended to remove; link coverage alone is green.
+
+Repair the extraction with sufficiently wide quotes or additional commitment rows for these operative passages, then reconcile satisfaction/proof mappings and re-run content/proportionality checks against that complete baseline. Preserve the design's immutable-quote/history rules when correcting existing rows. This finding concerns extraction and comparison evidence, not phase order or implementation."""
+disposition = "fix-now"
+response = "Fixed: quotes are immutable once committed, so the omitted passages became new rows rather than widened quotes: C-34 (realisation/intent definitions, design sec-5), C-35 (scoped refresh and the loop back to design), C-36 (the touchpoint table), C-37 (sequence ownership, fresh contexts, tree constraint, reads/checks table). Each maps to the EX that carries it (PHASE-01/EX-5, EX-6; PHASE-02/EX-1). Content re-check against the new quotes found EX-6 missing the loop-closes clause; added. Coverage re-run clean (37 rows)."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed: quotes are immutable once committed, so the omitted passages became new rows rather than widened quotes: C-34 (realisation/intent definitions, design sec-5), C-35 (scoped refresh and the loop back to design), C-36 (the touchpoint table), C-37 (sequence ownership, fresh contexts, tree constraint, reads/checks table). Each maps to the EX that carries it (PHASE-01/EX-5, EX-6; PHASE-02/EX-1). Content re-check against the new quotes found EX-6 missing the loop-closes clause; added. Coverage re-run clean (37 rows)."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "minor"
+title = "PHASE-01/EX-4 drops the single-phase trigger's permission to use the procedure"
+detail = """
+Verified comparison: .doctrine/slice/287/design.md:130-132 and commitment-ledger.toml C-12 state 'A single-phase plan may skip it and says so in one line of plan.md.' DEC-417 likewise makes the procedure optional for a single-phase plan. In .doctrine/slice/287/plan.toml:38, PHASE-01/EX-4 instead requires 'a single-phase plan says it skips in one line of plan.md', with no conditional or permission to elect to use the commitment ledger. C-12's how calls this faithful and its verdict is proportionate.
+
+Inference: the criterion can be satisfied by shipped guidance telling every single-phase plan to skip, excluding the design's permitted use on a single-phase plan. State the condition explicitly: a single-phase plan may use the procedure; if it skips, record that skip in one line of plan.md. Recheck C-12's content mapping and proof against that wording."""
+disposition = "fix-now"
+response = 'Fixed: PHASE-01/EX-4 now reads "a single-phase plan may skip it and, if it does, says so in one line of plan.md"; C-12 how updated to match.'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Fixed: PHASE-01/EX-4 now reads "a single-phase plan may skip it and, if it does, says so in one line of plan.md"; C-12 how updated to match.'
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "minor"
+title = "C-27's satisfying EX omits immutable, never-reused commitment identities"
+detail = """
+Expected: .doctrine/slice/287/design.md:53 makes a commitment id 'author-assigned, immutable, never reused'; sec-6:281-282 repeats the immutability requirement. commitment-ledger.toml C-27 quotes the latter and maps it to PHASE-01/EX-2 and EX-7. Observed: plan.toml:36, PHASE-01/EX-2, ends 'Ids author-assigned, criteria phase-qualified.' It never requires immutable or never-reused commitment ids. PHASE-01/EX-7 addresses naming, private references and guidance status, and EX-3's ledger rules do not restore the identity rule either. The plan-file header's immutable PHASE/criterion ids are not a requirement on the shipped commitment schema.
+
+Inference: a doc that permits renumbering or reusing C ids meets the written exits, breaking the stable targets on which satisfied_by/needs/variance history depend. Add the immutable/never-reused identity requirement to the shipped-doc EX and its content verification; keep C-27's mapping faithful. This is a missing condition in the exit criterion, not evidence that an implementation already renumbers ids."""
+disposition = "fix-now"
+response = "Fixed: PHASE-01/EX-2 now requires commitment ids author-assigned, immutable and never reused."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed: PHASE-01/EX-2 now requires commitment ids author-assigned, immutable and never reused."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "minor"
+title = "EX-7's sole linked proof cannot establish its semantic guidance requirements"
+detail = """
+Verified proof coverage: .doctrine/slice/287/commitment-ledger.toml:500-502 maps only PHASE-01/VA-2 to PHASE-01/EX-7. plan.toml:41 requires EX-7's doc to describe defect classes rather than cite them, use the intended commitment terminology, and present the procedure as guidance rather than an enforced check, as well as exclude private ids and src paths. VA-2 (line 48) only sweeps id/path patterns and checks that 'obligation' is absent. VA-1 (line 47) explicitly reads EX-2..EX-6, so EX-7 is excluded from the semantic content review. For example, 'This is an enforced check' contains none of VA-2's forbidden patterns but contradicts EX-7 and C-28's guidance rule. This counterexample is inference from the proposed checks, not observed shipped text.
+
+C-28 and the relevant part of C-24 therefore cannot be fully supported as proportionate by these proofs; mark the uncovered parts weak until a semantic read-through covers EX-7 and is linked in [[proof]]. Also reconcile C-11's mapping: it links PHASE-01/EX-7 for the distinction between 'commitment ledger' and bare 'ledger', but that rule is actually in PHASE-01/EX-3 (plan.toml:37), already covered by VA-1. A keyword/pattern floor is appropriate for forbidden tokens, but does not prove guidance status, terminology meaning or the description of defect classes."""
+disposition = "fix-now"
+response = "Fixed: PHASE-01/VA-1 now reads EX-2..EX-7, covering EX-7 semantics (guidance status, terminology, defect classes described not cited); its [[proof]] row now proves EX-7. VA-2 stays the token floor. C-11 now maps to PHASE-01/EX-3, where the naming rule lives."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed: PHASE-01/VA-1 now reads EX-2..EX-7, covering EX-7 semantics (guidance status, terminology, defect classes described not cited); its [[proof]] row now proves EX-7. VA-2 stays the token floor. C-11 now maps to PHASE-01/EX-3, where the naming rule lives."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "minor"
+title = "Three stored quotes fail the literal fidelity predicate on unchanged design text"
+detail = '''
+Verified with Python tomllib parsing and exact substring checks against .doctrine/slice/287/design.md: C-16, C-18 and C-21 in commitment-ledger.toml have quote not in design.md; the other 30 quotes pass. All three pass only after quote.strip(), so their words are faithful but their stored trailing newline is not. C-16 (lines 251-255) ends 'nothing more.\n' while design.md:177 continues 'nothing more. The plan review'; C-18 (276-280) ends 'contention).\n' while design.md:188 continues 'contention). After authoring'; C-21 (323-327) ends 'phase = "plan".\n' while design.md:263 continues 'phase = "plan". The cost'.
+
+Design sec-2 requires verbatim quotes, and sec-5:240 marks a governing design row stale if its quote no longer occurs verbatim in design.md. Inference: applying the literal predicate to this unchanged design already reports three stale rows, despite every extracted section fingerprint matching the current managed design run. The design specifies no whitespace-normalisation exception.
+
+Correct these stored quotes so they are actual substrings (widening to the full source line/passage also addresses lost context), following the immutable-row/history rules. Re-run the exact parsed-string fidelity check, not only a trimmed comparison. No claim is made that a runtime checker exists; this is a failure of the manual predicate the procedure prescribes.'''
+disposition = "fix-now"
+response = "Fixed by a plan-time realisation variance on C-03 (basis RV-431 F-5), not by editing quotes: the design is silent on the closing newline a TOML multi-line literal adds, so the shipped doc will state it is layout, not quote text, and the verbatim check removes exactly one trailing newline. PHASE-01/EX-3 carries the rule. Strict check under that rule: 37/37 quotes pass."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed by a plan-time realisation variance on C-03 (basis RV-431 F-5), not by editing quotes: the design is silent on the closing newline a TOML multi-line literal adds, so the shipped doc will state it is layout, not quote text, and the verbatim check removes exactly one trailing newline. PHASE-01/EX-3 carries the rule. Strict check under that rule: 37/37 quotes pass."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.
