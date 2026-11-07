@@ -68,5 +68,32 @@ response = """
 Fixed at run revision 31. sec-3 (authoring procedure) gains an "Orchestration seam" paragraph: the steps divide cleanly, so delegation proportionate to slice scope is an opportunity - planner alone, one delegate, one per section, a separate transcription or sequencing check - with the split and mechanism left to host directives; the plan review is the same seam. sec-6 adds POL-003: neutral terms only, no harness or delegate mechanism named.
 """
 
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "Ledger records no dependencies between commitments"
+detail = """
+Raised by the user (human reviewer), 2026-11-08: is there a role in the commitment ledger for identifying sequencing dependencies between commitments, to inform plan construction (sequencing, gates, potential for parallelism)?
+
+The draft has none: gated_by records a realised cross-phase gate but nothing records why one commitment must precede another, and plan.toml has no structured dependency (phase order is array order; dependencies live in EN prose). Agreed remedy (user: "yes"): optional `needs = ["C-NN"]` on commitment rows, correctness dependencies only (no soft `after`). Plan construction: needs never point forward across phases (sequencing); a cross-phase need appears as gated_by on the dependent phase's EN (gates); commitments with no needs path and disjoint surfaces are parallel-phase candidates (parallelism; host directives decide). After authoring, plan.toml owns the realised sequence; ledger needs is the rationale; the sequencing reviewer checks agreement. Not RFC-027 H9 (no engine consumer, no restated owner, no third dependency implementation); it gathers evidence for H9's reopening condition. Follow-up (user): a mechanical acyclicity check, e.g. via cordage.
+"""
+disposition = "fix-now"
+response = """
+Fixed at run revision 34. sec-2: optional `needs` on commitment rows, correctness only, acyclic, expected sparse. sec-3: needs drives sequencing (never forward), gates (cross-phase edge appears as gated_by EN) and parallel candidates (no needs path + disjoint surfaces; host directives decide); cross-check adds no-cycle / no-forward / every cross-phase edge gated. sec-4: sequencing reviewer reads the ledger and checks plan order agrees with needs; plan.toml owns the realised sequence, needs is its rationale. sec-9: why this is not RFC-027 H9 and how it gathers H9 reopening evidence; mechanical acyclicity check is a follow-up.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Fixed at run revision 34. sec-2: optional `needs` on commitment rows, correctness only, acyclic, expected sparse. sec-3: needs drives sequencing (never forward), gates (cross-phase edge appears as gated_by EN) and parallel candidates (no needs path + disjoint surfaces; host directives decide); cross-check adds no-cycle / no-forward / every cross-phase edge gated. sec-4: sequencing reviewer reads the ledger and checks plan order agrees with needs; plan.toml owns the realised sequence, needs is its rationale. sec-9: why this is not RFC-027 H9 and how it gathers H9 reopening evidence; mechanical acyclicity check is a follow-up.
+"""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

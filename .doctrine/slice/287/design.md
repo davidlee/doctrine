@@ -58,6 +58,7 @@ verbatim design text, as many lines as it takes
 '''
 satisfied_by = ["PHASE-02/EX-1"]   # phase-qualified, always
 how = "one line: how that EX meets the quote"
+needs = []                         # optional: ids of commitments this one needs
 gated_by = ["PHASE-04/EN-2"]       # optional: later phases relying on it
 verdict = "proportionate"          # proportionate | weak | excessive | deferred
 note = ""
@@ -85,6 +86,10 @@ Rules:
 - **Implicit commitments** are those the design entails without stating — e.g.
   a behaviour it relies on staying unchanged. They carry `kind = "implicit"`
   and a `quote` of the passage that entails them.
+- **`needs` is correctness only** — "C-04 cannot be correct until C-01
+  holds". No soft ordering field; phase order carries taste. Optional and
+  expected to be sparse: omit it when the dependency is simply the whole prior
+  phase. `needs` must be acyclic.
 - **Proofs are a separate table** in `REQ-468`'s shape. Commitment → EX lives
   on the commitment; EX ← VT lives on the proof; every coverage direction is
   derived from those two, never authored twice.
@@ -111,7 +116,14 @@ reads only the plan's own content (`POL-002`).
    already requires.
 2. **Satisfy** — while authoring `plan.toml`, fill each row's `satisfied_by`,
    `how` and `gated_by`, and add `[[proof]]` rows for each verification
-   criterion.
+   criterion. Use `needs` to construct the plan:
+   - *sequencing* — a commitment's phase is never earlier than any commitment
+     it needs;
+   - *gates* — a `needs` edge crossing phases appears as `gated_by` on an EN of
+     the dependent phase;
+   - *parallelism* — commitments with no `needs` path between them and
+     disjoint surfaces are candidates for parallel phases. The ledger names
+     candidates; host directives decide whether to parallelise.
 3. **Cross-check** (`DEC-416`), before the first commit:
    - *coverage* — a commitment no EX satisfies; an EX no proof proves; a
      verification criterion that proves nothing; an EX that meets no commitment
@@ -124,8 +136,8 @@ reads only the plan's own content (`POL-002`).
      warrants); `deferred` (proved later or at audit — `note` says where and
      why). Never count tests.
    - *entry criteria* — every `gated_by` names an EN on the relying phase that
-     actually gates the commitment; a later phase relying on an earlier
-     commitment with no such EN is a gap.
+     actually gates the commitment; every cross-phase `needs` edge has such an
+     EN; `needs` has no cycle and never points forward.
 
 Fix what the cross-check finds in the plan (or the ledger), then commit both.
 
@@ -147,14 +159,16 @@ critically"); its findings feed the existing revise steps 8–9 (`DEC-418`).
 
 Two RVs at facet `plan`, opened in parallel, each with its own raiser label
 (`review new` takes one raiser label per ledger, and two ledgers avoid turn
-contention). Reviewers should be fresh contexts, not the plan's author. Review
+contention). After authoring, `plan.toml` owns the realised sequence and the
+ledger's `needs` is its rationale; the `sequencing` reviewer checks they agree.
+Reviewers should be fresh contexts, not the plan's author. Review
 writes are refused inside dispatch workers, so this runs in a primary or
 solo tree.
 
 | raiser | reads | checks |
 |---|---|---|
 | `commitments` | `design.md`, `commitment-ledger.toml`, `plan.toml` | missed commitments (implicit especially); quote fidelity; EX wording vs quote; coverage; verdicts |
-| `sequencing` | `design.md`, `plan.toml`, the tree | phase order and dependencies; EN gates do gate what later phases need; each phase ends green; phase sizing; each VT's `test_file` can reach what the test needs |
+| `sequencing` | `design.md`, `plan.toml`, `commitment-ledger.toml`, the tree | phase order agrees with `needs`; missed `needs`; parallel candidates; EN gates do gate what later phases need; each phase ends green; phase sizing; each VT's `test_file` can reach what the test needs |
 
 The split maps onto the measured defect classes: `commitments` owns
 *unclaimed* and *cited-but-wrong*; `sequencing` owns *needs a tree check*.
@@ -295,6 +309,12 @@ closure condition.
   earns it; relock cost itself is `IMP-525`.
 - **Drift from `plan.toml`.** Criteria ids are immutable, so ledger references
   do not rot; renamed or withdrawn criteria still need a ledger edit.
+- **Not a dependency graph.** `needs` is not `RFC-027` `H9`'s rejected
+  obligation graph: nothing in the engine reads it, it restates no owner (the
+  plan has no structured dependencies), and it adds no dependency
+  implementation. It gathers evidence for `H9`'s reopening condition — whether
+  commitment granularity moves the parallel frontier. Acyclicity is checked by
+  hand for now; a mechanical check (e.g. via cordage) is a follow-up.
 - **Overlap with `SL-258`.** That slice mechanises extraction and admission;
   this one is its unmechanised precursor and evidence source.
 
