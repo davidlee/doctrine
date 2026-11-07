@@ -121,8 +121,9 @@ impl Coverage {
     /// carries no map — the one statement of that correspondence, which admission
     /// checks and construction fills (`RV-389` F-2).
     ///
-    /// `Artefact` is an **absent** coverage rather than an empty one; `PerSection` is a quantification the derivation performs over
-    /// the section set, carried by no act.
+    /// `Artefact` is an **absent** coverage rather than an empty one;
+    /// `PerSection` is a quantification the derivation performs over the section
+    /// set, carried by no act.
     pub(crate) const fn carried_shape(self) -> Option<CoveredShape> {
         match self {
             Coverage::EverySection => Some(CoveredShape::Sections),

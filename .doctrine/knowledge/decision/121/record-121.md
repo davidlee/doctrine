@@ -90,3 +90,7 @@ arbitrary section fingerprint), `SPEC-029`, `RFC-026`.
 ## Amendment (2026-09-25)
 
 Under `SL-264` (`DEC-302`, `RV-386` `F-14`), initial concerns is **one act, two actors**. The agent's judgement of which questions block moved from a free-standing `blocking-set-declared` act onto each inquiry node, required at creation; the user's `graph-reviewed` binds it through `ReviewedGraph` coverage. The two-act rationale (a refusal can name the missing half) is met by refusing an unjudged node at declaration.
+
+
+
+**Partially replaced by DEC-421 (2026-11-08):** `graph-reviewed` no longer uses `ReviewedGraph` coverage or compares the full-set blocking marks; it binds node material over carried keys (`InquiryMap`), and new inquiries reach the user by the write's relay line.

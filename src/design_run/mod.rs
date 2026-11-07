@@ -130,7 +130,7 @@ pub(crate) fn map_changed(
 }
 
 /// The relay line a write prints last, if it owes one: a changed map, in either
-/// delivery mode (SL-266 `DEC-310`, `DEC-421`), naming the inquiries the write
+/// delivery mode (SL-266 `DEC-310`, `DEC-421`), carrying the inquiries the write
 /// added. One rule for every map-writing verb.
 pub(crate) fn relay(
     delivery: config::MapDelivery,
@@ -143,8 +143,7 @@ pub(crate) fn relay(
             .map
             .inquiry
             .nodes()
-            .map(inquiry::InquiryNode::id)
-            .filter(|id| prior.map.inquiry.get(id).is_none())
+            .filter(|node| prior.map.inquiry.get(node.id()).is_none())
             .collect();
         render::tree::relay_line(delivery, slice_ref, &added)
     })

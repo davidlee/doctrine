@@ -186,16 +186,21 @@ fn relay_tail() -> String {
     )
 }
 
-/// The tail of the same line in sidecar mode (`DEC-421`).
+/// The tail of the same line in sidecar mode, for a write that added nodes
+/// (`DEC-421`, `RV-430` F-1).
 fn sidecar_tail() -> String {
-    format!("before ending this turn, tell the user to look at `doctrine design tree {SLICE}`")
+    format!(
+        "before ending this turn, tell the user to look at `doctrine design tree {SLICE}` and \
+         note the new ids"
+    )
 }
 
-/// The whole line a write that adds `new` prints, ending in `tail`.
+/// The whole line a write that adds the agent-raised node `new` prints, ending
+/// in `tail` (`RV-430` F-5).
 fn line_adding(new: &str, tail: &str) -> String {
     format!(
-        "map changed — new: {new} — consult the user before dispositioning an inquiry you \
-         added; {tail}"
+        "map changed — new: {new} — consult the user before dispositioning {new}, which you \
+         raised; {tail}"
     )
 }
 

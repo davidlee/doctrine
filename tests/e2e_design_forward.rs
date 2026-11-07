@@ -699,11 +699,9 @@ fn growing_run() -> DesignRun {
 
     // 300 inquiries, each judged blocking where it is born. The judgements are
     // what make them *blocking* (`SL-264` sec-3): the set is derived from the
-    // nodes, not from a declared act. The map's growth stales the graph review
-    // (`ReviewedGraph`, the ids whose effective judgement is blocking over the
-    // full set), which `reblock` below re-records — **not** `user-accepts-sufficiency`,
-    // whose `InquiryMap` coverage compares only the keys the act carried, so a pure
-    // addition does not move it (`SL-264` sec-2, *invisible*).
+    // nodes, not from a declared act. Pure additions move neither attested human
+    // gate — both compare only the keys their acts carried (`SL-264` sec-2,
+    // `DEC-421`).
     let nodes: Vec<Value> = (0..300)
         .map(|index| {
             json!({
@@ -717,15 +715,6 @@ fn growing_run() -> DesignRun {
         })
         .collect();
     designed.apply("growth", &json!({ "declare": nodes }));
-    designed.apply(
-        "reblock",
-        &json!({
-            "checkpoint_act": design_act::checkpoint_act(
-                ActKind::GraphReviewed,
-                "the grown blocking set is right",
-            ),
-        }),
-    );
 
     // 300 sections, none reviewed.
     let sections: Vec<Value> = (0..300)
@@ -804,9 +793,8 @@ fn node(index: u32) -> String {
 /// The run grew by **pure additions** after `user-accepts-sufficiency` was given:
 /// so it stays current (`SL-264` sec-2, *invisible*) and is not one of the
 /// over-cap causes — asserted below, because that is the narrowing this slice
-/// exists to make. The blocking additions do move the graph review, which
-/// `reblock` re-records, and `blocking-inquiries-dispositioned` still reports the
-/// 300 open blockers.
+/// exists to make. Nor is the graph review (`DEC-421`); `blocking-inquiries-dispositioned`
+/// still reports the 300 open blockers.
 #[test]
 fn large_run_still_renders() {
     let designed = growing_run();

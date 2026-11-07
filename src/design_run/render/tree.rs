@@ -9,8 +9,7 @@ use textwrap::core::display_width;
 use textwrap::{Options, WordSplitter};
 
 use super::super::config::MapDelivery;
-use super::super::ids::DesignId;
-use super::super::inquiry::{InquiryLifecycle, Provenance};
+use super::super::inquiry::{InquiryLifecycle, InquiryNode, Provenance};
 use super::envelope::{MapAnswer, MapNode, TitleLookup, TurnEnvelope};
 
 /// How the shell wants the tree laid out.
@@ -218,24 +217,39 @@ fn footer(envelope: &TurnEnvelope) -> String {
 
 /// The line a map-changing write prints last (`DEC-310`), in either delivery
 /// mode (`DEC-421`): relay shows the user the tree, sidecar sends them to it.
-/// `added` names the inquiries the write created, with the rule an agent owes
-/// each — the behavioural contract the gate no longer approximates.
-pub(crate) fn relay_line(delivery: MapDelivery, slice_ref: &str, added: &[&DesignId]) -> String {
+/// `added` is the inquiries the write created: every one is named, and the ones
+/// the agent raised carry the rule it owes them (`RV-430` F-5) — the behavioural
+/// contract the gate no longer approximates.
+pub(crate) fn relay_line(delivery: MapDelivery, slice_ref: &str, added: &[&InquiryNode]) -> String {
     let tree = command(slice_ref);
     let ask = match delivery {
         MapDelivery::Relay => format!("show the user the output of `{tree}` verbatim"),
-        MapDelivery::Sidecar => format!("tell the user to look at `{tree}`"),
+        MapDelivery::Sidecar if added.is_empty() => format!("tell the user to look at `{tree}`"),
+        MapDelivery::Sidecar => format!("tell the user to look at `{tree}` and note the new ids"),
     };
-    let new = if added.is_empty() {
+    if added.is_empty() {
+        return format!("map changed — before ending this turn, {ask}");
+    }
+    let raised = joined_ids(
+        added
+            .iter()
+            .filter(|node| *node.provenance() == Provenance::AgentProposed),
+    );
+    let consult = if raised.is_empty() {
         String::new()
     } else {
-        let ids: Vec<&str> = added.iter().map(|id| id.as_str()).collect();
-        format!(
-            "new: {} — consult the user before dispositioning an inquiry you added; ",
-            ids.join(", ")
-        )
+        format!(" — consult the user before dispositioning {raised}, which you raised")
     };
-    format!("map changed — {new}before ending this turn, {ask}")
+    let new = joined_ids(added.iter());
+    format!("map changed — new: {new}{consult}; before ending this turn, {ask}")
+}
+
+/// `nodes`' ids, comma-separated.
+fn joined_ids<'a>(nodes: impl Iterator<Item = &'a &'a InquiryNode>) -> String {
+    nodes
+        .map(|node| node.id().as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// The command that renders `slice_ref`'s tree.

@@ -1,0 +1,175 @@
+id    = 430
+slug  = "code-review-review-of-imp-526"
+title = "code-review review of IMP-526"
+# no status — a review's status is DERIVED from its findings, so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "opus-reviewer"
+responder = "agent"
+rounds_base = 0
+contests_base = 0
+concluded = true
+
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Examined commit aea84237e (IMP-526) against DEC-421, DEC-302, SL-264/RV-386 and SL-266/DEC-310: every hunk in src/design_run/{attestation,gate,inquiry,mod,run,config}.rs, render/tree.rs, src/commands/design.rs relay call sites (apply_lines, start, adopt's adoption_lines), install/design-prompts/inquiry.md and conditions/initial-concerns-recorded.md, install/design-run-stages.md, unit tests in src/design_run/tests.rs and e2e tests in tests/e2e_design_tree.rs / e2e_design_forward.rs. Grepped the tree (code, install/, .agents/skills, .doctrine/spec, .doctrine/knowledge, memories) for ReviewedGraph / reviewed-graph / blocking_marks / judged_blocking residue. Ran cargo test --bin doctrine design_run and the two e2e test binaries: all pass. Gate/change-log agreement holds: both readers call CoveredSet::moved under the rule's Coverage; no code path still references the removed comparison. Six findings, none blocker.
+"""
+
+[target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
+ref   = "IMP-526"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "minor"
+title = "Sidecar relay line should ask the agent to name the new ids to the user; it only says 'tell the user to look at the tree'"
+detail = """
+Expected (DEC-421 choice): "sidecar: tell the user to look and note the new ids". With the gate conjunct removed, this line is the only mechanism that carries a new question to a sidecar-mode user, who does not see the tree pasted.
+
+Observed: src/design_run/render/tree.rs:430-443 builds the sidecar ask as "tell the user to look at `{tree}`". The id list ("new: inq-8, inq-9 — consult the user ...;") is framed as agent-facing preamble, not as something to pass on. The inquiry prompt fragment (install/design-prompts/inquiry.md:51-52) does say "in sidecar mode, tell the user to look and name the new ids", but that fragment is served only during exploring/inquiring, while `declare` is admissible at every stage (drafting, reviewing, locked). Outside those stages the machine line is the whole contract.
+
+Suggestion: when `added` is non-empty in Sidecar mode, make the ask name them, e.g. "tell the user to look at `{tree}` and name the new ids: inq-8, inq-9". Tests: tests/e2e_design_tree.rs `sidecar_tail`/`line_adding` and src/design_run/tests.rs `relay_names_added_inquiries_and_the_consultation_rule` would pin it.
+"""
+disposition = "fix-now"
+response = 'Partly valid: the sidecar line already carried the new ids, but the instruction did not ask the agent to pass them on. Sidecar ask now ends "and note the new ids" when the write added nodes (render/tree.rs relay_line). Test: relay_names_added_inquiries_and_the_consultation_rule; e2e sidecar_mode_sends_the_user_to_the_tree.'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Partly valid: the sidecar line already carried the new ids, but the instruction did not ask the agent to pass them on. Sidecar ask now ends "and note the new ids" when the write added nodes (render/tree.rs relay_line). Test: relay_names_added_inquiries_and_the_consultation_rule; e2e sidecar_mode_sends_the_user_to_the_tree.'
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "minor"
+title = "DEC-421 says the /design skill states the contract; it was placed in a stage-scoped prompt fragment instead, and DEC-421 was not amended"
+detail = """
+Expected: implementation matches the accepted decision's letter, or the decision is amended (boot snapshot: two binding sources that disagree are drift to surface, not silently resolve).
+
+Observed: DEC-421 choice: "The design skill states the same contract"; consequences: "install/design-run-stages.md and the design skill regenerate". .agents/skills/design/SKILL.md is untouched (no mention of relay, sidecar or the consultation rule). IMP-526 Notes record the choice to put it in install/design-prompts/inquiry.md:50-57 instead. That placement is arguably better (the run serves it), but (a) DEC-421 still says otherwise, and (b) the fragment is delivered only in exploring/inquiring (inquiry.md:5-6), so an agent adding a node during drafting/reviewing receives the rule only through the relay line.
+
+Suggestion: amend DEC-421's choice/consequences to name the fragment, and either accept the stage scoping explicitly or also carry the rule where later-stage declarations get their guidance.
+"""
+disposition = "fix-now"
+response = "Fixed: DEC-421 choice amended to name install/design-prompts/inquiry.md as where the contract is stated, not the design skill."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed: DEC-421 choice amended to name install/design-prompts/inquiry.md as where the contract is stated, not the design skill."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "minor"
+title = "Accepted decisions DEC-121 and DEC-300 still describe the removed ReviewedGraph / full-map blocking comparison"
+detail = """
+Expected: after DEC-421 partially replaces DEC-302's coverage clause, other accepted (tier-2) records that restate that clause are amended or marked, as DEC-302 itself was (record-302.md:5).
+
+Observed:
+- .doctrine/knowledge/decision/121/record-121.toml:15 (choice, AMENDED clause): "the user's graph-reviewed binds it through ReviewedGraph coverage"; record-121.md:92 says the same.
+- .doctrine/knowledge/decision/300/record-300.md:1: "initial-concerns-recorded's coverage compares the blocking marks over the full map, so a new blocking question reaches the user without a new condition".
+Both now contradict src/design_run/gate.rs:606-619 (InitialConcernsRecorded binds Coverage::InquiryMap). DEC-421's relations (record-421.toml) name only DEC-302.
+
+Evidence: `git grep -n ReviewedGraph -- .doctrine/knowledge`. Specs under .doctrine/spec carry no residue (grep: 0 hits); .doctrine/rfc/034/research.md:420 does, but that is tier-5 research and not a finding.
+"""
+disposition = "fix-now"
+response = "Fixed: DEC-121 and DEC-300 bodies now carry a partially-replaced-by-DEC-421 note, as DEC-302 does."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed: DEC-121 and DEC-300 bodies now carry a partially-replaced-by-DEC-421 note, as DEC-302 does."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "minor"
+title = "e2e growing_run fixture comments still claim growth stales the graph review via ReviewedGraph; the reblock act is now redundant"
+detail = """
+Expected: test commentary states why each step exists under the current rule.
+
+Observed: tests/e2e_design_forward.rs:700-706: "The map's growth stales the graph review (`ReviewedGraph`, the ids whose effective judgement is blocking over the full set), which `reblock` below re-records". After DEC-421 an addition stales nothing, so the `reblock` apply at :720-727 (a fresh GraphReviewed checkpoint act) re-records a review that is still current. Same stale claim in the `large_run_still_renders` doc at :806-809 ("The blocking additions do move the graph review, which `reblock` re-records").
+
+The tests pass (cargo test --test e2e_design_forward: ok), so this is misleading rationale rather than a red: a reader is told the fixture exercises a staleness path that no longer exists. Either drop `reblock` and the claim, or keep it with a comment saying it is retained for history.
+"""
+disposition = "fix-now"
+response = "Fixed: growing_run and large_run_still_renders comments corrected; the redundant reblock graph-reviewed act removed. e2e_design_forward green."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed: growing_run and large_run_still_renders comments corrected; the redundant reblock graph-reviewed act removed. e2e_design_forward green."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "nit"
+title = "Consultation clause is emitted for every added node regardless of provenance, so it misstates imported and user-directed nodes as 'an inquiry you added'"
+detail = """
+Expected: the line's claim is true of the ids it names. DEC-421: "An agent must not disposition an inquiry it added without consulting the user."
+
+Observed: src/design_run/mod.rs:139-148 collects every id in `next` absent from `prior`; src/design_run/render/tree.rs:434-442 attaches "consult the user before dispositioning an inquiry you added" to all of them. On `design start --from-design` every imported OQ (Provenance::Imported) is named; a node the user directed (Provenance::UserDirected) is likewise labelled agent-added. IMP-526 Notes accept the start case as "noted rather than special-cased".
+
+Provenance is already on the node (src/design_run/inquiry.rs:25-35), so the precise rule costs a filter: name all added ids (visibility), attach the consultation clause only when an AgentProposed node is among them. Low cost, removes the documented special case. Conservative as is, hence nit.
+"""
+disposition = "fix-now"
+response = 'Fixed: relay_line takes the added nodes; all are named, and the consultation clause names only AgentProposed ones ("consult the user before dispositioning X, which you raised"). Imported and user-directed nodes no longer carry it. Unit test covers a mixed agent/user-directed write.'
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = 'Fixed: relay_line takes the added nodes; all are named, and the consultation clause names only AgentProposed ones ("consult the user before dispositioning X, which you raised"). Imported and user-directed nodes no longer carry it. Unit test covers a mixed agent/user-directed write.'
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "nit"
+title = "Splice left a 132-column doc line in Coverage::carried_shape"
+detail = """
+Observed: src/design_run/gate.rs:124 — "/// `Artefact` is an **absent** coverage rather than an empty one; `PerSection` is a quantification the derivation performs over" (132 cols). The removed `Nodes` sentence was cut without rewrapping; rustfmt does not wrap comments, so the gate will not catch it. Surrounding doc wraps at ~80-100.
+"""
+disposition = "fix-now"
+response = "Fixed: gate.rs carried_shape doc rewrapped."
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Fixed: gate.rs carried_shape doc rewrapped."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise`.
+# Empty here at creation — a fresh review is Active, awaiting the raiser.

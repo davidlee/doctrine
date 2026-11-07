@@ -1,1 +1,5 @@
 The inquiry map's two cumulative attested conditions stop treating an addition as a change to what they covered. The derived re-declaration condition first chosen here is superseded by DEC-302 (amended 2026-09-25): the blocking set derives from a per-node judgement, and initial-concerns-recorded's coverage compares the blocking marks over the full map, so a new blocking question reaches the user without a new condition. Reasoning, alternatives rejected and consequences are in the facet; the mechanism is designed in SL-264 and reconciled against DEC-062 by DEC-301.
+
+
+
+**Partially replaced by DEC-421 (2026-11-08):** `graph-reviewed` no longer uses `ReviewedGraph` coverage or compares the full-set blocking marks; it binds node material over carried keys (`InquiryMap`), and new inquiries reach the user by the write's relay line.

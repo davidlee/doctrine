@@ -6674,8 +6674,8 @@ fn relay_is_owed_in_both_modes_on_a_map_change() {
     assert_ne!(relay, sidecar, "the two modes ask different things");
 }
 
-/// `DEC-421`: a write that adds inquiries names them, and states the
-/// consultation rule, in both modes.
+/// `DEC-421`, `RV-430` F-1/F-5: a write that adds inquiries names them in both
+/// modes, and owes the consultation rule only for the ones the agent raised.
 #[test]
 fn relay_names_added_inquiries_and_the_consultation_rule() {
     let (prior, derived) = cleared();
@@ -6684,13 +6684,20 @@ fn relay_names_added_inquiries_and_the_consultation_rule() {
         &derived,
         serde_json::json!({"declare": [
             {"subject": "inq-8", "question": "first?", "blocking": true},
-            {"subject": "inq-9", "question": "second?", "blocking": false},
+            {"subject": "inq-9", "question": "second?", "blocking": false,
+                "provenance": {"provenance": "user-directed"}},
         ]}),
     );
     for delivery in [MapDelivery::Relay, MapDelivery::Sidecar] {
         let line = super::relay(delivery, &prior, &grown, "SL-266")
             .unwrap_or_else(|| panic!("{delivery:?}: growth owes a line"));
         assert!(line.contains("new: inq-8, inq-9"), "{delivery:?}: {line}");
-        assert!(line.contains("consult the user"), "{delivery:?}: {line}");
+        assert!(
+            line.contains("consult the user before dispositioning inq-8, which you raised"),
+            "{delivery:?}: only the agent's node owes consultation: {line}"
+        );
     }
+    let sidecar =
+        super::relay(MapDelivery::Sidecar, &prior, &grown, "SL-266").expect("growth owes a line");
+    assert!(sidecar.ends_with("and note the new ids"), "{sidecar}");
 }

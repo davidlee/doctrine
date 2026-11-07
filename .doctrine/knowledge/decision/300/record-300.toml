@@ -7,7 +7,7 @@ title = "Narrow the map's attested binding and derive a growth obligation"
 record_kind = "decision"
 status = "accepted"
 created = "2026-09-25"
-updated = "2026-09-25"
+updated = "2026-11-07"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)

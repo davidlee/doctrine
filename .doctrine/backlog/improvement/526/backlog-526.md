@@ -51,3 +51,8 @@ the consultation rule stays behavioural.
   (renamed), `sidecar_mode_sends_the_user_to_the_tree` (was
   `sidecar_mode_prints_no_relay_line`), relay-line assertions updated.
 - `doctrine check gate` green; clippy and fmt clean.
+- **RV-430 (Opus code review):** 6 findings (4 minor, 2 nit), all fixed. Code
+  change: the consultation clause now names only agent-proposed added ids, and
+  sidecar asks the agent to note the new ids. The rest are records, comments
+  and one redundant test act. The import special case noted above is gone
+  (imported nodes carry no consultation clause).
