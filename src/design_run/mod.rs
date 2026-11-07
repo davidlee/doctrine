@@ -129,16 +129,25 @@ pub(crate) fn map_changed(
     prior.map.inquiry != next.map.inquiry
 }
 
-/// The relay line a write prints last, if it owes one: relay mode and a changed
-/// map (SL-266 `DEC-310`). One rule for every map-writing verb.
+/// The relay line a write prints last, if it owes one: a changed map, in either
+/// delivery mode (SL-266 `DEC-310`, `DEC-421`), naming the inquiries the write
+/// added. One rule for every map-writing verb.
 pub(crate) fn relay(
     delivery: config::MapDelivery,
     prior: &snapshot::DesignSnapshot,
     next: &snapshot::DesignSnapshot,
     slice_ref: &str,
 ) -> Option<String> {
-    (delivery == config::MapDelivery::Relay && map_changed(prior, next))
-        .then(|| render::tree::relay_line(slice_ref))
+    map_changed(prior, next).then(|| {
+        let added: Vec<_> = next
+            .map
+            .inquiry
+            .nodes()
+            .map(inquiry::InquiryNode::id)
+            .filter(|id| prior.map.inquiry.get(id).is_none())
+            .collect();
+        render::tree::relay_line(delivery, slice_ref, &added)
+    })
 }
 
 /// The five coarse stages of a design run (design §5.4).

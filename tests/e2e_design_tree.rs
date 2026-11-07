@@ -178,11 +178,24 @@ fn design_tree_counts_each_run_once() {
 
 // ── the relay line (SL-266 PHASE-04, `DEC-309` / `DEC-310`) ────────────────
 
-/// The line a map-changing write prints last in relay mode, for [`SLICE`].
-fn relay_line() -> String {
+/// The tail of the line a map-changing write prints last in relay mode, for
+/// [`SLICE`].
+fn relay_tail() -> String {
     format!(
-        "map changed — before ending this turn, show the user the output of \
-         `doctrine design tree {SLICE}` verbatim"
+        "before ending this turn, show the user the output of `doctrine design tree {SLICE}` verbatim"
+    )
+}
+
+/// The tail of the same line in sidecar mode (`DEC-421`).
+fn sidecar_tail() -> String {
+    format!("before ending this turn, tell the user to look at `doctrine design tree {SLICE}`")
+}
+
+/// The whole line a write that adds `new` prints, ending in `tail`.
+fn line_adding(new: &str, tail: &str) -> String {
+    format!(
+        "map changed — new: {new} — consult the user before dispositioning an inquiry you \
+         added; {tail}"
     )
 }
 
@@ -265,7 +278,11 @@ fn relay_line_closes_a_map_changing_apply_only() {
 
     let created = payload(&fixture, "create", &create_node("inq-1"));
     let out = apply(&fixture, &created);
-    assert_eq!(last_line(&out), relay_line(), "{out}");
+    assert_eq!(
+        last_line(&out),
+        line_adding("inq-1", &relay_tail()),
+        "{out}"
+    );
     assert_eq!(out.matches("map changed").count(), 1, "{out}");
 
     let replay = apply(&fixture, &created);
@@ -288,7 +305,9 @@ fn relay_line_closes_a_map_changing_apply_only() {
 fn relay_line_closes_a_node_importing_start() {
     let tmp = legacy_tree(None);
     let out = start_from_design(tmp.path());
-    assert_eq!(last_line(&out), relay_line(), "{out}");
+    let last = last_line(&out);
+    assert!(last.starts_with("map changed — new: "), "{out}");
+    assert!(last.ends_with(&relay_tail()), "{out}");
 }
 
 /// `VT-12`: `design adopt` re-seats sections and never touches the map, so a
@@ -313,13 +332,14 @@ fn a_written_adopt_carries_no_relay_line() {
     assert!(!out.contains("map changed"), "{out}");
 }
 
-/// `VT-12`: in sidecar mode no write prints the relay line.
+/// `VT-12`, `DEC-421`: in sidecar mode a map-changing write sends the user to
+/// the tree instead of pasting it, naming the new ids.
 #[test]
-fn sidecar_mode_prints_no_relay_line() {
+fn sidecar_mode_sends_the_user_to_the_tree() {
     let sidecar = "[design]\nmap_delivery = \"sidecar\"\n";
     let tmp = legacy_tree(Some(sidecar));
     let out = start_from_design(tmp.path());
-    assert!(!out.contains("map changed"), "start: {out}");
+    assert!(last_line(&out).ends_with(&sidecar_tail()), "start: {out}");
 
     let fixture = DesignRun::start();
     write_config(&fixture.root, sidecar);
@@ -327,7 +347,11 @@ fn sidecar_mode_prints_no_relay_line() {
         &fixture,
         &payload(&fixture, "create", &create_node("inq-1")),
     );
-    assert!(!out.contains("map changed"), "apply: {out}");
+    assert_eq!(
+        last_line(&out),
+        line_adding("inq-1", &sidecar_tail()),
+        "apply: {out}"
+    );
 }
 
 /// `VT-12`: every malformed `[design]` entry refuses `design apply` and `design
@@ -384,7 +408,7 @@ fn an_unrelated_malformed_table_does_not_refuse_the_writes() {
     let tmp = legacy_tree(Some(unrelated));
     let out = start_from_design(tmp.path());
     assert!(
-        !out.contains("map changed"),
+        last_line(&out).ends_with(&sidecar_tail()),
         "sidecar still honoured: {out}"
     );
 
@@ -394,5 +418,5 @@ fn an_unrelated_malformed_table_does_not_refuse_the_writes() {
         &fixture,
         &payload(&fixture, "create", &create_node("inq-1")),
     );
-    assert!(!out.contains("map changed"), "apply: {out}");
+    assert!(last_line(&out).ends_with(&sidecar_tail()), "apply: {out}");
 }

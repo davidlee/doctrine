@@ -1,0 +1,35 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 421
+slug = "inquiry-growth-is-surfaced-by-relay-not-gate-staleness"
+title = "Inquiry growth is surfaced by relay, not gate staleness"
+record_kind = "decision"
+status = "accepted"
+created = "2026-11-07"
+updated = "2026-11-07"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-302 bound graph-reviewed (initial-concerns-recorded) under Coverage::ReviewedGraph: carried-keys material plus the full-set blocking marks, so any newly added blocking inquiry staled the user's graph review (RV-386 F-6). In practice the agent adds nodes routinely and the re-review is friction. Nothing can enforce that new nodes reach the user short of cryptographic or confinement-gated access; the contract is behavioural, and gate staleness is a blunt, lossy proxy for it."
+choice = "graph-reviewed binds node material over the keys it carried only — the same comparison as user-accepts-sufficiency; the full-set blocking-marks conjunct is removed. A flipped judgement on a covered node still stales it. Visibility moves to the write's output: every map-changing write names the added inquiry ids and owes a relay in both map_delivery modes — relay: show the tree; sidecar: tell the user to look and note the new ids. An agent must not disposition an inquiry it added without consulting the user. The design skill states the same contract."
+alternatives = ["Keep DEC-302's full-set comparison - rejected: re-faces the user on routine growth; the relay already carries visibility", "Notice without re-review as a new gate outcome - rejected: more machinery for the same behavioural guarantee", "Enforce agent-added-node consultation mechanically - rejected: unenforceable without access control the engine does not have"]
+rationale = "Design rules from the UX inward: the user needs to see new questions and be consulted on their answers, which is what the relay states at the moment it applies. Gate friction only approximates that, at the cost of repeated re-attestation. blocking-inquiries-dispositioned still holds the drafting edge until each blocker is resolved."
+consequences = ["Coverage::ReviewedGraph compares like InquiryMap (variant may collapse)", "A blocking inquiry added and resolved by the agent without consultation is a conduct breach not a gate refusal", "relay output names added ids and the consultation rule in relay and sidecar modes", "install/design-run-stages.md and the design skill regenerate"]
+decided_by = "user"
+decided_on = "2026-11-08"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "replaces DEC-302's ReviewedGraph full-set blocking comparison (coverage clause only)"
+target = "DEC-302"

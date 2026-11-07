@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use super::gate::{Coverage, ObservedFact};
 use super::ids::{DesignId, Fingerprint};
-use super::inquiry::{NodeMaterial, blocking_marks};
+use super::inquiry::NodeMaterial;
 
 /// Who reviewed a section (DEC-073, DEC-074).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -631,10 +631,8 @@ impl CoveredSet {
     /// in the wrong map.
     ///
     /// - [`Coverage::InquiryMap`] compares carried-keys material: a covered node
-    ///   whose material moved — or left — is stale, an uncovered node is not.
-    /// - [`Coverage::ReviewedGraph`] adds the **full-set** blocking comparison, so
-    ///   a node judged blocking after the act reaches the user whatever its
-    ///   lifecycle (`RV-386` F-6, F-15).
+    ///   whose material moved — or left — is stale, an uncovered node is not,
+    ///   however it is judged (`DEC-421`).
     /// - [`Coverage::EverySection`] keeps the union walk through
     ///   [`ContentCoverage::diff`] — a departing or joining section is a
     ///   difference the acceptance was not given over.
@@ -645,7 +643,6 @@ impl CoveredSet {
         coverage: Coverage,
         sections: &BTreeMap<DesignId, Fingerprint>,
         nodes: &BTreeMap<DesignId, NodeMaterial>,
-        legacy: &BTreeSet<DesignId>,
     ) -> Vec<DesignId> {
         match (coverage, carried) {
             // Inert by construction: the act's own recorded content cannot move,
@@ -656,9 +653,6 @@ impl CoveredSet {
             (Coverage::InquiryMap, Some(CoveredSet::Nodes(covered))) => {
                 covered.moved_among_carried(nodes)
             }
-            (Coverage::ReviewedGraph, Some(CoveredSet::Nodes(covered))) => {
-                covered.reviewed_graph_moved(nodes, legacy)
-            }
             // Fail closed. `PerSection` is carried by no act — the derivation
             // quantifies over the section set instead — so a record reaching here
             // accounts for none of it; every other arm is a map missing or of the
@@ -666,34 +660,8 @@ impl CoveredSet {
             (Coverage::EverySection | Coverage::PerSection, _) => {
                 sections.keys().cloned().collect()
             }
-            (Coverage::InquiryMap | Coverage::ReviewedGraph, _) => nodes.keys().cloned().collect(),
+            (Coverage::InquiryMap, _) => nodes.keys().cloned().collect(),
         }
-    }
-}
-
-impl ContentCoverage<NodeMaterial> {
-    /// The ids an act's carried node coverage no longer matches under
-    /// [`Coverage::ReviewedGraph`] (`SL-264` sec-2): carried-keys material, **and**
-    /// the full-set blocking comparison.
-    ///
-    /// The blocking set is compared in full, **whatever each node's lifecycle**,
-    /// so a blocker added after the act reaches the user even once it is resolved
-    /// before the next edge (`RV-386` F-15) — while lifecycle never enters the
-    /// material, so resolving a covered blocker is not a change.
-    fn reviewed_graph_moved(
-        &self,
-        nodes: &BTreeMap<DesignId, NodeMaterial>,
-        legacy: &BTreeSet<DesignId>,
-    ) -> Vec<DesignId> {
-        let mut moved = self.moved_among_carried(nodes);
-        moved.extend(
-            blocking_marks(&self.covered, legacy)
-                .symmetric_difference(&blocking_marks(nodes, legacy))
-                .map(|id| (*id).clone()),
-        );
-        moved.sort_unstable();
-        moved.dedup();
-        moved
     }
 }
 

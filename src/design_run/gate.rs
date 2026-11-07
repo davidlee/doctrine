@@ -98,21 +98,10 @@ pub(crate) enum Coverage {
     EverySection,
     /// The act carries a covered map that must equal every inquiry node's
     /// current canonical material, **over the keys it carried** — a node added
-    /// after the act is not a change to what it covered (`SL-264` sec-2).
+    /// after the act is not a change to what it covered (`SL-264` sec-2), however
+    /// it is judged (`DEC-421`: a new question reaches the user by relay, not by
+    /// re-attestation). A flipped judgement on a covered node is a material change.
     InquiryMap,
-    /// The act carries the same node materials as [`Coverage::InquiryMap`], over
-    /// the keys it carried, **and** the ids whose *effective* judgement is
-    /// blocking (`SL-264` sec-3) are compared over the **full** set, whatever
-    /// their lifecycle.
-    ///
-    /// The second conjunct is what keeps a question the agent judges blocking
-    /// visible to the human the moment it is added: a new blocking node changes
-    /// the marks, so the act that reviewed the graph goes stale and the user is
-    /// re-faced — while a new *non*-blocking node leaves the marks unchanged and
-    /// re-faces nobody (`SL-264` sec-2, `RV-386` F-6). Lifecycle is excluded, so
-    /// resolving a covered blocker is progress rather than a change to what was
-    /// seen (`RV-386` F-15).
-    ReviewedGraph,
     /// Quantified over subjects instead of carried by the act: every current
     /// section must have its OWN live act of the required kind, one per resolved
     /// lane, against that section's current digest.
@@ -132,15 +121,12 @@ impl Coverage {
     /// carries no map — the one statement of that correspondence, which admission
     /// checks and construction fills (`RV-389` F-2).
     ///
-    /// `Nodes` is the shape for **two** coverages (`SL-264` sec-2): `InquiryMap`
-    /// compares it over carried keys, `ReviewedGraph` over carried keys and the
-    /// full blocking set. `Artefact` is an **absent** coverage rather than an
-    /// empty one; `PerSection` is a quantification the derivation performs over
+    /// `Artefact` is an **absent** coverage rather than an empty one; `PerSection` is a quantification the derivation performs over
     /// the section set, carried by no act.
     pub(crate) const fn carried_shape(self) -> Option<CoveredShape> {
         match self {
             Coverage::EverySection => Some(CoveredShape::Sections),
-            Coverage::InquiryMap | Coverage::ReviewedGraph => Some(CoveredShape::Nodes),
+            Coverage::InquiryMap => Some(CoveredShape::Nodes),
             Coverage::Artefact | Coverage::PerSection => None,
         }
     }
@@ -154,7 +140,6 @@ impl Coverage {
             Coverage::Artefact => "artefact",
             Coverage::EverySection => "every-section",
             Coverage::InquiryMap => "inquiry-map",
-            Coverage::ReviewedGraph => "reviewed-graph",
             Coverage::PerSection => "per-section",
         }
     }
@@ -618,11 +603,10 @@ condition_vocabulary! {
         /// through this row (`SL-264` sec-3, *retired from writing, kept for
         /// reading*). DEC-121's two actors survive; its two acts do not.
         ///
-        /// `ReviewedGraph`, not `InquiryMap`: the review binds the carried node
-        /// materials **and** the full blocking set, so a question the agent
-        /// judges blocking reaches the user at the edge that adds it, while an
-        /// addition the agent leaves unblocking re-faces no one (`SL-264`
-        /// sec-2, `RV-386` F-6).
+        /// `InquiryMap`, the same comparison as `user-accepts-sufficiency`
+        /// (`DEC-421`, replacing `SL-264`'s full-set blocking comparison): an
+        /// addition, blocking or not, re-faces no one through the gate — the
+        /// write's relay line carries it to the user.
         InitialConcernsRecorded = "initial-concerns-recorded" => Contract {
             derivation: DerivationRule::Attested(AttestationRule {
                 acts: &[ActRequirement {
@@ -632,7 +616,7 @@ condition_vocabulary! {
                     disposes_review: false,
                 }],
                 binding: Binding {
-                    coverage: Coverage::ReviewedGraph,
+                    coverage: Coverage::InquiryMap,
                     observed: &[],
                 },
             }),
@@ -1589,20 +1573,14 @@ fn act_causes(
 /// **Derived from the node itself** (`SL-264` sec-3): a node's *effective*
 /// judgement is its own `blocking` when it holds one, else its membership in the
 /// stored legacy `blocking-set-declared` set — resolved **per node**, so a
-/// partly-judged run keeps every unjudged blocker (`RV-386` `F-8`). The two
-/// reads are one judgement differing only in lifecycle:
-/// [`blocking_marks`] is every node whose effective judgement is blocking
-/// whatever its lifecycle — the set a `ReviewedGraph` coverage compares — and
-/// this read is those not yet `Resolved` ([`InquiryMap::open_blockers`]). One
-/// judgement, so the gate and the coverage cannot disagree about which nodes
-/// block (`RV-386` `F-13`).
+/// partly-judged run keeps every unjudged blocker (`RV-386` `F-8`); this read
+/// is those not yet `Resolved` ([`InquiryMap::open_blockers`]).
 ///
 /// **Disposed** is `resolved`, which is the only lifecycle that can carry a
 /// [`Disposition`](super::inquiry::Disposition) — DEC-062 makes resolution
 /// without one unrepresentable, so *has a disposition* and *is resolved* are one
 /// question.
 ///
-/// [`blocking_marks`]: super::inquiry::blocking_marks
 /// [`InquiryMap::open_blockers`]: super::inquiry::InquiryMap::open_blockers
 fn blocking_inquiries_open(run: &DesignSnapshot) -> Vec<DesignId> {
     let legacy = legacy_blocking_set(run);
@@ -1659,10 +1637,10 @@ fn live_act(run: &DesignSnapshot, act: ActKind) -> Option<RecordedAct<'_>> {
 /// names.
 ///
 /// **Read through [`CoveredSet::moved`]** (`SL-264` sec-2, `RV-386` F-13): the
-/// narrowing that `ReviewedGraph` adds and `InquiryMap` narrows lives in the
-/// shared predicate, so this arm and the change log's [`live_acts`](super::run::live_acts)
-/// — which reads the same predicate under the same rule `Coverage` — cannot
-/// disagree about which nodes block.
+/// carried-keys narrowing lives in the shared predicate, so this arm and the
+/// change log's [`live_acts`](super::run::live_acts) — which reads the same
+/// predicate under the same rule `Coverage` — cannot disagree about which acts
+/// are stale.
 ///
 /// A map missing or of the wrong shape is [`CoveredSet::moved`]'s to fail
 /// closed: admission refuses a mismatched shape on write, so the only route is a
@@ -1678,7 +1656,6 @@ fn coverage_moved(
         coverage,
         &run.sections.fingerprints(),
         &run.map.inquiry.materials(),
-        &legacy_blocking_set(run),
     )
 }
 

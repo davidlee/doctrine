@@ -1021,10 +1021,11 @@ fn assert_human_gates_clear(designed: &DesignRun) {
 /// every edge below `reviewing` over an empty map (it declares no node), so the
 /// map at the sufficiency acceptance was empty and stayed so until the growth
 /// below — which adds two nodes and one `needs` edge, all therefore *after* the
-/// acceptance. The gate re-faces `initial-concerns-recorded` for the blocking
-/// addition alone, and never sufficiency.
+/// acceptance. Neither human gate is re-faced, blocking or not (`DEC-421`: a
+/// new question reaches the user by the write's relay line). Renamed from
+/// `map_growth_after_sufficiency_re_faces_only_for_a_blocking_addition`.
 #[test]
-fn map_growth_after_sufficiency_re_faces_only_for_a_blocking_addition() {
+fn map_growth_after_sufficiency_re_faces_no_human_gate() {
     let designed = ladder_to_reviewing();
 
     // The baseline: empty at the acceptance, so every node observed later is the
@@ -1050,9 +1051,8 @@ fn map_growth_after_sufficiency_re_faces_only_for_a_blocking_addition() {
     );
     assert_human_gates_clear(&designed);
 
-    // (2) A blocking addition reaches the user through `initial-concerns-recorded`
-    // (`ReviewedGraph`, the full-set blocking comparison), while sufficiency
-    // (`InquiryMap`, carried keys only) stays current for the same addition.
+    // (2) A blocking addition re-faces neither gate either (`DEC-421`); it holds
+    // the edge through `blocking-inquiries-dispositioned` until answered.
     designed.apply(
         "blocking",
         &json!({ "declare": [
@@ -1060,18 +1060,12 @@ fn map_growth_after_sufficiency_re_faces_only_for_a_blocking_addition() {
               "blocking": true, "needs": ["inq-growth-a"] },
         ]}),
     );
-    let unmet = forward_unmet_conditions(&designed);
+    assert_human_gates_clear(&designed);
     assert!(
-        unmet
+        forward_unmet_conditions(&designed)
             .iter()
-            .any(|condition| condition == "initial-concerns-recorded"),
-        "a new blocking node re-faces the graph review: {unmet:?}"
-    );
-    assert!(
-        !unmet
-            .iter()
-            .any(|condition| condition == "user-accepts-sufficiency"),
-        "sufficiency is not re-faced by an addition: {unmet:?}"
+            .any(|condition| condition == "blocking-inquiries-dispositioned"),
+        "the open blocker still holds the edge"
     );
 
     // (3) The measured quantity: nodes and edges added after the acceptance.

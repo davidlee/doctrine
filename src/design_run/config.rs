@@ -21,7 +21,8 @@ pub(crate) enum MapDelivery {
     /// The write that changed the map tells the agent to show the tree.
     #[default]
     Relay,
-    /// The user runs `doctrine design tree` themselves.
+    /// The user runs `doctrine design tree` themselves; the write that changed
+    /// the map tells the agent to send them to it (`DEC-421`).
     Sidecar,
 }
 

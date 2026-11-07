@@ -7,7 +7,7 @@ title = "Blocking is a node attribute and the blocking set is derived"
 record_kind = "decision"
 status = "accepted"
 created = "2026-09-25"
-updated = "2026-09-25"
+updated = "2026-11-07"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)

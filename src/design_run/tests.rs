@@ -1417,7 +1417,7 @@ fn the_contract_table_classifies_every_condition_as_the_design_says() {
         .1;
     assert_eq!(concerns.acts.len(), 1);
     assert_eq!(concerns.acts[0].act, ActKind::GraphReviewed);
-    assert_eq!(concerns.binding.coverage, Coverage::ReviewedGraph);
+    assert_eq!(concerns.binding.coverage, Coverage::InquiryMap);
 }
 
 /// The remedy is rendered from the rule, and the one row with two ways through
@@ -2528,15 +2528,16 @@ fn adding_a_non_blocking_node_does_not_stale_the_attested_rows() {
     assert_holds(Condition::UserAcceptsSufficiency, &run, &derived);
 }
 
-/// `VT-1` (plan) — a **blocking** node added after the review stales the graph
-/// review, and only it.
+/// `DEC-421` — a **blocking** node added after the review stales neither
+/// attested row, even once resolved.
 ///
-/// The user is re-faced because the set the review binds changed, not because the
-/// map grew (`SL-264` sec-2). `user-accepts-sufficiency` stays current: a new
-/// blocking question is `initial-concerns-recorded`'s event, and re-asking *has
-/// enough been asked* would re-face the same person twice (`OQ-3`).
+/// Replaces `adding_a_blocking_node_stales_the_graph_review` and
+/// `adding_then_resolving_a_blocker_leaves_it_stale` (`SL-264` VT-1, VT-2). A
+/// new question reaches the user through the write's relay line, not through
+/// re-attestation; `blocking-inquiries-dispositioned` still holds the edge until
+/// it is answered.
 #[test]
-fn adding_a_blocking_node_stales_the_graph_review() {
+fn adding_a_blocking_node_stales_neither_attested_row() {
     let (mut run, derived) = cleared();
     let late = id("inq-3");
     run.map
@@ -2548,15 +2549,11 @@ fn adding_a_blocking_node_stales_the_graph_review() {
             Some(true),
         ))
         .expect("a fresh node closes no cycle");
-
-    assert_eq!(
-        causes_of(Condition::InitialConcernsRecorded, &run, &derived),
-        vec![Cause::CoverageStale {
-            act: ActKind::GraphReviewed,
-            moved: vec![late],
-        }]
-    );
+    assert_holds(Condition::InitialConcernsRecorded, &run, &derived);
     assert_holds(Condition::UserAcceptsSufficiency, &run, &derived);
+
+    resolves(&mut run, &late);
+    assert_holds(Condition::InitialConcernsRecorded, &run, &derived);
 }
 
 /// `VT-1` (plan) — a flip on a **covered** node is different in kind and stales
@@ -2626,37 +2623,6 @@ fn resolving_a_covered_blocker_leaves_the_graph_review_current() {
     assert_holds(Condition::InitialConcernsRecorded, &run, &derived);
 }
 
-/// `VT-2` (plan) — a blocker added after the act and resolved before the next
-/// edge is **still** stale (`RV-386` F-15).
-///
-/// The reversal the design calls out: the review never saw the node, and its
-/// resolution does not restore the set the review *was* given. Reading only open
-/// blockers — filtering resolved nodes out of the comparison — would quietly
-/// revive the act here, which is a silent lie about what the user was shown.
-#[test]
-fn adding_then_resolving_a_blocker_leaves_it_stale() {
-    let (mut run, derived) = cleared();
-    let late = id("inq-3");
-    run.map
-        .inquiry
-        .insert(InquiryNode::open(
-            late.clone(),
-            "a blocker raised after the review",
-            Provenance::AgentProposed,
-            Some(true),
-        ))
-        .expect("a fresh node closes no cycle");
-    resolves(&mut run, &late);
-
-    assert_eq!(
-        causes_of(Condition::InitialConcernsRecorded, &run, &derived),
-        vec![Cause::CoverageStale {
-            act: ActKind::GraphReviewed,
-            moved: vec![late],
-        }]
-    );
-}
-
 /// `VT-3` (plan) — a move re-faces for a **covered** node only (`F-1`'s scoping).
 ///
 /// Re-parenting a node the review covered changes content the user saw, so the
@@ -2717,9 +2683,8 @@ fn a_move_re_faces_for_a_covered_node_only() {
 /// The change log's `live_acts` and the gate's `coverage_moved` both read coverage
 /// currency through `CoveredSet::moved` with the act's rule `Coverage`, so the
 /// `ActInvalidated` rows a sequence of declarations emits name **exactly** the
-/// attested acts the gate then calls stale — over both of them, because the
-/// blocking addition is precisely where they diverge (`graph-reviewed` stale,
-/// `user-accepts-sufficiency` current). Every case is driven through `apply`,
+/// attested acts the gate then calls stale — over both of them, which share one
+/// coverage since `DEC-421`. Every case is driven through `apply`,
 /// the lifecycle ones included (`F-15`): a reader that re-derived currency
 /// rule-free, walked the union, or dropped one act's row would disagree here.
 #[test]
@@ -2768,8 +2733,8 @@ fn the_change_log_agrees_with_the_gate_on_every_case() {
     );
     assert_eq!(
         over_cleared(&[ADD_BLOCKER]),
-        acts(&["cpa-graph"]),
-        "a new blocking node stales the review alone, and only it is reported dead"
+        acts(&[]),
+        "a new blocking node leaves both rows current and reports nothing (`DEC-421`)"
     );
     assert_eq!(
         over_cleared(&[r#"{"subject": "inq-2", "question": "a re-worded question"}"#]),
@@ -2783,8 +2748,8 @@ fn the_change_log_agrees_with_the_gate_on_every_case() {
     );
     assert_eq!(
         over_cleared(&[ADD_BLOCKER, RESOLVE_BLOCKER]),
-        acts(&["cpa-graph"]),
-        "a blocker added after the act and resolved before the next edge stays stale"
+        acts(&[]),
+        "a blocker added after the act and then resolved reports nothing (`DEC-421`)"
     );
 
     // Resolving a blocker the acts *covered* is progress, not a change: a prior
@@ -2809,15 +2774,13 @@ fn the_change_log_agrees_with_the_gate_on_every_case() {
     );
 }
 
-/// `VT-1`/`VT-2` (plan) — the carried-keys projection keeps the **leaver** arm,
-/// for both coverages (`SL-264` sec-2).
+/// `VT-1`/`VT-2` (plan) — the carried-keys projection keeps the **leaver** arm
+/// (`SL-264` sec-2).
 ///
 /// The narrowing drops only the *joiner* from `ContentCoverage::diff`'s three
 /// cases; a covered node that left is as much a change to what the act was given
 /// over as one that moved. Exercised at the predicate every reader shares, since
-/// removal is not a run event the map exposes — and over both `InquiryMap` and
-/// `ReviewedGraph`, because the blocking projection is additive, not a
-/// replacement.
+/// removal is not a run event the map exposes.
 #[test]
 fn a_carried_node_that_leaves_is_still_stale() {
     let map = |raws: &[&str]| {
@@ -2838,19 +2801,16 @@ fn a_carried_node_that_leaves_is_still_stale() {
     let covered = CoveredSet::Nodes(ContentCoverage::of(held.materials()));
     let after = map(&["inq-2"]);
 
-    for coverage in [Coverage::InquiryMap, Coverage::ReviewedGraph] {
-        assert_eq!(
-            CoveredSet::moved(
-                Some(&covered),
-                coverage,
-                &BTreeMap::new(),
-                &after.materials(),
-                &BTreeSet::new(),
-            ),
-            vec![id("inq-1")],
-            "a carried node that left is stale under {coverage:?}"
-        );
-    }
+    assert_eq!(
+        CoveredSet::moved(
+            Some(&covered),
+            Coverage::InquiryMap,
+            &BTreeMap::new(),
+            &after.materials(),
+        ),
+        vec![id("inq-1")],
+        "a carried node that left is stale"
+    );
 }
 
 /// `VT-2` — a departing section is a failure for one coverage and not the other,
@@ -3484,17 +3444,17 @@ fn submitted_legacy_act_is_refused() {
 /// after set alike, so the set difference is empty and nothing reports an act
 /// dead whose currency nothing reads (`RV-386` F-17, `STD-003`). The control is
 /// the user's `graph-reviewed`, which IS currency-read and does die when the map
-/// moves: the exclusion discriminates by kind, not by coverage. The edit adds a
-/// **blocking** node, because after the sweep a non-blocking addition is no longer
-/// a move the graph review sees (`SL-264` sec-2, `RV-386` F-6).
+/// moves: the exclusion discriminates by kind, not by coverage. The edit rewords
+/// a **covered** node, because an addition is no longer a move the graph review
+/// sees (`SL-264` sec-2, `DEC-421`).
 #[test]
 fn a_map_edit_emits_no_row_for_a_legacy_act() {
     let (run, _derived) = cleared();
     let edit = declare_over(
         &run,
-        r#"{"subject": "inq-3", "question": "what did the review not see?", "blocking": true}"#,
+        r#"{"subject": "inq-2", "question": "what did the review not see?"}"#,
     )
-    .expect("a new node with a judgement applies");
+    .expect("a reword of a covered node applies");
 
     let invalidated = subjects(&edit, ChangeEvent::ActInvalidated);
     assert!(
@@ -6405,7 +6365,6 @@ fn a_blocking_flip_moves_the_carried_material() {
             Coverage::InquiryMap,
             &BTreeMap::new(),
             &before.materials(),
-            &BTreeSet::new(),
         )
         .is_empty(),
         "nothing moved while nothing moved"
@@ -6418,7 +6377,6 @@ fn a_blocking_flip_moves_the_carried_material() {
             Coverage::InquiryMap,
             &BTreeMap::new(),
             &flipped.materials(),
-            &BTreeSet::new(),
         ),
         vec![id("inq-1")],
         "a flipped judgement is a change to what the node is made of"
@@ -6433,7 +6391,6 @@ fn a_blocking_flip_moves_the_carried_material() {
             Coverage::InquiryMap,
             &BTreeMap::new(),
             &answered.materials(),
-            &BTreeSet::new(),
         )
         .is_empty(),
         "and answering the question is still progress through the graph, not a \
@@ -6692,29 +6649,48 @@ fn map_changed_table() {
     }
 }
 
-/// `DEC-310`: the line is owed only in relay mode, and only by a map change.
+/// `DEC-310`, `DEC-421`: every map change owes a line in **both** modes — relay
+/// shows the tree, sidecar sends the user to it — and an unchanged map owes none.
 #[test]
-fn relay_is_owed_only_in_relay_mode_on_a_map_change() {
+fn relay_is_owed_in_both_modes_on_a_map_change() {
     let (prior, derived) = cleared();
     let changed = apply_body(
         &prior,
         &derived,
         serde_json::json!({"declare": [{"subject": OPEN_NODE, "question": "reworded?"}]}),
     );
-    let line = super::render::tree::relay_line("SL-266");
-    for (delivery, next, expected) in [
-        (MapDelivery::Relay, &changed, Some(line.clone())),
-        (MapDelivery::Relay, &prior, None),
-        (MapDelivery::Sidecar, &changed, None),
+    for (delivery, tail) in [
+        (MapDelivery::Relay, "`doctrine design tree SL-266` verbatim"),
+        (MapDelivery::Sidecar, "`doctrine design tree SL-266`"),
     ] {
-        assert_eq!(
-            super::relay(delivery, &prior, next, "SL-266"),
-            expected,
-            "{delivery:?}"
-        );
+        let line = super::relay(delivery, &prior, &changed, "SL-266")
+            .unwrap_or_else(|| panic!("{delivery:?}: a map change owes a line"));
+        assert!(line.ends_with(tail), "{delivery:?} names the tree: {line}");
+        assert!(!line.contains("new:"), "a reword adds no node: {line}");
+        assert_eq!(super::relay(delivery, &prior, &prior, "SL-266"), None);
     }
-    assert!(
-        line.ends_with("`doctrine design tree SL-266` verbatim"),
-        "the line names the slice's tree: {line}"
+    let relay = super::relay(MapDelivery::Relay, &prior, &changed, "SL-266");
+    let sidecar = super::relay(MapDelivery::Sidecar, &prior, &changed, "SL-266");
+    assert_ne!(relay, sidecar, "the two modes ask different things");
+}
+
+/// `DEC-421`: a write that adds inquiries names them, and states the
+/// consultation rule, in both modes.
+#[test]
+fn relay_names_added_inquiries_and_the_consultation_rule() {
+    let (prior, derived) = cleared();
+    let grown = apply_body(
+        &prior,
+        &derived,
+        serde_json::json!({"declare": [
+            {"subject": "inq-8", "question": "first?", "blocking": true},
+            {"subject": "inq-9", "question": "second?", "blocking": false},
+        ]}),
     );
+    for delivery in [MapDelivery::Relay, MapDelivery::Sidecar] {
+        let line = super::relay(delivery, &prior, &grown, "SL-266")
+            .unwrap_or_else(|| panic!("{delivery:?}: growth owes a line"));
+        assert!(line.contains("new: inq-8, inq-9"), "{delivery:?}: {line}");
+        assert!(line.contains("consult the user"), "{delivery:?}: {line}");
+    }
 }

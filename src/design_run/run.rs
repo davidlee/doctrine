@@ -2134,7 +2134,7 @@ const fn outcome_label(claim: DischargeClaim) -> &'static str {
 /// rule names — looked up here from the act's kind via
 /// [`requirement_for`](super::gate::requirement_for) — so this emits
 /// [`ChangeEvent::ActInvalidated`] exactly for the act the gate calls stale, and
-/// **never** for a non-blocking addition the gate keeps current. A reader that
+/// **never** for an addition the gate keeps current. A reader that
 /// re-derived coverage currency rule-free would report a death the gate never
 /// saw.
 ///
@@ -2164,18 +2164,16 @@ const fn outcome_label(claim: DischargeClaim) -> &'static str {
 pub(super) fn live_acts(snapshot: &DesignSnapshot) -> BTreeSet<(ActKind, DesignId)> {
     let sections = snapshot.sections.fingerprints();
     let nodes = snapshot.map.inquiry.materials();
-    let legacy = gate::legacy_blocking_set(snapshot);
     // The rule's `Coverage`, looked up from the act's kind, is what the shared
     // predicate compares under — so this reader and the gate's `coverage_moved`
-    // narrow together and cannot disagree about which nodes block (`RV-386`
+    // narrow together and cannot disagree about which acts are stale (`RV-386`
     // F-13). A legacy kind is excluded first; past that guard `requirement_for`
     // is total, and an act carrying no map (an `Artefact` rule) is live.
     let live = |kind: ActKind, covered: Option<&CoveredSet>| {
         !kind.is_legacy()
             && match (gate::requirement_for(kind), covered) {
                 (Some(rule), Some(_)) => {
-                    CoveredSet::moved(covered, rule.binding.coverage, &sections, &nodes, &legacy)
-                        .is_empty()
+                    CoveredSet::moved(covered, rule.binding.coverage, &sections, &nodes).is_empty()
                 }
                 _ => true,
             }

@@ -8,6 +8,8 @@ use owo_colors::{OwoColorize, Style};
 use textwrap::core::display_width;
 use textwrap::{Options, WordSplitter};
 
+use super::super::config::MapDelivery;
+use super::super::ids::DesignId;
 use super::super::inquiry::{InquiryLifecycle, Provenance};
 use super::envelope::{MapAnswer, MapNode, TitleLookup, TurnEnvelope};
 
@@ -214,12 +216,26 @@ fn footer(envelope: &TurnEnvelope) -> String {
     command(&envelope.slice_ref)
 }
 
-/// The line a map-changing write prints last in relay mode (`DEC-310`).
-pub(crate) fn relay_line(slice_ref: &str) -> String {
-    format!(
-        "map changed — before ending this turn, show the user the output of `{}` verbatim",
-        command(slice_ref)
-    )
+/// The line a map-changing write prints last (`DEC-310`), in either delivery
+/// mode (`DEC-421`): relay shows the user the tree, sidecar sends them to it.
+/// `added` names the inquiries the write created, with the rule an agent owes
+/// each — the behavioural contract the gate no longer approximates.
+pub(crate) fn relay_line(delivery: MapDelivery, slice_ref: &str, added: &[&DesignId]) -> String {
+    let tree = command(slice_ref);
+    let ask = match delivery {
+        MapDelivery::Relay => format!("show the user the output of `{tree}` verbatim"),
+        MapDelivery::Sidecar => format!("tell the user to look at `{tree}`"),
+    };
+    let new = if added.is_empty() {
+        String::new()
+    } else {
+        let ids: Vec<&str> = added.iter().map(|id| id.as_str()).collect();
+        format!(
+            "new: {} — consult the user before dispositioning an inquiry you added; ",
+            ids.join(", ")
+        )
+    };
+    format!("map changed — {new}before ending this turn, {ask}")
 }
 
 /// The command that renders `slice_ref`'s tree.
