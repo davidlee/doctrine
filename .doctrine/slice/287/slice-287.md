@@ -47,6 +47,13 @@ Codify the pattern as shipped workflow guidance — prose, no engine change:
 4. **Plan review shape.** Codify the two-reviewer plan review (ledger
    cross-check; sequencing and phase gates) on the existing RV ledger
    machinery.
+5. **Variances and refresh.** The ledger carries append-only variances to
+   audit (`DEC-420`), and is refreshed when the design is revised and relocked
+   (`RV-429` F-1, F-4, F-5).
+6. **`/plan` step-4 correction** (user, 2026-11-08: "keep it"). The step's
+   claim that `specs`/`requirements` stay empty "(no registry yet)" is false;
+   it is reworded to what is true. The reader discarding those tables stays
+   `ISS-321`'s; this slice fulfils it only partially.
 
 ## Non-Goals
 
@@ -62,7 +69,8 @@ Codify the pattern as shipped workflow guidance — prose, no engine change:
 - `install/commitment-ledger.md` (new) → `lib:reference/commitment-ledger.md` —
   the procedure, ledger TOML shape, plan-review shape (`DEC-415`–`DEC-419`).
 - `plugins/doctrine/skills/plan/SKILL.md` — routes to it at ledger authoring
-  and at review (replaces step 7 for multi-phase plans).
+  and at review (replaces step 7 for multi-phase plans); step-4
+  `specs`/`requirements` line corrected.
 - `plugins/doctrine/skills/phase-plan/SKILL.md` — one-line pointer: carry the
   phase's ledger quotes into the runtime sheet.
 - `plugins/doctrine/skills/{execute,consult,audit}/SKILL.md` — one-line
@@ -81,15 +89,9 @@ Shipped text must not cite repo-private ids (`POL-002`, `ADR-024`).
   mitigation; the follow-up trial should show whether cited-but-wrong shrinks.
 - **Risk:** ceremony on simple plans. Mitigation: an explicit trigger; skip
   otherwise.
-- **OQ:** where the ledger artefact lives (slice folder, plan notes, or the RV
-  ledger itself), and whether it is authored or runtime.
-- **OQ (user aside, 2026-11-08):** the ledger's format deserves design even if
-  nothing machine-reads it yet — TOML may beat Markdown (storage rule:
-  structured data in TOML; a later consumer, e.g. `SL-258` or an `IMP-409`
-  check, could read it without a migration).
-- **OQ:** trigger for "complex design".
-- **Adjacent, not in scope:** `/plan` step 4 says `specs`/`requirements` stay
-  empty "no registry yet" — stale per `RFC-029` § 5 (`ISS-321`).
+- **Settled:** the ledger is an authored TOML sidecar in the slice folder
+  (`DEC-415`); the procedure lives in `lib:reference/commitment-ledger.md`
+  (`DEC-419`); the trigger is any multi-phase plan (`DEC-417`).
 
 ## Verification / closure intent
 

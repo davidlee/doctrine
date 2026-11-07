@@ -83,6 +83,11 @@ selector = "install/using-doctrine.md"
 intent = "design-target"
 
 [[relation]]
+label = "fulfils"
+degree = "partial"
+target = "ISS-321"
+
+[[relation]]
 label = "related"
 target = "RFC-029"
 

@@ -32,7 +32,7 @@ ref   = "SL-287"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Ledger has no refresh after the design is revised and relocked"
 detail = """
@@ -59,9 +59,14 @@ response = """
 Fixed in the design at run revision 29. sec-2 (ledger format): source becomes {section, heading}; new [[extracted]] table stamps each section's fingerprint at extraction. sec-3 (authoring): extraction stamps [[extracted]]. sec-5 (variances): new subsection "Refresh after a design revision" - detect at the locked-exit handoff to /plan and at each /phase-plan via fingerprint compare plus verbatim-quote check (fallback: quote check plus design.md diff); refresh scoped to changed sections, supersede gone rows by intent variance plus new-id replacement, add new rows, re-run cross-check, re-stamp; touchpoint table updated for /plan and /phase-plan. sec-9 (risks): staleness detection is manual, first candidate for a mechanical check; relock cost is IMP-525.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = 'User (raiser) on 2026-11-08, asked whether the fixes resolve F-1 to F-3: "yes". Recorded by the agent on that reply.'
+
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Note the ledger's orchestration seam, proportionate and host-directed"
 detail = """
@@ -84,9 +89,14 @@ response = """
 Fixed at run revision 31. sec-3 (authoring procedure) gains an "Orchestration seam" paragraph: the steps divide cleanly, so delegation proportionate to slice scope is an opportunity - planner alone, one delegate, one per section, a separate transcription or sequencing check - with the split and mechanism left to host directives; the plan review is the same seam. sec-6 adds POL-003: neutral terms only, no harness or delegate mechanism named.
 """
 
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = 'User (raiser) on 2026-11-08, asked whether the fixes resolve F-1 to F-3: "yes". Recorded by the agent on that reply.'
+
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Ledger records no dependencies between commitments"
 detail = """
@@ -110,6 +120,11 @@ disposition = "fix-now"
 response = """
 Fixed at run revision 34. sec-2: optional `needs` on commitment rows, correctness only, acyclic, expected sparse. sec-3: needs drives sequencing (never forward), gates (cross-phase edge appears as gated_by EN) and parallel candidates (no needs path + disjoint surfaces; host directives decide); cross-check adds no-cycle / no-forward / every cross-phase edge gated. sec-4: sequencing reviewer reads the ledger and checks plan order agrees with needs; plan.toml owns the realised sequence, needs is its rationale. sec-9: why this is not RFC-027 H9 and how it gathers H9 reopening evidence; mechanical acyclicity check is a follow-up.
 """
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = 'User (raiser) on 2026-11-08, asked whether the fixes resolve F-1 to F-3: "yes". Recorded by the agent on that reply.'
 
 [[finding]]
 id = "F-4"
@@ -204,7 +219,7 @@ note = "codex: VERIFIED against the revised materialised design, sec-2 and sec-5
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "The design includes a correction the slice explicitly excludes"
 detail = """
@@ -215,10 +230,18 @@ Verified inconsistency: 'doctrine show SL-287', 'Risks, assumptions, open questi
 Expected: scope and design must agree on the work implementation is authorised to deliver. Inference: following the current code-impact table would include an explicitly excluded edit, while following the scope would omit a promised change; a reviewer cannot assess conformance against both.
 
 Reconcile the scope explicitly if this correction is accepted into SL-287, or remove this correction from the design and leave it with ISS-321. This finding does not request either edit from the raiser; this pass writes RV-429 only."""
+disposition = "fix-now"
+response = "Resolved by the user (2026-11-08: keep it): the step-4 correction is in SL-287 scope. slice-287.md gains scope item 6 and the affected-surface note; the adjacent/not-in-scope line is removed. The design (sec-6, sec-7) is unchanged. ISS-321 (reader discards the tables) stays open; SL-287 fulfils it partially (linked)."
 
 [[finding.turn]]
 act = "raise"
 role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = "Resolved by the user (2026-11-08: keep it): the step-4 correction is in SL-287 scope. slice-287.md gains scope item 6 and the affected-surface note; the adjacent/not-in-scope line is removed. The design (sec-6, sec-7) is unchanged. ISS-321 (reader discards the tables) stays open; SL-287 fulfils it partially (linked)."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.

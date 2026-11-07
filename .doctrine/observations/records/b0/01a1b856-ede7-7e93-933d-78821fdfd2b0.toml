@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1b856-ede7-7e93-933d-78821fdfd2b0"
+recorded_at = "2026-11-07T23:27:47.175662269Z"
+kind = "friction"
+summary = "design: top-level acceptance on a section-attestation submission records design-accepted"
+detail = "SL-287 /design reviewing, run rev 42->43. Submitted declare att-1..9 (attests sec-N, reviewer human) with a top-level acceptance basis citing the user's section sign-off, intending it as the attestations' basis. The engine also recorded cpa-design-accepted (act=design-accepted), which the user had NOT given. No retract verb exists; a later discharge-only submission did not stale it (still current:true). The reviewing fragment's lock example shows top-level acceptance paired with checkpoint_act design-accepted, but nothing says top-level acceptance alone in reviewing IS the acceptance act. Either require checkpoint_act explicitly for design-accepted, or refuse/announce the inference, and provide a retraction path."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

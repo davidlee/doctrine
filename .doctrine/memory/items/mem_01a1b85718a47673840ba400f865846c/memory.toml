@@ -1,0 +1,46 @@
+memory_uid = "mem_01a1b85718a47673840ba400f865846c"
+memory_key = "mem.fact.design-run.top-level-acceptance-is-design-accepted"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "design apply: top-level acceptance in reviewing records design-accepted"
+summary = "In a reviewing design run, a submission's top-level acceptance (even with only section attestations declared) records a design-accepted act; no retract verb"
+created = "2026-11-07"
+updated = "2026-11-07"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine design apply"]
+tags = ["design-run", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c5d0f9a2db922f9bdb72bee868bcd4a53c5f23bd"
+ref_name = "refs/heads/edge"
+checkout_state_id = "8aea70ba8d4e6fc8caa24226094fa480c4e339198013763bb42a9b17df5f39b0"
+base_commit = "08d081f542ed49f8d777e6a5d3743b1240d68f93"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "observation"
+ref = "SL-287 run dr-01a1b821 rev 43"
+
