@@ -59,11 +59,15 @@ Codify the pattern as shipped workflow guidance — prose, no engine change:
 
 ## Affected surface
 
-- `plugins/doctrine/skills/plan/SKILL.md` — the `/plan` skill master.
-- Probably a new shipped reference doc for the procedure body (`ADR-005`:
-  skills route, reference docs explain) — home decided in design.
-- Wherever plan review is currently described (design to locate:
-  `install/review-ledger.md`, `/code-review`, or `/plan`).
+- `install/commitment-ledger.md` (new) → `lib:reference/commitment-ledger.md` —
+  the procedure, ledger TOML shape, plan-review shape (`DEC-415`–`DEC-419`).
+- `plugins/doctrine/skills/plan/SKILL.md` — routes to it at ledger authoring
+  and at review (replaces step 7 for multi-phase plans).
+- `plugins/doctrine/skills/phase-plan/SKILL.md` — one-line pointer: carry the
+  phase's ledger quotes into the runtime sheet.
+- `publication/manifest.toml` + a shipped-ness test in `src/install.rs`.
+- `install/glossary.md`, `install/using-doctrine.md` — slice-directory layout
+  and storage example gain the ledger; "commitment ledger" vs review ledger.
 
 Shipped text must not cite repo-private ids (`POL-002`, `ADR-024`).
 

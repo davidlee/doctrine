@@ -1,0 +1,1 @@
+Required for any plan with more than one phase; optional for a single-phase plan, which records the skip in one line. Trigger is judged from plan content only (POL-002).

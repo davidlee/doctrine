@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1b818-4d9d-7381-b176-6189187e35ed"
+recorded_at = "2026-11-07T22:19:22.910007054Z"
+kind = "friction"
+summary = "research skill; SL-287: pi_agent refused form-unapproved"
+detail = "Both pi_agent_start calls (profiles research, read) refused: .quotient/forms/read resolves to a new nix store path than the approved one. Coincides with staged deletions of .quotient/forms/* in the primary tree (CHR-184 moved agents to flakes:dev-envs). Needs an operator 'quotient allow'; research round blocked."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

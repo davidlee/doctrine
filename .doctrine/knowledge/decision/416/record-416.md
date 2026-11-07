@@ -1,0 +1,1 @@
+Coverage: commitment with no satisfying EX; EX with no proof; verification criterion proving nothing; EX meeting no commitment (extraction gap or scope drift). Content: each satisfying EX's wording compared against the quote (counts, names, sets). Proportionality: closed verdict set proportionate | weak | excessive | deferred, plus free note. No test counts.

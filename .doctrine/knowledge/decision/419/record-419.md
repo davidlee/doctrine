@@ -1,0 +1,1 @@
+New shipped reference doc with inline TOML example; no template, no verb. /plan routes to it at ledger authoring and at review; /phase-plan gets a one-line pointer to carry the phase's ledger quotes into the runtime sheet. /audit use is a follow-up.

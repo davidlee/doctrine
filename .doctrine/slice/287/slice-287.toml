@@ -26,6 +26,18 @@ intent = "scope-relevant"
 selector = "install/*.md"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "plugins/doctrine/skills/phase-plan/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "publication/manifest.toml"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/install.rs"
+intent = "scope-relevant"
+
 [[relation]]
 label = "related"
 target = "RFC-029"
