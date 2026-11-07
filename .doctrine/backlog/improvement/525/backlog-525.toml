@@ -56,3 +56,7 @@ target = "IMP-430"
 [[relation]]
 label = "related"
 target = "SL-287"
+
+[[relation]]
+label = "related"
+target = "IMP-526"
