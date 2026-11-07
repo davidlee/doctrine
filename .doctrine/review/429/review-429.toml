@@ -27,6 +27,11 @@ act = "conclude"
 role = "raiser"
 note = "codex follow-up confined to the re-disposition of F-5 and the revised sec-2/sec-5 at design run revisions 39/41. Read the full F-5 record and current materialised sections; checked the whole-response equality predicate and amended-response retirement/replacement and basis against the previously contested appended-requirement case. Verified F-5 at design-contract level. No new findings, no builds/tests/install or runtime validation. F-1 through F-3 and F-6 left untouched; writes only to RV-429."
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """user 2026-11-08: "conclude" — all six findings verified (F-6 answered on the user's scope decision)."""
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-287"
 
@@ -46,6 +51,7 @@ disposition = "fix-now"
 response = """
 Fixed in the design at run revision 29. sec-2 (ledger format): source becomes {section, heading}; new [[extracted]] table stamps each section's fingerprint at extraction. sec-3 (authoring): extraction stamps [[extracted]]. sec-5 (variances): new subsection "Refresh after a design revision" - detect at the locked-exit handoff to /plan and at each /phase-plan via fingerprint compare plus verbatim-quote check (fallback: quote check plus design.md diff); refresh scoped to changed sections, supersede gone rows by intent variance plus new-id replacement, add new rows, re-run cross-check, re-stamp; touchpoint table updated for /plan and /phase-plan. sec-9 (risks): staleness detection is manual, first candidate for a mechanical check; relock cost is IMP-525.
 """
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -63,6 +69,25 @@ Fixed in the design at run revision 29. sec-2 (ledger format): source becomes {s
 act = "verify"
 role = "raiser"
 note = 'User (raiser) on 2026-11-08, asked whether the fixes resolve F-1 to F-3: "yes". Recorded by the agent on that reply.'
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = 'User 2026-11-08: "yeah revw for F-1 & F-3". Route-only change; substance unchanged. Reopened only so the responder can set route review (verified is terminal).'
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = """
+Fixed in the design at run revision 29. sec-2 (ledger format): source becomes {section, heading}; new [[extracted]] table stamps each section's fingerprint at extraction. sec-3 (authoring): extraction stamps [[extracted]]. sec-5 (variances): new subsection "Refresh after a design revision" - detect at the locked-exit handoff to /plan and at each /phase-plan via fingerprint compare plus verbatim-quote check (fallback: quote check plus design.md diff); refresh scoped to changed sections, supersede gone rows by intent variance plus new-id replacement, add new rows, re-run cross-check, re-stamp; touchpoint table updated for /plan and /phase-plan. sec-9 (risks): staleness detection is manual, first candidate for a mechanical check; relock cost is IMP-525.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """User 2026-11-08: "yeah revw for F-1 & F-3". Route-only change; substance unchanged. Re-verified on the user's earlier "yes" to the fix; only the route changed."""
 
 [[finding]]
 id = "F-2"
@@ -108,6 +133,7 @@ disposition = "fix-now"
 response = """
 Fixed at run revision 34. sec-2: optional `needs` on commitment rows, correctness only, acyclic, expected sparse. sec-3: needs drives sequencing (never forward), gates (cross-phase edge appears as gated_by EN) and parallel candidates (no needs path + disjoint surfaces; host directives decide); cross-check adds no-cycle / no-forward / every cross-phase edge gated. sec-4: sequencing reviewer reads the ledger and checks plan order agrees with needs; plan.toml owns the realised sequence, needs is its rationale. sec-9: why this is not RFC-027 H9 and how it gathers H9 reopening evidence; mechanical acyclicity check is a follow-up.
 """
+route = "review"
 
 [[finding.turn]]
 act = "raise"
@@ -125,6 +151,25 @@ Fixed at run revision 34. sec-2: optional `needs` on commitment rows, correctnes
 act = "verify"
 role = "raiser"
 note = 'User (raiser) on 2026-11-08, asked whether the fixes resolve F-1 to F-3: "yes". Recorded by the agent on that reply.'
+
+[[finding.turn]]
+act = "reopen"
+role = "raiser"
+note = 'User 2026-11-08: "yeah revw for F-1 & F-3". Route-only change; substance unchanged. Reopened only so the responder can set route review (verified is terminal).'
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+route = "review"
+response = """
+Fixed at run revision 34. sec-2: optional `needs` on commitment rows, correctness only, acyclic, expected sparse. sec-3: needs drives sequencing (never forward), gates (cross-phase edge appears as gated_by EN) and parallel candidates (no needs path + disjoint surfaces; host directives decide); cross-check adds no-cycle / no-forward / every cross-phase edge gated. sec-4: sequencing reviewer reads the ledger and checks plan order agrees with needs; plan.toml owns the realised sequence, needs is its rationale. sec-9: why this is not RFC-027 H9 and how it gathers H9 reopening evidence; mechanical acyclicity check is a follow-up.
+"""
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """User 2026-11-08: "yeah revw for F-1 & F-3". Route-only change; substance unchanged. Re-verified on the user's earlier "yes" to the fix; only the route changed."""
 
 [[finding]]
 id = "F-4"

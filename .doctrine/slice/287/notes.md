@@ -33,5 +33,6 @@ fresh-as-of: 2026-11-08 · design reviewing (run dr-01a1b821, rev 44) · head 53
 
 ### Open
 
-- User: review-disposed (conduct RV-429 or waive) and design-accepted — the latter genuinely, superseding the unintended rev-43 act.
-- User: whether to add route `review` to F-1/F-3 (unanswered).
+- Design LOCKED at run rev 47 (user: "conclude, accept"); RV-429 conducted; the rev-43 act was invalidated by the genuine acceptance. F-1/F-3 now route `review`.
+- RV-429 F-6 answered, awaiting Codex's verify (minor; did not hold the lock).
+- Next: /plan.
