@@ -19,6 +19,13 @@ note = """
 Examined commit aea84237e (IMP-526) against DEC-421, DEC-302, SL-264/RV-386 and SL-266/DEC-310: every hunk in src/design_run/{attestation,gate,inquiry,mod,run,config}.rs, render/tree.rs, src/commands/design.rs relay call sites (apply_lines, start, adopt's adoption_lines), install/design-prompts/inquiry.md and conditions/initial-concerns-recorded.md, install/design-run-stages.md, unit tests in src/design_run/tests.rs and e2e tests in tests/e2e_design_tree.rs / e2e_design_forward.rs. Grepped the tree (code, install/, .agents/skills, .doctrine/spec, .doctrine/knowledge, memories) for ReviewedGraph / reviewed-graph / blocking_marks / judged_blocking residue. Ran cargo test --bin doctrine design_run and the two e2e test binaries: all pass. Gate/change-log agreement holds: both readers call CoveredSet::moved under the rule's Coverage; no code path still references the removed comparison. Six findings, none blocker.
 """
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+Second round: verified the fixes in bbbb28e8b (F-1, F-3..F-6) and the DEC-421 consequences amendment (F-2) against code, records and passing tests (e2e_design_forward, e2e_design_tree, relay unit tests). All six findings verified.
+"""
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "IMP-526"
 
@@ -56,7 +63,7 @@ Verified in bbbb28e8b: src/design_run/render/tree.rs sidecar ask is "tell the us
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "DEC-421 says the /design skill states the contract; it was placed in a stage-scoped prompt fragment instead, and DEC-421 was not amended"
 detail = """
@@ -91,6 +98,13 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Contest accepted: consequences amended - ReviewedGraph stated as removed (initial-concerns-recorded binds InquiryMap), and the design-skill entry replaced by install/design-run-stages.md regenerating plus install/design-prompts/inquiry.md stating the contract. choice and consequences now agree."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Verified: record-421.toml:18 consequences now state ReviewedGraph removed / InquiryMap bound, relay names added ids and agent-proposed ones owing consultation, and inquiry.md states the contract — consistent with the amended choice and the code.
+"""
 
 [[finding]]
 id = "F-3"
