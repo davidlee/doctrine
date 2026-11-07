@@ -129,6 +129,16 @@ reads only the plan's own content (`POL-002`).
 
 Fix what the cross-check finds in the plan (or the ledger), then commit both.
 
+**Orchestration seam.** The steps divide cleanly, which makes them an
+opportunity for delegation proportionate to the slice's scope: the planner may
+extract alone, hand extraction to one delegate or one per design section, and
+have a separate agent check the transcription (quotes, satisfaction sites) or
+the sequencing implications. Doctrine does not prescribe the split or the
+mechanism — that is where host directives (project or harness conventions)
+govern how the procedure is applied (`POL-003`). The guidance names the seam
+and the proportionality, nothing more. The plan review (§ Plan review) is the
+same seam at review time.
+
 <!-- doctrine:section sec-4 -->
 ## Plan review
 
@@ -214,6 +224,9 @@ variance with `phase = "plan"`. The cost of returning to design is `IMP-525`.
 - **`ADR-024` / `POL-002`** — shipped text grounds only on prose, `lib:`
   addresses, skill names and CLI verbs. No `SL-`/`RFC-`/`DEC-`/`REQ-` ids, no
   `src/` paths; the defect classes are described, not cited.
+- **`POL-003`** — the orchestration seam is described in neutral terms
+  (planner, delegate, reviewer); no harness, tool or delegate mechanism is
+  named. Host directives decide the split.
 - **`ADR-007`** — the plan review is the existing RV kind at facet `plan`; no
   new facet, kind or multi-raiser mechanism.
 - **`STD-002` / `DEC-101`** — "commitment", never "obligation"; ledger ids are

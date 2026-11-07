@@ -43,5 +43,30 @@ response = """
 Fixed in the design at run revision 29. sec-2 (ledger format): source becomes {section, heading}; new [[extracted]] table stamps each section's fingerprint at extraction. sec-3 (authoring): extraction stamps [[extracted]]. sec-5 (variances): new subsection "Refresh after a design revision" - detect at the locked-exit handoff to /plan and at each /phase-plan via fingerprint compare plus verbatim-quote check (fallback: quote check plus design.md diff); refresh scoped to changed sections, supersede gone rows by intent variance plus new-id replacement, add new rows, re-run cross-check, re-stamp; touchpoint table updated for /plan and /phase-plan. sec-9 (risks): staleness detection is manual, first candidate for a mechanical check; relock cost is IMP-525.
 """
 
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "minor"
+title = "Note the ledger's orchestration seam, proportionate and host-directed"
+detail = """
+Raised by the user (human reviewer), 2026-11-08: the procedure has a natural orchestration seam. The planner could write the ledger itself, appoint one delegate, or one delegate per design section; it might have a second agent check the transcription (quotes, satisfaction sites) for errors, or another check sequencing implications. Doctrine should not prescribe which: these are exactly where host directives (project or harness conventions, e.g. which delegate mechanism to use) should influence how doctrine is applied. The design should note the opportunity for orchestration proportionate to the slice's scope, without naming any harness or delegate mechanism (POL-003).
+"""
+disposition = "fix-now"
+response = """
+Fixed at run revision 31. sec-3 (authoring procedure) gains an "Orchestration seam" paragraph: the steps divide cleanly, so delegation proportionate to slice scope is an opportunity - planner alone, one delegate, one per section, a separate transcription or sequencing check - with the split and mechanism left to host directives; the plan review is the same seam. sec-6 adds POL-003: neutral terms only, no harness or delegate mechanism named.
+"""
+
+[[finding.turn]]
+act = "raise"
+role = "raiser"
+
+[[finding.turn]]
+act = "dispose"
+role = "responder"
+disposition = "fix-now"
+response = """
+Fixed at run revision 31. sec-3 (authoring procedure) gains an "Orchestration seam" paragraph: the steps divide cleanly, so delegation proportionate to slice scope is an opportunity - planner alone, one delegate, one per section, a separate transcription or sequencing check - with the split and mechanism left to host directives; the plan review is the same seam. sec-6 adds POL-003: neutral terms only, no harness or delegate mechanism named.
+"""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
