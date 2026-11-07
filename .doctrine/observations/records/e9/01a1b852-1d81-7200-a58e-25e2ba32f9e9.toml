@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1b852-1d81-7200-a58e-25e2ba32f9e9"
+recorded_at = "2026-11-07T23:22:31.681960325Z"
+kind = "friction"
+summary = "design: apply→materialise round-trip grows a blank line per section edit"
+detail = "SL-287 /design reviewing. Extracting a section body from design.md (text between doctrine:section markers, which includes the trailing blank separator) and declaring it back via design apply makes materialise emit an extra blank line before the next marker each time. Needed a second apply with trailing blanks stripped. Either materialise should normalise trailing whitespace in section bodies, or design show should expose the canonical body for round-tripping."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
