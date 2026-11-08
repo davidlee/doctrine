@@ -82,3 +82,29 @@ landed (F-1); `/super-orchestrator` should be checked for that step.
 ### Governance/spec (REV)
 
 - None. No finding touches an ADR, policy, standard or spec.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+
+- design.md sec-3, Satisfy → *parallelism*: "The ledger names candidates" →
+  "The commitment ledger names candidates" (finding F-3).
+- design.md sec-3, Extract: paragraph rewrapped to 80 columns; whitespace only
+  (finding F-4).
+- design.md sec-3, Cross-check → *coverage*: also rewrapped to 80 columns,
+  whitespace only. Same defect class as F-4, seen while landing it; not a new
+  finding. Applied with the user's agreement.
+
+The design run is locked, so these edits land out of band; the run's section
+fingerprints now differ from the file by design.
+
+### REVs completed
+
+- None. The brief named no governance or spec item.
+
+### Withdrawn / tolerated
+
+- F-1: remediated during audit (source deltas recorded).
+- F-2, F-5: tolerated with rationale in their dispositions.
+
+Reconcile pass complete — handoff to /close.

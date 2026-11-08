@@ -136,8 +136,8 @@ reads only the plan's own content (`POL-002`).
 1. **Extract** — after scaffolding, before authoring phases. Walk `design.md`
    section by section; one row per commitment, explicit or implicit, quoted.
    Routed design-review findings (the existing step-3 sub-procedure) become
-   review rows, quoting the finding's response (§ The commitment ledger). Stamp an `[[extracted]]` row per
-   section read. A gap or contradiction found
+   review rows, quoting the finding's response (§ The commitment ledger).
+   Stamp an `[[extracted]]` row per section read. A gap or contradiction found
    while extracting is a design defect: stop and return to `/design`, as step 2
    already requires.
 2. **Satisfy** — while authoring `plan.toml`, fill each row's `satisfied_by`,
@@ -148,11 +148,12 @@ reads only the plan's own content (`POL-002`).
    - *gates* — a `needs` edge crossing phases appears as `gated_by` on an EN of
      the dependent phase;
    - *parallelism* — commitments with no `needs` path between them and
-     disjoint surfaces are candidates for parallel phases. The ledger names
-     candidates; host directives decide whether to parallelise.
+     disjoint surfaces are candidates for parallel phases. The commitment
+     ledger names candidates; host directives decide whether to parallelise.
 3. **Cross-check** (`DEC-416`), before the first commit:
-   - *coverage* — over the governing set: a commitment no EX satisfies; an EX no proof proves; a
-     verification criterion that proves nothing; an EX that meets no commitment
+   - *coverage* — over the governing set: a commitment no EX satisfies; an EX
+     no proof proves; a verification criterion that proves nothing; an EX that
+     meets no commitment
      (an extraction gap or scope drift — resolve which);
    - *content* — each satisfying EX's wording against the quote: counts, names,
      sets, conditions;
