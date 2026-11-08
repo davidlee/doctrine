@@ -36,6 +36,10 @@ Inputs:
    - assumptions and constraints carried into execution
    - the verification steps that will satisfy each `VT-`/`VA-`/`VH-` expectation
    - the files / components each task is expected to touch
+   - where the slice has a commitment ledger: run its staleness check first,
+     then copy the phase's governing rows' quotes into the sheet, so the worker
+     reads the design's words — `lib:reference/commitment-ledger.md`
+     § Refresh after a design revision
 6. This is runtime state (`lib:reference/using-doctrine.md` § Storage tiers) —
    never write task detail or progress back into the authored `plan.toml` /
    `plan.md`.

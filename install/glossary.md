@@ -115,12 +115,15 @@ the hypothesis is supported by evidence; `refuted` means it has been falsified.
 | `design.md` | authored | canonical technical design |
 | `plan.toml` | authored | phase plan (objectives, EN/EX/VT criteria, links) |
 | `plan.md` | authored | plan prose — rationale & sequencing (no queried data) |
+| `commitment-ledger.toml` | authored | commitment ledger: the design's commitments, quoted, and where the plan meets them (`lib:reference/commitment-ledger.md`); not a review ledger |
 | `notes.md` | authored | durable implementation notes (on-demand) |
 | `handover.md` | **runtime** (gitignored) | disposable agent context |
 | `phases/` | **runtime** (gitignored) | symlink into `.doctrine/state/slice/nnn/phases/` |
 
 Verification, audit and code-review findings do not live in the slice folder:
 they are written to a review ledger under `.doctrine/review/nnn/`.
+A bare "ledger" means a review ledger; the slice's commitment ledger is always
+named in full.
 
 Also permitted inside a slice, spec, or backlog dir:
 - `research/*` — pre-design research round (in a slice dir: gitignored, runtime tier):

@@ -61,3 +61,5 @@ Seat: /super-orchestrator, 2026-11-08, PHASE-01..02, main worktree on `edge`.
 <!-- phase · what · why · tier (decided / deferred / escalated) -->
 - PHASE-01 · VA-1 read-through: restored design wording in three places the worker loosened (trigger "reads only the plan's own content"; "host directives (project or harness conventions)" twice, which the worker had narrowed to "project conventions"; a garbled fifth stale condition) · fidelity to C-12/C-14/C-38/C-20 quotes · decided
 - PHASE-01 · doc example uses placeholder ids (`C-NN`, `PHASE-NN/EX-n`) not the design's concrete ones · `[A-Z]{2,4}-[0-9]` matches inside `PHASE-0x`, so concrete phase ids fail the shipped-text sweep · decided
+- PHASE-02 · `./target/debug/doctrine install -y` also bumped `.doctrine/doctrine.toml` `installed-version` 0.48.1→0.48.3; committed separately as a chore, as install advises · side effect of EX-4's required install · decided
+- PHASE-02 · pre-existing "obligation" in `/plan` step 3 (routed-findings paragraph) left as is · this phase's text only; not in EX-2's scope · deferred to audit

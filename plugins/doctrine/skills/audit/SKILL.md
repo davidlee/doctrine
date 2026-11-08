@@ -94,6 +94,9 @@ and is recorded separately — do not mutate a finding to `fixed`/`remediated`.
      land. Only a dispatch worker process is refused review writes; one writer
      per RV at a time (`lib:reference/review-ledger.md` §6, "Where reviews
      run").
+   - **Read the commitment ledger**, where the slice has one: each
+     commitment's quote, its variances, and where it was finally satisfied —
+     `lib:reference/commitment-ledger.md`.
    - **Run `doctrine slice conformance <id>` and read the algebra** — the
      mechanical path-conformance delta between what `design.md` declared
      (`design-target` selectors) and what git actually touched (recorded

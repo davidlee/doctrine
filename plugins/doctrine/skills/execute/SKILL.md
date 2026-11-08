@@ -46,6 +46,9 @@ Inputs:
 10. If `/preflight` or implementation reveals unresolved design ambiguity,
     unexpected obstacles, tradeoffs, or policy ambiguity, stop and `/consult`
     before improvising past it.
+    Where the slice has a commitment ledger, a change to how or whether a
+    commitment is met is recorded there as a variance —
+    `lib:reference/commitment-ledger.md` § Variances.
 11. Keep the runtime phase sheet current as work progresses — never record progress in
     authored `plan.toml` / `plan.md` (the storage rule).
 12. Before declaring the phase ready, run the verification gate — `doctrine

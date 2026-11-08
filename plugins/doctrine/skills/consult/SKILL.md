@@ -41,3 +41,7 @@ so. Is it work, knowledge, or a decision? See the boundary in
 
 Capture the consult's outcome via `/knowledge`: a resolved tradeoff → DEC; one
 still open → QUE, with the blocked work gating itself (`doctrine needs <work> QUE-n`).
+
+An outcome that changes a commitment in the slice's commitment ledger is also
+recorded there as a variance citing the DEC —
+`lib:reference/commitment-ledger.md` § Variances.

@@ -52,6 +52,12 @@ Inputs:
     blocker cannot honestly be verified, and an unverified blocker refuses the
     slice close. Nothing validates the transcription.
 
+    **Commitment ledger (multi-phase plans).** After scaffolding, before
+    authoring phases, extract the design's commitments into
+    `commitment-ledger.toml`, routed findings included as review rows — see
+    `lib:reference/commitment-ledger.md` § Authoring procedure. On entry after
+    a design relock, run its refresh first (§ Refresh after a design revision).
+
 4.  Author `plan.toml` — one `[[phase]]` per ordered phase:
     - `id` is `PHASE-NN` (zero-padded), **immutable** and never reused — edits
       append, they never renumber.
@@ -92,9 +98,12 @@ Inputs:
       conclude/handover, not at audit. A `test_file` with no keywords
       passes vacuously — the keyword floor is what gives the gate teeth, not
       the file alone.
-    - `specs` / `requirements` stay empty in v1 (no registry yet). When a slice
-      does carry relations, they are written with `doctrine link` (not typed keys
-      here) — see `lib:reference/using-doctrine.md` § Relating entities.
+    - Relations are written with `doctrine link` (not typed keys here) — see
+      `lib:reference/using-doctrine.md` § Relating entities. The in-file
+      `specs` / `requirements` tables are not read.
+    - For a multi-phase plan, fill the commitment ledger's satisfaction sites
+      while authoring and cross-check it before the first commit —
+      `lib:reference/commitment-ledger.md` § Authoring procedure.
 5.  Author `plan.md` — the rationale and sequencing prose: why these phases, in
     this order, with these boundaries. Honour the storage rule
     (`lib:reference/using-doctrine.md` § Storage tiers): no queried or derived
@@ -104,6 +113,9 @@ Inputs:
     oversized, optimistic, requires verification, or presents implementation risk?
     For each of these, decide what new information is needed, or what mitigations
     to put in place. Ground the plan in known details of the implementation.
+    For a multi-phase plan, run the two-review plan review instead —
+    `lib:reference/commitment-ledger.md` § Plan review; its findings feed
+    steps 8–9.
 8.  Plan the revision; print a summary of it for the user. Then work through it.
 9.  Revise the plan; commit again. Summarise what changed.
 10.  Materialise phase tracking: `doctrine slice phases <ID>` creates the per-phase

@@ -188,9 +188,10 @@ Three tiers; know which one you are writing:
 - **Derived**: regenerable indexes / caches — gitignored.
 
 **Example — inside a slice directory:** `slice-NNN.toml`, `slice-NNN.md`,
-`design.md`, `plan.toml`, `plan.md`, and `notes.md` are **authored** (committed,
-diffable). `handover.md` and the `phases/` symlink are **runtime** (gitignored) —
-they carry disposable context and phase tracking, never committed progress. See
+`design.md`, `plan.toml`, `plan.md`, `commitment-ledger.toml` (when the plan
+has one), and `notes.md` are **authored** (committed, diffable). `handover.md`
+and the `phases/` symlink are **runtime** (gitignored) — they carry disposable
+context and phase tracking, never committed progress. See
 `lib:reference/glossary.md` for the full directory layout.
 
 **Hand-edit vs verb.** Reach for a verb to create or transition an entity; hand-
