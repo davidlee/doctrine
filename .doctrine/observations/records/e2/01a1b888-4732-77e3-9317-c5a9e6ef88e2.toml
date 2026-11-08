@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1b888-4732-77e3-9317-c5a9e6ef88e2"
+recorded_at = "2026-11-08T00:21:41.298504654Z"
+kind = "friction"
+summary = "shipped-text id sweep [A-Z]{2,4}-[0-9] matches inside PHASE-0x [super-orchestrator/sub-orchestrator]"
+detail = "SL-287 PHASE-01: the VA-2 sweep regex hits 'HASE-0' in any concrete phase id, so design/sheet examples cannot be copied into shipped text verbatim; the worker had to switch to PHASE-NN placeholders. Briefs for shipped-text work should say so up front, or the sweep should anchor on a word boundary."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
