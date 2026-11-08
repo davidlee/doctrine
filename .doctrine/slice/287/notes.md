@@ -12,7 +12,7 @@ contradicts the design.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-11-08 · audit, phases 2/2 · head e4634e60f
+fresh-as-of: 2026-11-08 · close, phases 2/2 · head 34026c5a7
 
 ### Produced
 
@@ -26,6 +26,7 @@ fresh-as-of: 2026-11-08 · audit, phases 2/2 · head e4634e60f
 - plan.toml (PHASE-01 doc+manifest+ship test; PHASE-02 pointers+step-4+glossary), plan.md, commitment-ledger.toml (dogfooded: 40 rows, 37 governing, C-16/18/21 superseded).
 - RV-431 (commitments) and RV-432 (sequencing) plan reviews — all findings verified. Plan accepted on user delegation; status ready.
 - PHASE-01 ae3013d83, PHASE-02 f58fb2d41 (/super-orchestrator); RV-433 audit (5 findings, all verified; no REV); RV-429 F-6 verified at audit.
+- Reconcile 34026c5a7: design.md sec-3 F-3 wording, F-4 + coverage-bullet rewrap; outcome on RV-433. No REV.
 
 ### Learned
 
@@ -38,8 +39,9 @@ fresh-as-of: 2026-11-08 · audit, phases 2/2 · head e4634e60f
 
 ### Open
 
-- RV-433 Reconciliation Brief: design.md sec-3 wording (F-3) and rewrap (F-4) — per-slice edits at /reconcile.
-- Next: /reconcile, then /close. Trial deferred (RFC-029 § 9).
+- ISS-321 stays open: SL-287 fulfils it only partially.
+- Live-plan trial deferred (RFC-029 § 9); not a closure condition.
+- Harvest at close: no new memory. Each Learned item already sits in an observation, a memory, or a backlog item (IMP-526); the rest are consciously rejected as slice-local.
 
 ## Implementation run
 
