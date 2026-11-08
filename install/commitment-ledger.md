@@ -165,8 +165,8 @@ The steps run inside `/plan`, after scaffolding.
    - *gates* — a `needs` edge crossing phases appears as `gated_by` on an entry
      criterion of the dependent phase;
    - *parallelism* — commitments with no `needs` path between them and disjoint
-     surfaces are candidates for parallel phases. The ledger names candidates;
-     host directives decide whether to parallelise.
+     surfaces are candidates for parallel phases. The commitment ledger names
+     candidates; host directives decide whether to parallelise.
 3. **Cross-check**, before the first commit:
    - *coverage* — over the governing set: a commitment no exit criterion
      satisfies; an exit criterion no proof proves; a verification criterion that

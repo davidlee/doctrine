@@ -12,7 +12,7 @@ contradicts the design.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-11-08 · ready, phases 0/2 (design locked rev 47) · head 939bf20a0
+fresh-as-of: 2026-11-08 · audit, phases 2/2 · head e4634e60f
 
 ### Produced
 
@@ -25,6 +25,7 @@ fresh-as-of: 2026-11-08 · ready, phases 0/2 (design locked rev 47) · head 939b
 - mem_01a1b85718a47673840ba400f865846c (top-level acceptance records design-accepted).
 - plan.toml (PHASE-01 doc+manifest+ship test; PHASE-02 pointers+step-4+glossary), plan.md, commitment-ledger.toml (dogfooded: 40 rows, 37 governing, C-16/18/21 superseded).
 - RV-431 (commitments) and RV-432 (sequencing) plan reviews — all findings verified. Plan accepted on user delegation; status ready.
+- PHASE-01 ae3013d83, PHASE-02 f58fb2d41 (/super-orchestrator); RV-433 audit (5 findings, all verified; no REV); RV-429 F-6 verified at audit.
 
 ### Learned
 
@@ -32,13 +33,13 @@ fresh-as-of: 2026-11-08 · ready, phases 0/2 (design locked rev 47) · head 939b
 - Adding an inquiry after graph-reviewed voids it (IMP-526 in flight).
 - design apply round-trip of a section body grows a trailing blank line (observation recorded).
 - A top-level `acceptance` on an attestation-only submission recorded an unintended design-accepted at rev 43 (observation + memory); invalidated by the genuine acceptance at lock.
+- The execution seat committed phases without `slice record-delta`; conformance read empty until audit bootstrapped it (RV-433 F-1).
 - Dogfood evidence for RFC-029 § 9 (observations recorded): cross-check caught a cited-but-wrong count before commit; reviewers caught lead-in-only quotes (RV-431 F-1) and newline-tainted quotes (F-5); no variance class fits a transcription correction; verify-vt says "keyword present" for absent keywords.
 
 ### Open
 
-- RV-429 F-6 answered, awaiting Codex's verify (minor; did not hold the lock).
-- design.md sec-3 line 139 overlong (edit artefact) — tidy at reconcile.
-- Next: execution of PHASE-01..02 via /super-orchestrator (handover.md); halts before audit.
+- RV-433 Reconciliation Brief: design.md sec-3 wording (F-3) and rewrap (F-4) — per-slice edits at /reconcile.
+- Next: /reconcile, then /close. Trial deferred (RFC-029 § 9).
 
 ## Implementation run
 

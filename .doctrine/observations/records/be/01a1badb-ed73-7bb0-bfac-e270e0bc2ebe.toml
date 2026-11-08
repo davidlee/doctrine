@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "01a1badb-ed73-7bb0-bfac-e270e0bc2ebe"
+recorded_at = "2026-11-08T11:12:17.779425688Z"
+kind = "friction"
+summary = "[super-orchestrator; SL-287] phases committed without slice record-delta"
+detail = "At /audit SL-287, slice conformance showed 10 undelivered / 0 conformant because neither phase commit recorded a source delta. Bootstrapped with record-delta from the phase commits (RV-433 F-1). The super-orchestrator seat's per-phase commit step should record the delta."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

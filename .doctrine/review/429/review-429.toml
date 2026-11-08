@@ -32,6 +32,13 @@ act = "conclude"
 role = "raiser"
 note = """user 2026-11-08: "conclude" — all six findings verified (F-6 answered on the user's scope decision)."""
 
+[[review.turn]]
+act = "conclude"
+role = "raiser"
+note = """
+F-6 verified against slice-287.md scope item 6 during the SL-287 audit; all six findings terminal.
+"""
+
 [target]                   # the outbound `reviews` edge: RV-NNN ──reviews──▶ <ref>
 ref   = "SL-287"
 
@@ -264,7 +271,7 @@ note = "codex: VERIFIED against the revised materialised design, sec-2 and sec-5
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The design includes a correction the slice explicitly excludes"
 detail = """
@@ -287,6 +294,13 @@ act = "dispose"
 role = "responder"
 disposition = "fix-now"
 response = "Resolved by the user (2026-11-08: keep it): the step-4 correction is in SL-287 scope. slice-287.md gains scope item 6 and the affected-surface note; the adjacent/not-in-scope line is removed. The design (sec-6, sec-7) is unchanged. ISS-321 (reader discards the tables) stays open; SL-287 fulfils it partially (linked)."
+
+[[finding.turn]]
+act = "verify"
+role = "raiser"
+note = """
+Verified at SL-287 audit (RV-433): slice-287.md carries scope item 6 and the affected-surface note for the /plan step-4 correction; no "not in scope" line remains. Scope and design now agree; the correction shipped in PHASE-02 (f58fb2d41).
+"""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise`.
 # Empty here at creation — a fresh review is Active, awaiting the raiser.
