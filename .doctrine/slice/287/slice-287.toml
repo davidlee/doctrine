@@ -1,9 +1,9 @@
 id = 287
 slug = "commitment-ledger-plan"
 title = "Commitment ledger for plan authoring and review"
-status = "ready"
+status = "started"
 created = "2026-11-07"
-updated = "2026-11-07"
+updated = "2026-11-08"
 tags = []
 
 [relationships]

@@ -39,3 +39,23 @@ fresh-as-of: 2026-11-08 · ready, phases 0/2 (design locked rev 47) · head 939b
 - RV-429 F-6 answered, awaiting Codex's verify (minor; did not hold the lock).
 - design.md sec-3 line 139 overlong (edit artefact) — tidy at reconcile.
 - Next: execution of PHASE-01..02 via /super-orchestrator (handover.md); halts before audit.
+
+## Implementation run
+
+Seat: /super-orchestrator, 2026-11-08, PHASE-01..02, main worktree on `edge`.
+
+- quotient forms probed at the seat: `read` (tools present, root read-only,
+  network ok) and `write` (fmt-check, clippy, lint-js, build, validate,
+  `cargo test -p doctrine -p cordage`, test-bridge all exit 0). No form change.
+- Known sandbox-only failures: none (host and write-form suites both fully green).
+- Host gate: `doctrine check gate` (builds before validate). Use
+  `./target/debug/doctrine` for `install` / `library show` (PATH binary is the
+  release and lacks the new manifest entry).
+- Operator inputs: none.
+- Other writers: leave unrelated dirty paths alone (src/design_run/*, IMP-526
+  work, other reviews). Commit path-limited only.
+- Background tasks are enabled: spawns run in the background; parent is woken
+  by notification.
+
+## Autonomy log
+<!-- phase · what · why · tier (decided / deferred / escalated) -->
