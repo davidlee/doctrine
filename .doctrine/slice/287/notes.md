@@ -59,3 +59,5 @@ Seat: /super-orchestrator, 2026-11-08, PHASE-01..02, main worktree on `edge`.
 
 ## Autonomy log
 <!-- phase · what · why · tier (decided / deferred / escalated) -->
+- PHASE-01 · VA-1 read-through: restored design wording in three places the worker loosened (trigger "reads only the plan's own content"; "host directives (project or harness conventions)" twice, which the worker had narrowed to "project conventions"; a garbled fifth stale condition) · fidelity to C-12/C-14/C-38/C-20 quotes · decided
+- PHASE-01 · doc example uses placeholder ids (`C-NN`, `PHASE-NN/EX-n`) not the design's concrete ones · `[A-Z]{2,4}-[0-9]` matches inside `PHASE-0x`, so concrete phase ids fail the shipped-text sweep · decided

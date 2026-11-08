@@ -459,6 +459,15 @@ provenance    = "declared"
 customization = "customizable"
 
 [[entry]]
+address       = "reference/commitment-ledger.md"
+backing       = "commitment-ledger.md"
+kind          = "reference"
+title         = "Commitment ledger"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
 address       = "reference/essentials.md"
 backing       = "essentials.md"
 kind          = "reference"

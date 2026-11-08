@@ -6257,6 +6257,51 @@ mod tests {
     }
 
     #[test]
+    fn commitment_ledger_is_shipped() {
+        // SL-287 PHASE-01 (EX-8): the commitment-ledger protocol doc must ship via
+        // the implicit top-level install/*.md copy, be published at its stable
+        // reference/ address, and carry one parseable TOML fenced block.
+        let names = embedded_filenames();
+        assert!(
+            names.contains(&"commitment-ledger.md".to_string()),
+            "commitment-ledger.md must be embedded (shipped); got {names:?}"
+        );
+        let text = asset_text("commitment-ledger.md").unwrap();
+        assert!(
+            !text.trim().is_empty(),
+            "commitment-ledger.md asset must be non-empty"
+        );
+
+        let manifest = crate::publication::PublicationManifest::load().unwrap();
+        assert!(
+            manifest
+                .entries()
+                .iter()
+                .any(|e| e.address().as_str() == "reference/commitment-ledger.md"),
+            "the publication manifest must publish reference/commitment-ledger.md"
+        );
+
+        let openers = text.lines().filter(|l| l.trim() == "```toml").count();
+        assert_eq!(
+            openers, 1,
+            "commitment-ledger.md must have exactly one ```toml fenced block"
+        );
+        let start = text
+            .lines()
+            .position(|l| l.trim() == "```toml")
+            .expect("a ```toml opening line");
+        let body: String = text
+            .lines()
+            .skip(start + 1)
+            .take_while(|l| l.trim() != "```")
+            .collect::<Vec<_>>()
+            .join("\n");
+        if let Err(err) = toml::from_str::<toml::Value>(&body) {
+            panic!("the ```toml block must parse: {err}\n--- body ---\n{body}");
+        }
+    }
+
+    #[test]
     fn plan_creates_dirs_from_manifest() {
         let dir = tempfile::tempdir().unwrap();
         let manifest = Manifest {
